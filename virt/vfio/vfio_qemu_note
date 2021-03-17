@@ -1,0 +1,146 @@
+How does qemu access PCI configure space and BARs: 
+--------------------------------------------------
+
+vfio_initfn
+    --> vfio_bars_setup(vdev)
+        --> vfio_bar_setup
+            --> vfio_region_mmap(&bar->region)
+                    ...
+                --> mmap
+                    ...
+                /* How to register to QEMU PCI architecture? */
+            --> pci_register_bar(&vdev->pdev, nr, type, bar->region.mem)
+
+5. how to move data of VF to VM DMA memory
+------------------------------------------
+
+VF driver in guest kernel will configure DMA for VF, however, SMMU should already
+know the map: iova -> pa, so data from VF can be sent to right pa, which can be
+access from vCPU's vaddr.
+```
+                              guest VA       
+
+       vaddr -->   --------   guest PA(host VA)
+
+           pa -->       --------   host PA
+                            ^
+         ........................... pysical amba bus
+                  ^
+              +---------+
+              | SMMU    |
+              +---------+
+                  ^
+              +---------+
+              |  RP     |
+              +---------+
+                  ^
+              +-----+---+  <-- iova
+              |  VF |DMA|
+              +-----+---+
+```
+it seems firstly qemu will mmap a range of memory: vaddr -> pa, and pin related
+host PA. and somehow vaddr -> map will be set in SMMU. so when we call, e.g.
+```
+void *
+dma_alloc_coherent(struct device *dev, size_t size, dma_addr_t *dma_handle, gfp_t flag)
+```
+to allocate dma memory in VM for VF, we will get retured void * as guest VA, 
+dma_handle as guest PA. then this guest PA will be set as VF DMA iova.
+
+
+How does qemu do DMA for VF
+---------------------------
+vfio_initfn
+    --> vfio_get_group
+        --> vfio_connect_container
+                /* register vfio_memory_listener to qemu */
+            --> memory_listener_register(&container->listener, container->space->as)
+
+                /* but when can we call this */
+                MemoryListener: vfio_memory_listener
+                                    .region_add: vfio_listener_region_add
+                                                         --> vfio_dma_map
+                                                             --> ioctl:VFIO_IOMMU_MAP_DMA
+above will set map: vaddr -> pa in SMMU. but I do not know who and when will call
+.region_add to build above map, and I do not know the exactly address of mapped
+vaddr and pa. so I can not build the relationship between vaddr -> pa map and
+dma requirement.(it seems that VF dma requirement should be in the vaddr -> pa map)
+I do not know about this.
+
+If VF dma range will be vaddr -> pa map, which means vaddr maybe fall into the
+PCIe address in host PCIe RP. In this case, we need ACS cap in RP to forbid
+peer to peer tranlation in this RP's PCIe domain. We need check if this is the
+real case ?!
+
+Another point is that what is the relationship between vaddr and SMMU's iova?
+An iova domain is for a iommu_group or iommu_domain ?
+It seems an iova domain can reserve PCIe windows ? what does this mean for vaddr
+here ?
+
+ 
+      +---------------------+            +--------------------+
+      |  guest              |            |  guest             |
+      |    +--------+       |            |                    |
+      |    |  qemu  |       |            |                    |
+      |    +        +       |            |                    |
+      |    |  vfio  |       |            |                    |
+      +----+--------+-------+            +--------------------+
+                            
+      +-------------------------------------------------------+
+      |  host                                                 |
+      |          +------------+    +----------------------+   |
+      |          | kvm        |    | vfio                 |   |
+      |          |            |    +--------+--+----------+   |
+      |          +-----+      |    | iommu  |  | eventfd  |   |
+      |          | ITS |      |    +--------+  +----------+   |
+      |          +-----+------+    | smmu-v3|  | msi/msi-x|   |
+      |                            +--------+--+----------+   |
+      +-------------------------------------------------------+
+              ^
+              |
+      +---------------+   +---------------+
+      |     SMMU      |   |    GIC ITS    |
+      +---------------+   +---------------+
+              ^
+              |
+      +-------+-----------------------------------------------+
+      |                                                       |
+      |  hardware PCIe host                                   |
+      |                                                       |
+      +--------------------------+----------------------------+
+                                 |
+      +--------------------------+----------------------------+
+      |             +------+-------+------+------+-----+      |
+      |  PCIe card  |  pf  |   vf  |  vf  | ...  | vf  |      |
+      |             +------+-------+------+------+-----+      |
+      +-------------------------------------------------------+
+
+      First we should get a PCIe card(e.g. 82599 networking card) which supports
+      SR-IOV. We can enable the vf in this kind of card, each vf has their own
+      BDF and config space and can be seen as a seperate networking port.
+
+      Our job, to enable PCIe SR-IOV, is to assign each pf or vf to each guest,
+      make sure the flows of data and interrupt between pf/vf and guests are OK.
+
+      How to do this?
+      there are many VM which we can choose, here I use QEMU as userspace VM
+      showed as guest in above figure.
+
+      And there are different ways we can build the flow: vfio and virtio.
+      I use vfio here(do not know virtio too much), vfio is a kernel driver in
+      drivers/vfio/* which help to expose iommu operations to userspace.
+
+      A interrupt from VF will firstly be routed to interrupt part(msi/msi-x) in
+      vfio driver, then sent by vfio to KVM ITS. vfio codes in QEMU will at first
+      build up the relationship between these two using eventfd.
+
+####
+      There is ITS driver/PCIe_card driver running in the guest. PCIe card driver
+      in guest will set msi capability in vf. So when ITS driver in guest been called,
+      it will trap into KVM to set KVM GIC. VFIO module in QEMU will set interrupt
+      for PCIe devices in VFIO kernel driver as above showed, VFIO kernel driver
+      request interrupt for PCIe device in kernel, in interrupt handler, it raises
+      a event signal to KVM GIC?
+
+      Who trollers VFIO modules in QEMU?
+

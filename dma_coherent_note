@@ -1,0 +1,62 @@
+Linux DMA coherent analysis
+---------------------------
+
+-v0.1 2017.5.5 Sherlock init
+-v0.2 2017.5.6 Sherlock finish
+
+There are dma-coherent in DT and _CCA in ACPI to configure to tell kernel if
+hardware support auto cache coherence.
+
+If we configure them, CPU will access the DMA range as cacheable, and device will
+access the DMA range through SMMU as cacheable.
+If we do not configure them, CPU will access the DMA range as non-cacheable, and
+device will access the DMA range through SMMU as cacheable. If we do not enable
+SMMU, to do...
+
+We scan __CCA in drivers/acpi/scan.c: acpi_init_coherency(struct acpi_device *adev)
+```
+dma_alloc_coherent(struct device *dev, size_t size, dma_addr_t *dma_handle, gfp_t flag)
+    --> dma_alloc_attrs(dev, size, dma_handle, flag, 0)
+            /* For arm64, __iommu_alloc_attrs in arch/arm64/mm/dma-mapping.c */
+        --> cpu_addr = ops->alloc(dev, size, dma_handle, flag, attrs);
+                /* if coherent = 1, will add IOMMU_CACHE to ioprot here */
+            --> ioprot = dma_direction_to_prot(DMA_BIDIRECTIONAL, coherent)
+```
+
+1. configure _CCA/dma-coherent
+
+   so for coherent, we will go: alloc_pages(gfp, get_order(size)).
+   alloc_page will allocate page in normal or dma zone, whose memory attribute
+   have already been configured in paging_inti as cacheable.
+
+   so from CPU view, it can access DMA as cacheable here.
+
+2. not configure _CCA/dma-coherent
+ 
+   so for non-coherent, we will go: __alloc_from_pool(size, &page, gfp), which
+   will allocate memory from atomic_pool. atomic_pool has been created in
+   atomic_pool_init with non cacheable attribute: pgprot_t prot = __pgprot(PROT_NORMAL_NC))
+   
+   so from CPU view, it can access DMA as non cacheable here.
+
+For 1 and 2 above, iommu_dma_map_page(dev, page, 0, iosize, ioprot) will be called
+to configure SMMU page table, it will configure page table according ioprot.
+call train is like:
+```
+    --> iommu_dma_map_page
+        --> __iommu_dma_map
+            --> iommu_map
+                    /* arm_smmu_map in drivers/iommu/arm-smmu-v3.c */
+                --> domain->ops->map
+                        /* arm_lpae_map in drivers/iommu/io-pgtable-arm.c */
+                    --> ops->map
+                        --> __arm_lpae_map
+                            --> __arm_lpae_set_pte
+                                    /* 
+                                     * we configure SMMU page table here, as
+                                     * mentioned above, if we configure _CCA or
+                                     * dma-coherent, pte will include IOMMU_CACHE,
+                                     * which means DMA will be operated as cacheable
+                                     */
+                                --> *ptep = pte;
+```

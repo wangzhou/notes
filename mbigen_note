@@ -1,0 +1,11 @@
+mbigen study note
+
+IRQCHIP_DECLARE(hisi_mbigen, "hisilicon,mbigen-intc-v2", mbigen_intc_of_init);
+where to call mbigen_intc_of_init ?
+
+struct of_device_id
+
+probe function, msi_list in struct device ?
+when add msi_desc to this list ?
+
+how device use interrupts provided by mbigen ?

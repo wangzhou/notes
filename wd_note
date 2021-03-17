@@ -1,0 +1,56 @@
+wd note
+-------
+
+v0.1 2017.10.9 sherlock init
+
+/*
+ * echo `cat /proc/sys/kernel/random/uuid` > /sys/class/mdev_bus/dummy_wd.0/mdev_supported_types/dummy-wd_memcopy/create
+ *
+ * after create a virtual device, we will get below files in uuid/params/xxx
+ */
+mdev_fops.mdev_attr_groups
+        +-> max_copy_size 
+        +-> aflags
+        +-> pid /* common, offered by wd */
+
+supported_type_groups
+        +-> name
+        +-> device_api
+        +-> available_instances
+            /* below are common, offered by wd */
+        +-> available_instances
+        +-> latency
+        +-> throughput
+        +-> flags
+            /* how to create the create file? */
+            in
+            add_mdev_supported_type
+                --> sysfs_create_file(&type->kobj, &mdev_type_attr_create.attr)
+        +-> create
+
+        /* all offered by wd, for phsical devices: /sys/class/mdev_bus/dummy_wd.0/wdev/xxx */
+mdev_fops.dev_attr_groups
+        +-> node_id
+        +-> priority
+        +-> iommu_type
+
+mdev_fops.create/remove/open/release/read/write/ioctl/mmap will be binded to
+vfio device file.
+
+wd_dev.wd_dev_ops.get_queue/put_queue/is_q_updated/mmap/open/close/reset/reset_queue/ioctl
+will be the callback in wd framework, and will be called in above mdev_fops.
+
+
+In wd framework:
+
+ - create: call get_queue
+   
+
+wd_dev_register
+
+
+
+
+
+
+

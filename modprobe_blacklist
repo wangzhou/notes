@@ -1,0 +1,11 @@
+how to black list a kernel modules
+----------------------------------
+
+v0.1 2018.8.22 Sherlock init
+
+
+You can add:
+```
+modprobe.brocklist=module1,module2,...,module3
+```
+in kernel cmdline to not let related kernel module loading.

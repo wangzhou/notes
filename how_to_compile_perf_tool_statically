@@ -1,0 +1,16 @@
+how to compile perf tool statically
+-----------------------------------
+
+-v0.1 2018/5/22/ Sherlock init
+
+
+1. D05 machine + CentOS7.4
+
+2. kernel code
+
+3. cd kernel/tools
+   make LDFLAGS=-static perf
+
+4. you can find perf statically in kernel/tools/perf
+
+Note: you may need to: yum install glibc-static

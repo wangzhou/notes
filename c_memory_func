@@ -1,0 +1,15 @@
+glibc内存相关函数笔记
+
+-v0.1 2020.2.2 Sherlock init
+
+bzero
+-----
+
+bcopy
+-----
+
+共享内存
+--------
+
+	shmget...
+

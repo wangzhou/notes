@@ -1,0 +1,55 @@
+LDAP configure guide
+
+-v1.0 2015.4.17 wangzhou draft
+
+This doc is about how to use LDAP in our openlab, it includes:
+
+1. How to add a ldap account in ldap server. After adding an account in ldap
+   server, you can login in any PC where there is a ldap client in it.
+
+2. How to add a ldap client in a new PC. After doing this, if you have an
+   ldap account in server, you can login in this this PC. 
+
+Add a ldap account in ldap server
+---------------------------------
+
+Our ldap server is in the main server(192.168.1.101), so you should login in
+main server and run:
+
+sudo ldapadduser new_accoutn_name User
+
+
+configure LDAP client[1]
+------------------------
+1. sudo apt-get install libpam-ldap nscd
+   When installing libpam-ldap, it will ask you to configure LDAP client during
+   the install process. You can also change the configuration as below(step 2).
+
+   a. ldap server ip: ldap://192.168.1.101
+   b. Dstinguished name of the search base: dc=huawei,dc=com
+   c. LDAP version to use: 3
+   d. Make local root Database admin: yes
+   e. Does the LDAP database require login: no
+   f. LDAP account for root: cn=admin,dc=huawei,dc=com
+   g. LDAP root account password: to know this, please ping WangZhou :)
+   h. Local crypt to use when changing passwords: md5
+
+2. sudo apt-get install ldap-auth-config
+   sudo dpkg-reconfigure ldap-auth-config[1] 
+  or( sudo dpkg-reconfigure ldap-auth-config)
+
+3. Modify /etc/nsswitch.conf to choose how to make authentication:
+       passwd: files ldap
+       group: files ldap
+       shadow: files ldap
+
+   NOTE: You'd better put "filles" befort "ldap"
+
+4. Build home directory automatically in LDAP client[2]
+   add line: session required pam_mkhomedir.so skel=/etc/skel/ umask=0022
+   to /etc/pam.d/common-account
+
+Reference:
+[1] https://www.digitalocean.com/community/tutorials/how-to-authenticate-client-computers-using-ldap-on-an-ubuntu-12-04-vps
+[2] http://www.debian-administration.org/article/403/Giving_users_a_home_directory_automatically
+[3] http://blog.csdn.net/scarecrow_byr/article/details/42471461

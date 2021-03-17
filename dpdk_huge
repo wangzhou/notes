@@ -1,0 +1,4 @@
+dpdk huge page
+
+lib/librte_eal/linux/eal_hugepage_info.c
+hugepage_info_init

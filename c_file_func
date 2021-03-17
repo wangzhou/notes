@@ -1,0 +1,40 @@
+glibc文件相关函数笔记
+
+-v0.1 2020.2.2 Sherlock init
+
+fgets
+-----
+
+sscanf
+------
+
+fopen
+-----
+
+popen
+-----
+
+pclose
+------
+
+fdopen
+------
+	       if( (sock_fpi = fdopen(sock_fd,"r")) == NULL )
+		       oops("fdopen reading");
+
+	       if ( fgets(dirname, BUFSIZ-5, sock_fpi) == NULL )
+		       oops("reading dirname");
+	       sanitize(dirname);
+
+	       /* open writing direction as buffered stream */
+	       if ( (sock_fpo = fdopen(sock_fd,"w")) == NULL )
+		       oops("fdopen writing");
+
+	多次对同一个fd调用fdopen, 需要多次调用fclose关闭打开的fd。
+
+stat
+----
+	#include <sys/stat.h>
+
+	man 2 stat
+

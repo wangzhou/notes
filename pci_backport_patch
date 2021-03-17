@@ -1,0 +1,8 @@
+e365745d PCI: Add decoding for 16 GT/s link speed
+c197437 PCI: Disable MSI for HiSilicon Hip06/Hip07 only in Root Port mode
+1358d2b PCI/portdrv: Compute MSI/MSI-X IRQ vectors after final allocation
+e259799 PCI/portdrv: Factor out Interrupt Message Number lookup
+437dfae PCI/portdrv: Consolidate comments
+416440e PCI/portdrv: Add #defines for AER and DPC Interrupt Message Number masks
+eeef394 PCI/PME: Handle invalid data when reading Root Status
+bf71a20 PCI/AER: Report non-fatal errors only to the affected endpoint

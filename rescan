@@ -1,0 +1,8 @@
+
+/* drivers/pci/pci-sysfs.c */
+dev_rescan_store
+    --> pci_rescan_bus
+        --> pci_bus_add_devices
+            --> pci_bus_add_device
+                --> pci_create_sysfs_dev_files
+                    --> sysfs_create_bin_file

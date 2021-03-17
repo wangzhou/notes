@@ -1,0 +1,104 @@
+PASID analysis note
+-------------------
+
+-v0.1 2017.6.27 Sherlock init
+-v0.2 2017.6.30 Sherlock add vfio_svm_ioctl analysis
+
+6(7)/30: add multiple CD support
+
+there is a PASID Extended Capability indicates that the EP supports sending and
+receiving TLP containing a PASID TLP Prefix.
+
+PASID Control Register
+PASID Capability Register
+
+arm_smmu_add_device
+        /*
+         * enable PASID in PCIe EP, operate above registers, reture how many
+         * PASID this PCIe EP supports.
+         */
+    --> nr_ssids = arm_smmu_enable_ssid(master)
+        /* just allocate line or two-level CD table with nr_ssids entries */
+    --> arm_smmu_alloc_cd_tables(master, nr_ssids)
+
+as showed:
+
+      Stream tables          Ctx. tables          Page tables
+        +--------+   ,------->+-------+   ,------->+-------+
+        :        :   |        :       :   |        :       :
+        +--------+   |        +-------+   |        +-------+
+   SID->|  STE   |---'  SSID->|  CD   |---'  IOVA->|  PTE  |--> IPA
+        +--------+            +-------+            +-------+
+        :        :            :       :            :       :
+        +--------+            +-------+            +-------+
+
+8/30: ARM8.1 VHE support
+9/31: ...
+
+10/30:
+
+PASID/CD/smmu_taks/smmu_context create:
+```
+vfio_svm_ioctl(struct vfio_device *device, unsigned int cmd, unsigned long arg)
+    --> iommu_bind_task(device->dev, task, &svm.pasid, 0, NULL);
+            /* arm_smmu_bind_task in drivers/iommu/arm-smmu-v3.c */
+        --> ops->bind_task(dev, task, pasid, flags, priv)
+           
+                /*  */
+            --> arm_smmu_alloc_task(smmu, task)    
+                    /*
+                     * register a mm_notifier to mm[1], when mm has invalidate,
+                     * invalidate_page, invalidate_range will be called
+                     *
+                     * when to call clear_flush_young?
+                     */
+                --> smmu_task->mmu_notifier.ops = &arm_smmu_mmu_notifier_ops
+                    /*  */
+                --> arm_smmu_init_task_pgtable(smmu_task)
+                    --> arm_smmu_context_share(smmu_task, asid);
+                        --> arm_smmu_write_ctx_desc(master, 0, &smmu_domain->s1_cfg)
+                                /*
+                                 * here update related CD table, we just
+                                 * invaliate the cached CD table, so we can use
+                                 * the updated one safely.
+                                 */
+                            --> run command: CMDQ_OP_CFGI_CD !!
+                        --> run command: CMDQ_OP_TLBI_EL2_ASID or
+                                         CMDQ_OP_TLBI_NH_ASID
+                --> mmu_notifier_register(&smmu_task->mmu_notifier, mm)
+
+                /* here we create related CD for ssid/mm  */
+            --> arm_smmu_attach_task(smmu_task, master)
+                --> ssid = arm_smmu_alloc_cd(master)
+                --> arm_smmu_write_ctx_desc(master, ssid, &smmu_task->s1_cfg)
+                --> Insert into master context list... ??
+``` 
+
+Once we bind certain mm to a device, which means this process see the same address
+together with above device.
+
+So we will see a lot sync problem, for example, if Page table in MMU changes,
+related map in SMMU should also been changed, here we use mm notifier. Reversely, 
+if map change happens in SMMU, we should also inform MMU about this. And we should
+also handle cache correctly from both CPU and SMMU side.
+
+In the area of cache, we will see the concept of ASID. We can see the basic concept
+of ASID from "ARM Cortex-A Series Programmer's Guide for ARMv8-A" 12.10 Context switching.
+ASID is just a flag in MMU TLB to indicate process. (I think)Without ASID,
+when doing context switch, we should update all the TLB with new process, but
+if we add a ASID to TLB, apart from VM, we also have ASID to check if there is
+a right TLB.
+
+
+what is the use case of PRI?
+
+
+what is the relationship between shared mm and iova domain?
+this means how to use PASID to access mm, by which API? how does device send a
+request with PASID? Now we can not find a PASID only related API :(
+
+
+reference:
+
+[1] Memory management notifiers: https://lwn.net/arricles/266320
+

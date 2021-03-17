@@ -1,0 +1,99 @@
+Hi1616 ACS problem
+------------------
+
+-v0.1 2017.5.10 Sherlock init
+
+We can set RP's Bar0/1 to this RP's mem window to forward TLP transction whose
+target address is in PCI address to CPU address, which is showed in patch1.
+
+Bar size which can be set by setting Bar mask, which must be the value of 2 power.
+However, we do not allocate RP's mem window to the value of 2 power now. So if
+we want use blow patch 1 and patch 2 to support ACS liked feature. We should
+modify all RPs' mem window to the valude of 2 power.
+
+Maybe, we can firstly test this in 1P NA PCIe2 :) But modify all mem window is
+a big job for D05 UEFI, which may bring us a lot problems.
+
+
+Patch 2
+-------
+
+ drivers/pci/quirks.c | 10 ++++++++++
+ 1 file changed, 10 insertions(+)
+
+diff --git a/drivers/pci/quirks.c b/drivers/pci/quirks.c
+index 9b85ce5..6fffebe 100644
+--- a/drivers/pci/quirks.c
++++ b/drivers/pci/quirks.c
+@@ -4180,6 +4180,14 @@ static int pci_quirk_qcom_rp_acs(struct pci_dev *dev, u16 acs_flags)
+ 	return ret;
+ }
+ 
++static int pci_quirk_hisi_rp_acs(struct pci_dev *dev, u16 acs_flags)
++{
++	u16 flags = (PCI_ACS_RR | PCI_ACS_CR | PCI_ACS_UF | PCI_ACS_SV);
++	int ret = acs_flags & ~flags ? 0 : 1;
++
++	return ret;
++}
++
+ /*
+  * Sunrise Point PCH root ports implement ACS, but unfortunately as shown in
+  * the datasheet (Intel 100 Series Chipset Family PCH Datasheet, Vol. 2,
+@@ -4346,6 +4354,8 @@ static int pci_quirk_mf_endpoint_acs(struct pci_dev *dev, u16 acs_flags)
+ 	{ 0x10df, 0x720, pci_quirk_mf_endpoint_acs }, /* Emulex Skyhawk-R */
+ 	/* Cavium ThunderX */
+ 	{ PCI_VENDOR_ID_CAVIUM, PCI_ANY_ID, pci_quirk_cavium_acs },
++	/* Hisilicon Hip05/Hip06 root ports */
++	{ PCI_VENDOR_ID_HUAWEI,	0x1610, pci_quirk_hisi_rp_acs },
+ 	{ 0 }
+ };
+
+
+Patch 1
+-------
+
+diff --git a/drivers/pci/quirks.c b/drivers/pci/quirks.c
+index 6736836..9b85ce5 100644
+--- a/drivers/pci/quirks.c
++++ b/drivers/pci/quirks.c
+@@ -4533,6 +4533,40 @@ int pci_dev_specific_enable_acs(struct pci_dev *dev)
+ 	return -ENOTTY;
+ }
+ 
++static void quirk_hisi_enable_acs(struct pci_dev *dev)
++{
++        struct pci_host_bridge *bridge = pci_find_host_bridge(dev->bus);
++        void __iomem *reg_base = dev->bus->sysdata->priv;
++       struct resource_entry *window;
++        unsigned long base, size;
++        u32 tmp;
++
++        /* find mem window of host bridge */
++	resource_list_for_each_entry(window, &bridge->windows) {
++		if (resource_type(window->res) != IORESOURCE_MEM)
++			continue;
++
++                base = window->res->start;
++                size = window->res->end - window->res->start;
++        }
++
++        /* find related sys-controll base, then enable dbi */
++        tmp = readl(reg_base + 0x1024);
++        writel(tmp | 1 << 2, reg_base + 0x1024);
++
++        /* configure BAR0 of host bridge */
++	pci_write_config_byte(dev, 0x10, 0x1);
++	pci_write_config_byte(dev, 0x10, ~(size - 1));
++
++        /* disable dbi */
++        tmp = readl(reg_base + 0x1024);
++        writel(tmp & ~(1 << 2), reg_base + 0x1024);
++
++	pci_write_config_byte(dev, 0x10, base);
++}
++DECLARE_PCI_FIXUP_FINAL(PCI_VENDOR_ID_HUAWEI, 0x1610, quirk_hisi_enable_acs);
++
+ /*
+  * The PCI capabilities list for Intel DH895xCC VFs (device id 0x0443) with
+  * QuickAssist Technology (QAT) is prematurely terminated in hardware.  The

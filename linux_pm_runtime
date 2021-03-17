@@ -1,0 +1,19 @@
+linux pm runtime
+================
+
+-v0.1 2020.11.27 Sherlock init
+
+struct pci_driver {
+	/* example: drivers/net/ethernet/intel/igb */
+	.driver.pm = struct dev_pm_ops;
+	/* ?? */
+	.shutdown = xxx;
+}
+
+/* 只是减PM里device的引用计数 */
+pm_runtime_put_noidle
+pm_runtime_get_noresume
+
+/* 引用计数增减的同时，尝试上下电设备 */
+pm_runtime_get_sync
+pm_runtime_put

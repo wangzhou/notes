@@ -1,0 +1,11 @@
+1. mount -o loop RH.iso /mnt
+
+2. edit /etc/yum.repo.d/iso.repo as:
+
+[Server]
+name=rhel7server
+baseurl=file:///mnt
+enable=1
+gpgcheck=1
+gpgkey=file:///mnt/RPM-GPG-KEY-redhat-release
+

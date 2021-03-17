@@ -1,0 +1,5 @@
+用这个命令可以找见当前内核里的warning，然后可以做patch修复
+
+make W=1 ARCH=arm64 CROSS_COMPILE=aarch-linux-gnu- M=drivers/crypto
+
+可能需要提前全量编译下内核。

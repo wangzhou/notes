@@ -1,0 +1,19 @@
+
+Linux kernel/driver engineer in HiSilicon
+
+- Redhat on-site engineer(2015.11 ~ 2018.9): Enable KunPeng916/920 in RHEL/CentOS 7.x/8.x
+
+- Maintainer of several Linux kernel driver:
+
+  1. KunPeng916 PCIe controller driver.
+
+  2. KunPeng SoC ZIP engine and QM driver crypto.
+
+  3. KunPeng Soc DMA engine driver.
+
+  4. UACCE driver(A general user space accelerator driver).
+
+- Also Maintain UADK library, which is a set of user space libraries working
+  together with UACCE. It is a general user space accelerator libraries.
+
+  https://github.com/Linaro/UADK

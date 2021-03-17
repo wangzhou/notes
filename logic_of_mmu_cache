@@ -1,0 +1,16 @@
+mmu and cache
+-------------
+
+
+                                
+       VA          L1 TLB          PA           L1 cache
+
+
+            
+	            miss
+
+
+
+		               MMU         page table
+			    L2 TLB
+	

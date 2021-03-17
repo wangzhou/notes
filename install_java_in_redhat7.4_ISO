@@ -1,0 +1,46 @@
+Redhat ISO test report
+======================
+
+-v0.1 2017.7.4 Sherlock add Java,PHP,ceph test
+
+
+1432350: Java support 
+---------------------
+
+	ISO: 6.22 nightly built
+
+	yum install java-1.8.0-openjdk*
+
+	result: OK
+
+	[root@localhost ~]# java -version
+	openjdk version "1.8.0_131"
+	OpenJDK Runtime Environment (build 1.8.0_131-b12)
+	OpenJDK 64-Bit Server VM (build 25.131-b12, mixed mode)
+
+
+1432360: PHP support
+--------------------
+
+	ISO: 6.22 nightly built
+
+	yum install php
+
+	result: OK
+
+	[root@localhost ~]# php --version
+	PHP 5.4.16 (cli) (built: Aug  5 2016 07:51:46) 
+	Copyright (c) 1997-2013 The PHP Group
+	Zend Engine v2.4.0, Copyright (c) 1998-2013 Zend Technologies
+
+
+1403848: ceph support
+---------------------
+
+	[root@localhost ~]# ceph --version
+	ceph version 10.2.5 (c461ee19ecbc0c5c330aca20f7392c9a00730367)
+
+	we have ceph related command:
+
+	ceph            ceph-brag       ceph-dencoder   ceph-rbdnamer   certutil
+	ceph-authtool   ceph-conf       ceph-post-file  ceph-syn

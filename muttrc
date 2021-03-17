@@ -1,0 +1,16 @@
+set from="Sherlock Wang <wangzhou.bry@gmail.com>"
+set use_from=yes
+set sendmail="/usr/bin/msmtp"
+set editor=vim
+set folder="$HOME/Mail"
+set record="+sent"
+set mbox="+mbox"
+set postponed="+postponed"
+# lasted mail in first line, I like this.
+# set sort=threads
+set sort_aux=reverse-last-date-received
+# set sort_aux=last-date-received
+
+#mailboxes pci-mbox
+#mailboxes kernel-mbox
+#mailboxes arm-mbox

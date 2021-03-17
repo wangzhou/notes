@@ -1,0 +1,28 @@
+openssl-uadk:
+
+   open libwd_crypto    constructor1: wd_cipher_open_driver   
+
+			   open hisi_sec 
+
+			   	set_cipher_driver
+			   	set_digest_driver
+			   	set_aead_driver
+
+   		        constructor2: wd_digest_open_driver
+
+			   open hisi_sec
+
+			   	set_cipher_driver
+			   	set_digest_driver
+			   	set_aead_driver
+
+			constructor3: wd_aead_open_driver
+
+			   open hisi_sec
+
+			   	set_cipher_driver
+			   	set_digest_driver
+			   	set_aead_driver
+
+所有多次dlopen一个库会怎么样？
+

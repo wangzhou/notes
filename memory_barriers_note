@@ -1,0 +1,10 @@
+Memory Barries: a Hardware View for software Hackers笔记
+--------------------------------------------------------
+
+-v0.1 2020.2.19 Sherlock init
+
+简介：这个文章是"Memory Barries: a Hardware View for software Hackers"这篇文章
+      的阅读笔记，这个文章从硬件实现的角度把引入Memory Barrie的原因分析的很清楚。
+      比较值的仔细阅读。
+
+

@@ -1,0 +1,1 @@
+make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- W=1 M=drivers/crypto

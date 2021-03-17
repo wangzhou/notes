@@ -1,0 +1,129 @@
+vSVA逻辑分析
+------------
+
+-v0.1 2020.2.29 Sherlock init.
+-v0.2 2020.4.16 Sherlock add missing pasid logic in guest.
+-v0.3 2020.4.27 Sherlock update vSMMU/SMMU CD base update.
+
+简介：本文分析Linux vSVA现在的构架逻辑，用于相关开发人员对齐认识。目前为止Linux
+      vSVA的代码还在构架讨论和代码review阶段。
+
+0. qemu基础认识
+---------------
+
+ qemu里linux系统的用户态代码跑在cpu EL0, qemu里linux系统的内核态代码跑在cpu EL1。
+
+ qemu创建虚拟机的时候ioctl(CREATE_VM，VCPU，MEMORY)会到cpu EL2创建VM的记录信息。
+ ioctl(VM_RUN)会把PC指向虚拟机起始地址，然后退出到EL1。EL2只起到虚拟机管理的作用，
+ 虚拟机上的代码正常运行时，代码占据真实的CPU，并且如果是用户态代码，跑在物理CPU
+ 的EL0, 如果是内核态代码就直接跑到物理CPU的EL1。当CPU访问物理内存的时候，VA->IPA
+ 的转换由MMU S1直接支持, 当IPA的地址落在之前ioctl注册的虚拟机地址空间时，硬件自动
+ 完成MMU S2的转换。可见，虚拟机里的进程页表是直接放到虚拟机内核地址空间的。
+
+ 虚拟机里的代码运行在CPU EL0/EL1。当有IO访问的时候, 因为之前创建虚拟机的时候
+ 已经把IO地址空间配置给虚拟机，这里有IO访问的时候会触发CPU异常，虚拟机退出，CPU
+ 进入EL2, CPU在EL2处理后退出到虚拟机qemu里，qemu可以具体去处理这个IO，比如是一个
+ 网络IO，那qemu可以直接起socket，把报文发出去。注意，这里的虚拟机退出是指CPU不再
+ 运行虚拟机里执行的代码，因为CPU并不知道如果控制IO。
+
+1. vSVA
+-------
+
+ vSVA的目标是在虚拟机里(qemu)，使的IO设备可以直接使用进程VA。所以，我们这里的
+ 假设是物理IO设备已经通过host上vfio驱动直通给虚拟机。
+
+ 要实现vSVA的目标，我们需要同时使能SMMU的S1,S2地址翻译，S1进行VA->IPA翻译，S2
+ 进行IPA->PA翻译，如果是host vfio使能，我们认为S2的翻译已经通过vfio配置在SMMU里。
+
+ 所以，vSVA的方案需要把虚拟机系统里的进程页表同步到host SMMU上。因为是vSVA，就
+ 有可能出现设备发起内存访问的时候，host SMMU上虚拟机里的进程页表项不存在的情况，
+ 所以，host上的SMMU要可以支持S1缺页。因为，S2用vfio支持，vfio采用pin内存的方式，
+ 暂时我们不需要S2的缺页。这里说的host上SMMU支持S1缺页，并不是在host系统上做S1缺页，
+ 我们这里讨论的是nested SMMU, 所以在host SMMU硬件检测到S1缺页的时候，应该把这个
+ 信息上报给guest里的SMMU，guest里使用和host一样的SMMU驱动处理缺页，当guest处理完
+ 这个缺页后，应该把对应的页表信息同步到SMMU的物理硬件上(SMMU.CD.TT0里)。因为，
+ guest里的进程页表和SMMU CD上的页表物理上不是一个，很明显这里有一个设备和vcpu页
+ 表的同步问题，在host SVA上这个问题不存在，因为host SVA上cpu和SMMU是物理上共用
+ 相同页表。因此，在需要在vcpu无效化页表的时候，需要把信息同步到host的SMMU上，
+ 这个信息包括页表项和TLB。host SVA上也有这个问题，但是如果用SMMU stall mode, 可
+ 以配置DVM，把CPU侧TLB invalidate广播到SMMU，这样就不需要软件同步。
+
+ 在guest里多进程使用一个设备的资源，就需要支持PASID。这里的逻辑和上面的是一样的，
+ 只不过扩展到多进程。
+
+2. 软件框架
+-----------
+```
+      +----------------------+
+      | guest           user |
+      |                      |
+      |                      |
+      |                      |
+      |----------------------|   --------------------    VA
+      |               kernel |                                 +------------+
+      |                      |                                 | page table |
+      |                      |                                 +------------+
+      |                      |                                         ^
+      +----------------------+                                         |
+      +----------------------+         --------------------  IPA       |
+      | host                 |                                         |
+      |                      |                                         |
+      |                      |             +---------+                 |
+      |                      |             | DDR     |        PA       |
+      |                      |             +---------+                 |
+      |                      |                                         |
+      |                      |                                         |
+      |                      |                                         |
+      |                      |                                         |
+      +----------------------+                                         |
+              |                                                        |
+              |                   +-----+                              |
+              |          +------> | S1  |  VA->IPA  <------------------+
+           +--+---+ -----+        +-----+                  
+	   | SMMU |
+           +------+ -----+        +-----+
+              ^          +------> | S2  |  IPA->PA
+              |                   +-----+
+           +-----+
+	   | dev |
+           +-----+
+```
+ 我们顺着具体的数据流看看需要的接口，在dev的控制寄存器被map到guest的用户态后，
+ 用户态可以直接给guest VA配置给dev，启动dev从VA处读写数据。dev发出的访问到达
+ SMMU后首先要进过S1的翻译，得到IPA，所以S1需要guest里的进程的页表。
+
+ 目前Redhat的Eric在做ARM nested SMMU的支持，他把相关的补丁集合到了他的分支里，
+ 你可以在这个地方看到完整的内核补丁：https://github.com/eauger/linux branch:
+ v5.6-2stage-v11_10.1。这组补丁里给vfio加了一个ioctl(VFIO_IOMMU_SET_PASID_TABLE)，
+ 用这个ioctl把虚拟机里的SMMU的CD地址(IPA)直接传给host，并且配置给物理SMMU的CD
+ 基地址。对于预先在vcpu一侧有缺页的情况，这里S1可以查页表翻译，SMMU硬件在nested
+ 模式下，会对CD基地址做S2翻译的到CD的真正物理地址，然后找见页表做翻译。可见qemu
+ 里的SMMU驱动使用和host SMMU相同的驱动，初始化qemu里SMMU的CD.TT0, 然后把CD直接
+ 通过系统调用配置到物理SMMU上。需要注意，这里CD里的页表基地址是IPA，SMMU硬件
+ 会先根据S2页表翻译IPA到PA得到页表物理基地址。
+
+ 对于dev传给SMMU的VA没有页表的情况, S1要做缺页处理。这里的缺页处理在逻辑上应该
+ 上报给guest，因为要做vSVA，是要给虚拟机里的进程的页表加页表项。Eric这组补丁里，
+ 在vfio里加了一个event queue的队列，mmap到host用户态，用来传递这个信息。逻辑上看，
+ qemu应该处理并上报这个缺页请求，qemu里的SMMU驱动做缺页处理。在qemu的SMMU驱动做
+ 缺页处理的时候，来自dev的请求是stall在SMMU里的，所以，SMMU缺页处理完毕后，应该
+ 有通知机制通知到host SMMU，使能stall的请求继续。
+
+ 可以看到当页表有变动的时候，在guest和物理SMMU上同步页表的开销是很大的。
+
+ 当guest里的进程有退出或者内存有释放时，需要更新guest里进程的页表，vcpu tlb，
+ host SMMU上相关进程页表和tlb。Eric补丁里vfio里提供了ioctl(VFIO_IOMMU_CACHE_INVALIDATE)
+ 用来更新host SMMU上的相关tlb。这里vcpu可以做带VMID/ASID的DVM, 直接无效化相关的tlb。
+ 
+3. virtio iommu
+---------------
+
+ 以上的分析都是基于nested IOMMU/SMMU的方案。目前Jean在做virtio iommu的方案。
+ 这个方案在qemu里实现一个virtio iommu的虚拟设备qemu/hw/virtio/virtio-iommu.c,
+ 虚拟机内核里的drivers/iommu/virtio-iommu.c驱动这个虚拟设备，现在看来这个是
+ 用纯软件实现VA->IPA的映射。
+
+ 基于以上的分析，可以基于vfio接口在virtio iommu里实现有物理SMMU支持的virtio-iommu。
+ 但是，这个需要virtio-iommu协议的支持。目前，Jean在搞virt-iommu的协议
+ jpbrucker.net/virtio-iommu/spec, 目前看virtio iommu spec中PASID/fault的支持
+ 还不完善。

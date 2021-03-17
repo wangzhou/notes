@@ -1,0 +1,32 @@
+Linux NUMA balancing分析
+========================
+
+-v0.1 2021.3.6 Sherlock
+
+
+0. NUMA balancing是什么
+-----------------------
+
+ NUMA balancing是指，Linux根据程序运行状态自动调整内存的特性。比如，程序在CPU0上，
+ 使用的内存也在CPU0对应的NUMA节点上，当程序被迁移到CPUx的时候，系统可以自动识别
+ 并且把内存也迁移到CPUx对应的NUMA节点的内存上。需要打开内核配置CONFIG_NUMA_BALANCING。
+
+1. 使用方式
+-----------
+
+ 内核会自动进行内存的迁移调整。 
+
+ 我们可以人为的写一个测试代码去观察这种自动迁移。
+```
+ todo: ...
+```
+ /proc/vmstat里numa balancing相关的统计数据: numa_*
+ 还有如下控制文件:
+ /proc/sys/kernel/numa_balancing
+ /proc/sys/kernel/numa_balancing_scan_delay_ms
+ /proc/sys/kernel/numa_balancing_scan_period_max_ms
+ /proc/sys/kernel/numa_balancing_scan_period_min_ms
+ /proc/sys/kernel/numa_balancing_scan_size_mb
+
+2. 内核实现分析
+---------------

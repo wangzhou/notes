@@ -1,0 +1,40 @@
+PCIe/SMMU PRI analysis note
+---------------------------
+
+-v0.1 2017.7.3 Sherlock init
+
+PRI is independent to ATS.
+RRI offers the ability in device to page fault.
+
+
+Page Request Message(PRM)(is a kind of PCIe message) sent from device to RC
+(page address and Page Request Group(PRG))
+
+
+RPG Response Message to device
+
+
+device sending ATS request before sending data
+
+```
+arm_smmu_device_probe
+    --> arm_smmu_device_reset
+        --> arm_smmu_setup_irqs(smmu)
+                /* thread callback is arm_smmu_priq_thread */
+            --> devm_request_threaded_irq
+            (arm_smmu_priq_thread)
+                --> arm_smmu_handle_ppr
+                        /* register a work queue */
+                    --> INIT_WORK(&fault->work, arm_smmu_handle_fault)
+                    (arm_smmu_handle_fault)
+                            /* where to fill the page table of SMMU ?? */
+                        --> _arm_smmu_handle_fault(fault)
+                            /* CMDQ_OP_PRI_RESP: issue a RPI response */
+                        --> arm_smmu_fault_reply(fault, resp)
+
+```
+
+
+
+        
+

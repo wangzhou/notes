@@ -1,0 +1,11 @@
+time in linux
+-------------
+
+
+RTC: real time clock: hwclock
+
+kernel clock: date
+
+NTP time server: ntpdate
+
+chronyd service

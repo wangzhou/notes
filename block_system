@@ -1,0 +1,69 @@
+block system
+------------
+
+-v0.1 2020.10.31 Sherlock init
+
+
+
+              vfs
+
+			page/buffer cache
+
+	
+    ext    xfs    btrfs         bdev
+
+
+
+        
+	      block
+
+
+     
+     scsi                                nvme
+
+
+
+     libsas           libata
+
+
+
+     hisi_sas mvsas   achi
+
+
+
+     sas controller   sata controller    nvme controller
+
+
+
+     BIO  --> request(多个连续的BIO组成)
+
+     每个磁盘对应io调度器里的一个request_queue。IO调度的输入是request，输出是
+     根据磁盘物理特性排序的requst, 把这些request，放入磁盘对应的request_queue。
+
+
+     multi queue:
+
+     
+     core         core         core         core
+
+
+
+     software     soft
+     queue        queue
+
+
+
+           hardware
+	   context
+
+
+      
+          sas driver
+
+
+
+	  sas controller
+
+
+
+Note: bitmap vs sbitmap

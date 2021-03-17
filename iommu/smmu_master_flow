@@ -1,0 +1,7 @@
+/* drivers/pci/pci-driver.c */
+pci_dma_configure(struct device *dev)
+  +-> acpi_dma_configure 
+    +-> iort_iommu_configure(dev)
+      +-> iort_iommu_xlate(dev, parent, streamid)
+        +-> arm_smmu_iort_xlate(dev, streamid, iort_fwnode, ops)
+	  +-> iommu_fwspec_init(dev, fwnode, ops)

@@ -1,0 +1,97 @@
+PATH=/usr/local/bin:/usr/bin:/bin
+MAILDIR=$HOME/Mail
+DEFAULT=$MAILDIR/mbox
+LOGFILE=$MAILDIR/log
+
+#--------------------------------
+# to or cc wangzhou
+:0
+* ^Cc:.*wangzhou1@hisilicon.com
+to-or-cc-wangzhou
+
+:0
+* ^To:.*wangzhou1@hisilicon.com
+to-or-cc-wangzhou
+#--------------------------------
+
+#--------------------------------
+# for qemu mailing list
+:0
+* ^Cc:.*qemu-devel@nongnu.org
+qemu-mbox
+
+:0
+* ^To:.*qemu-devel@nongnu.org
+qemu-mbox
+#--------------------------------
+
+#--------------------------------
+# for pci mailing list
+:0
+* ^Cc:.*linux-pci@vger.kernel.org
+pci-mbox
+
+:0
+* ^To:.*linux-pci@vger.kernel.org
+pci-mbox
+#--------------------------------
+
+
+#--------------------------------
+# for acpi mailing list
+:0
+* ^Cc:.*linux-acpi@vger.kernel.org
+acpi-mbox
+
+:0
+* ^To:.*linux-acpi@vger.kernel.org
+acpi-mbox
+#--------------------------------
+
+
+#--------------------------------
+# for gpio mailing list
+:0
+* ^Cc:.*linux-gpio@vger.kernel.org
+gpio-mbox
+
+:0
+* ^To:.*linux-gpio@vger.kernel.org
+gpio-mbox
+#--------------------------------
+
+
+#--------------------------------
+# for nand mailing list
+:0
+* ^Cc:.*linux-mtd@lists.infradead.org
+nand-mbox
+
+:0
+* ^To:.*linux-mtd@lists.infradead.org
+nand-mbox
+#--------------------------------
+
+
+#--------------------------------
+# for ARM mailing list
+:0
+* ^Cc:.*linux-arm-kernel@lists.infradead.org
+arm-mbox
+
+:0
+* ^To:.*linux-arm-kernel@lists.infradead.org
+arm-mbox
+#--------------------------------
+
+
+#--------------------------------
+# for kernel mailing list
+:0
+* ^Cc:.*linux-kernel@vger.kernel.org
+kernel-mbox
+
+:0
+* ^To:.*linux-kernel@vger.kernel.org
+kernel-mbox
+#--------------------------------

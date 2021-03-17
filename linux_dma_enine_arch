@@ -1,0 +1,89 @@
+Linux内核DMA子系统分析
+======================
+
+-v0.1 2019.10.1  Sherlock init
+-v0.2 2019.10.19 Sherlock Add part2 and part3
+
+本文分析Linux内核DMA子系统的构架，需要写DMA engine驱动的同学可以作为参考。
+
+
+1. DMA engine使用
+-----------------
+
+ DMA子系统下有一个帮助测试的测试驱动(drivers/dma/dmatest.c), 从这个测试驱动入手
+ 我们了解到内核里的其他部分怎么使用DMA engine。配置内核，选则CONFIG_DMATEST可以
+ 把这个模块选中，编译会生成dmatest.ko。可以参考这个文档来快速了解怎么使用dmatest.ko:
+ https://www.kernel.org/doc/html/v4.15/driver-api/dmaengine/dmatest.html.
+
+ 具体上来讲，内核的其他模块使用dma engine的步骤是:
+
+  - 使用dma_request_channel先申请一个dma channel，之后的dma请求都基于这个申请
+    的dma channel。
+
+  - 调用dma_dev->device_prep_dma_memcpy(chan, dst, src, len, flag)把dma操作的参
+    数传给dma子系统。同时返回一个从chan申请的异步传输描述符: struct dma_async_tx_descriptor.
+
+    可以把用户的回调函数设置在上面的描述符里。通常这里的回调函数里是一个complete
+    函数，用来在传输完成后通知用户业务流程里的wait等待。
+
+  - tx->tx_submit(tx) 把请求提交。
+
+  - dma_submit_error 判断提交的请求是否合法。
+
+  - dma_async_issue_pending 触发请求真正执行。
+
+    如上，在发送请求之后，一般可以在这里wait等待，通过上面注册的回调函数在dma
+    执行完成后通知这里的wait。
+
+  - dma_async_is_tx_complete 查看请求的状态。
+
+  - 做完dma操作之后使用dma_release_channel释放申请的dma channel。
+
+2. DMA子系统分析
+----------------
+
+ 分析一个现有的dmaengine驱动可以看到，dmaengine驱动需要使用dmaenginem_async_device_register
+ 向dma子系统注册驱动自己的struct dma_device结构。在注册之前，设备驱动要先填充
+ 这个结构里的一些域段。cap_mask是设备驱动支持的特性，还有dma子系统需要的各种
+ 回调函数。
+
+ DMA子系统用一个全局链表记录系统里的dma engine设备。对于dma engine设备上的各个
+ channel，DMA子系统为每个channel创建一个struct device设备，这个设备的class是dma_dev
+ class, DMA子系统把创建的device用device_register向系统注册，这样在用户态sysfs
+ 的/sys/class/dma下面就会出现dma<xx>chan<xx>的dma channel描述文件。每个dma<xx>chan<xx>
+ 下有对应的属性描述文件。
+
+ DMA子系统还对外提供一套第一节中所描述的API。
+
+3. DMA engine驱动分析
+---------------------
+
+ 可以看到，DMA系统在dma engine注册的时候需要设备驱动提供的一套回调函数来支持
+ 第一小节里的各个API，这些回调函数操作具体硬件，完成相关硬件的配置。我们这里可以
+ 以MEMCPY要提供的回调函数示例说明回调函数的意义。
+
+  - device_alloc_chan_resources
+
+    分配chan的硬件资源
+
+  - device_free_chan_resources
+
+    释放chan的硬件资源
+
+  - device_prep_dma_memcpy
+
+    接收用户传入的请求，分配驱动层面的用户请求
+
+  - device_issue_pending
+
+    操作硬件发起具体的dma请求
+
+ 分析现有的dma驱动，可以看到里面用了virt-dma.[ch]里提供的接口。这里也简单看下
+ virt-dma的使用方法。virt-dma的核心数据结构是一组链表，这组链表记录处于不同阶段
+ 的dma请求。当用 e.g. device_prep_dma_memcpy创建一个请求后，这个请求应该挂入
+ desc_allocated链表，当用tx->tx_submit提交这个请求后，应该把请求挂入desc_submitted
+ 链表，当用dma_async_issue_pending执行请求后，应该把请求挂入desc_issued链表，
+ 当最后请求执行完成后，应该挂入desc_completed链表。virt-dma在原来的dma_chan上
+ 封装了virt_dma_chan，在virt_dma_chan创建的时候, vchan_init为每一个vchan创建
+ 一个tasklet，设备驱动可以在中断处理里调用 e.g. vchan_cookie_complete->tasklet_schedule
+ 执行tasklet函数vchan_complete, 这个函数里会执行dma请求中用户设置的回调函数。

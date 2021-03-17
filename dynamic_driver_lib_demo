@@ -1,0 +1,156 @@
+使用动态库实现私有驱动的加载
+----------------------------
+
+v0.1 2020.8.1 Sherlock init
+
+本文讨论linux下使用动态库加载私有驱动库的一个设计。
+
+1. 模型
+-------
+```
+              +----------------------+
+              |       用户app        |
+              +----------------------+
+                         |
+                         |
+                         v
+              +----------------------+
+              |        api库         |
+              +----------------------+
+              /          |           \
+             /           |            \
+            v            v             v
+    +---------+      +---------+      +---------+
+    | 驱动库1 |      | 驱动库2 |      | 驱动库3 |
+    +---------+      +---------+      +---------+
+         |               |                 |
+         |               |                 |
+         v               v                 v
+    +---------+      +---------+      +---------+
+    |  硬件1  |      |  硬件2  |      |  硬件3  |
+    +---------+      +---------+      +---------+
+```
+ 如上图，用户通过api库提供的接口使用api库提供的功能，由于底层的硬件不一样，对应
+ 不同的驱动。为了方便, api库和各个驱动库被独立的编译成动态库。可以想像各个驱动
+ 库里需要实现api库里函数的各个回调函数，然后通过某种方式挂到api库里。我们考虑
+ 怎么组织软件实现这样的自动挂接。实际上rdma-core的代码里已经我们提供了实现的
+ 样板，我们下面把相关的骨架抽出来，简单demo下。
+
+2. 设计demo代码
+---------------
+app.c:
+```
+#include <stdio.h>                                                              
+#include "api_dl.h"                                                             
+                                                                                
+int main()                                                                      
+{                                                                               
+        int a = 1, b = 5, c = 0xffff;                                           
+                                                                                
+        c = add(a, b);                                                          
+        printf("a + b = %d\n", c);                                              
+                                                                                
+        c = multi(a, b);                                                        
+        printf("a * b = %d\n", c);                                              
+                                                                                
+        return 0;                                                               
+}
+```
+
+api_dl.h:
+```
+int add(int a, int b);                                                          
+int multi(int a, int b);                                                         
+```
+api_dl.c:
+```
+#include <stdio.h>                                                              
+#include <dlfcn.h>                                                              
+#include "api_internal.h"                                                       
+                                                                                
+struct api_driver *global_driver;                                               
+                                                                                
+void __set_driver(struct api_driver *drv)                                       
+{                                                                               
+        global_driver = drv;                                                    
+}                                                                               
+                                                                                
+int add(int a, int b)                                                           
+{                                                                               
+        return global_driver->add(a, b);                                        
+}                                                                               
+                                                                                
+int multi(int a, int b)                                                         
+{                                                                               
+        return global_driver->multi(a, b);                                      
+}                                                                               
+                                                                                
+static void __attribute__((constructor)) open_driver_dl(void)                    
+{                                                                               
+        void *driver_dl;                                                        
+                                                                                
+        driver_dl = dlopen("./libdriver.so", RTLD_NOW);                         
+        if (!driver_dl)                                                         
+                printf("Fail to open libdriver\n");                             
+}                                                                               
+```
+
+api库中针对驱动库的头文件(api_internal.h):
+```
+struct api_driver {                                                             
+        int (*add)(int a, int b);                                               
+        int (*multi)(int a, int b);                                             
+};                                                                              
+                                                                                
+void __set_driver(struct api_driver *drv);                                      
+                                                                                
+#define SET_DRIVER(drv)                                                 \       
+static void __attribute__((constructor)) set_driver(void)               \       
+{                                                                       \       
+        __set_driver(drv);                                              \       
+}
+```
+
+一个驱动库的实现:
+```
+#include "api_internal.h"                                                       
+                                                                                
+static int add(int a, int b)                                                    
+{                                                                               
+        return a + b;                                                           
+}                                                                               
+                                                                                
+static int multi(int a, int b)                                                  
+{                                                                               
+        return a * b;                                                           
+}                                                                               
+                                                                                
+struct api_driver one_driver = {                                                
+        .add = add,                                                             
+        .multi = multi,                                                         
+};                                                                              
+                                                                                
+SET_DRIVER(&one_driver);                                                         
+```
+
+编译app, api库，驱动库的命令:
+```
+# build libdriver.so                                                            
+        gcc -shared -fPIC -o libdriver.so driver_dl.c                           
+                                                                                
+# build libapi.so                                                               
+        gcc -shared -fPIC -o libapi.so api_dl.c                                 
+                                                                                
+# build app                                                                     
+        gcc -o app app.c -L. -lapi -ldl                                         
+```
+
+3. 说明
+-------
+ 可以看到app在加载libapi.so的时候可以先打开libdriver.so，libdrver.so在打开的时候
+ 调用libapi.so中提供给下层驱动的接口把驱动结构体的指针传给libapi.so里的驱动指针。
+
+ 这里把libapi里打开的驱动库名字写死了，实际上，我们应该通过某种选择机制把这个
+ 搞成动态可以配置的, 这样就可以选择加载不同的驱动库。这个动态的机制是另一个独立
+ 的逻辑，可以通过配置文件的方式，用户提前把需要加载的驱动库写到一个配置文件里，
+ libapi库通过读这个配置文件知道自己要加载哪个驱动库。

@@ -1,0 +1,9 @@
+
+t@linaro-developer:~# ./qemu-run.sh
+test: in vfio_initfn
+vfio_connect_container: is v2 = 1
+qemu-system-aarch64: -device vfio-pci,host=0000:01:10.0: vfio: failed to set iommu for container: Operation not permitted
+qemu-system-aarch64: -device vfio-pci,host=0000:01:10.0: vfio: failed to setup container for group 3
+qemu-system-aarch64: -device vfio-pci,host=0000:01:10.0: vfio: failed to get group 3
+qemu-system-aarch64: -device vfio-pci,host=0000:01:10.0: Device initialization failed
+

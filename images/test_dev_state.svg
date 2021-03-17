@@ -1,0 +1,393 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!-- Created with Inkscape (http://www.inkscape.org/) -->
+
+<svg
+   xmlns:osb="http://www.openswatchbook.org/uri/2009/osb"
+   xmlns:dc="http://purl.org/dc/elements/1.1/"
+   xmlns:cc="http://creativecommons.org/ns#"
+   xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+   xmlns:svg="http://www.w3.org/2000/svg"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:xlink="http://www.w3.org/1999/xlink"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   width="325.71301"
+   height="376.37845"
+   viewBox="0 0 91.923451 106.22236"
+   version="1.1"
+   id="svg34474"
+   inkscape:version="0.48.4 r9939"
+   sodipodi:docname="test_dev_state.png">
+  <defs
+     id="defs34468">
+    <marker
+       inkscape:stockid="Arrow1Lend"
+       orient="auto"
+       refY="0.0"
+       refX="0.0"
+       id="Arrow1Lend"
+       style="overflow:visible;">
+      <path
+         id="path4066"
+         d="M 0.0,0.0 L 5.0,-5.0 L -12.5,0.0 L 5.0,5.0 L 0.0,0.0 z "
+         style="fill-rule:evenodd;stroke:#000000;stroke-width:1.0pt;"
+         transform="scale(0.8) rotate(180) translate(12.5,0)" />
+    </marker>
+    <linearGradient
+       id="linearGradient35142"
+       osb:paint="solid">
+      <stop
+         style="stop-color:#2a2a2a;stop-opacity:0.02352941;"
+         offset="0"
+         id="stop35140" />
+    </linearGradient>
+    <linearGradient
+       id="linearGradient35136"
+       osb:paint="solid">
+      <stop
+         style="stop-color:#000000;stop-opacity:1;"
+         offset="0"
+         id="stop35134" />
+    </linearGradient>
+    <linearGradient
+       inkscape:collect="always"
+       xlink:href="#linearGradient6713"
+       id="linearGradient6771-2-4-3"
+       x1="40.624969"
+       y1="115.12309"
+       x2="60.670181"
+       y2="115.12309"
+       gradientUnits="userSpaceOnUse"
+       gradientTransform="translate(76.831756,11.108265)" />
+    <linearGradient
+       id="linearGradient6713"
+       osb:paint="solid">
+      <stop
+         style="stop-color:#000000;stop-opacity:1;"
+         offset="0"
+         id="stop6711" />
+    </linearGradient>
+    <linearGradient
+       inkscape:collect="always"
+       xlink:href="#linearGradient6713"
+       id="linearGradient6771-2-4-3-7"
+       x1="40.624969"
+       y1="115.12309"
+       x2="60.670181"
+       y2="115.12309"
+       gradientUnits="userSpaceOnUse"
+       gradientTransform="translate(-11.580462,11.108264)" />
+    <linearGradient
+       inkscape:collect="always"
+       xlink:href="#linearGradient6713"
+       id="linearGradient6771-2-4-3-75"
+       x1="40.624969"
+       y1="115.12309"
+       x2="60.670181"
+       y2="115.12309"
+       gradientUnits="userSpaceOnUse"
+       gradientTransform="translate(32.435921,-46.343465)" />
+    <linearGradient
+       inkscape:collect="always"
+       xlink:href="#linearGradient35136"
+       id="linearGradient35138"
+       x1="142.55104"
+       y1="150.98875"
+       x2="153.7527"
+       y2="150.98875"
+       gradientUnits="userSpaceOnUse" />
+    <linearGradient
+       inkscape:collect="always"
+       xlink:href="#linearGradient35142"
+       id="linearGradient35144"
+       x1="142.55104"
+       y1="150.98875"
+       x2="153.7527"
+       y2="150.98875"
+       gradientUnits="userSpaceOnUse" />
+  </defs>
+  <sodipodi:namedview
+     id="base"
+     pagecolor="#ffffff"
+     bordercolor="#666666"
+     borderopacity="1.0"
+     inkscape:pageopacity="0.0"
+     inkscape:pageshadow="2"
+     inkscape:zoom="1.979899"
+     inkscape:cx="165.26543"
+     inkscape:cy="189.69894"
+     inkscape:document-units="mm"
+     inkscape:current-layer="g27062-5"
+     showgrid="false"
+     inkscape:window-width="1539"
+     inkscape:window-height="876"
+     inkscape:window-x="61"
+     inkscape:window-y="24"
+     inkscape:window-maximized="1"
+     units="mm"
+     fit-margin-top="0"
+     fit-margin-left="0"
+     fit-margin-right="0"
+     fit-margin-bottom="0" />
+  <metadata
+     id="metadata34471">
+    <rdf:RDF>
+      <cc:Work
+         rdf:about="">
+        <dc:format>image/svg+xml</dc:format>
+        <dc:type
+           rdf:resource="http://purl.org/dc/dcmitype/StillImage" />
+        <dc:title></dc:title>
+      </cc:Work>
+    </rdf:RDF>
+  </metadata>
+  <g
+     inkscape:label="Layer 1"
+     inkscape:groupmode="layer"
+     id="layer1"
+     transform="translate(-49.712134,-44.697566)">
+    <g
+       transform="matrix(0.7043574,0,0,0.79550416,0.81869397,-32.317406)"
+       id="g27062">
+      <circle
+         id="path3755-51-1-92"
+         cx="97.874535"
+         cy="134.44199"
+         style="fill:#ffffff;fill-opacity:1;stroke:url(#linearGradient6771-2-4-3);stroke-width:1"
+         r="10.022608"
+         d="m 107.89714,134.44199 c 0,5.53533 -4.48727,10.0226 -10.022605,10.0226 -5.535334,0 -10.022608,-4.48727 -10.022608,-10.0226 0,-5.53534 4.487274,-10.02261 10.022608,-10.02261 5.535335,0 10.022605,4.48727 10.022605,10.02261 z"
+         sodipodi:cx="97.874535"
+         sodipodi:cy="134.44199"
+         sodipodi:rx="10.022608"
+         sodipodi:ry="10.022608">
+        <title
+           id="title6795-4-4-0">init</title>
+      </circle>
+      <text
+         xml:space="preserve"
+         style="font-size:4.03145266px;font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;text-align:start;line-height:1.25;letter-spacing:0px;word-spacing:0px;writing-mode:lr-tb;text-anchor:start;fill:#000000;fill-opacity:1;stroke:none;font-family:sans-serif;-inkscape-font-specification:'sans-serif, Normal'"
+         x="91.256493"
+         y="135.8652"
+         id="text8485-2-4-5"><tspan
+           sodipodi:role="line"
+           id="tspan8483-5-4-3"
+           x="91.256493"
+           y="135.8652"> 初始化</tspan></text>
+    </g>
+    <g
+       transform="matrix(0.7043574,0,0,0.79550416,63.092493,-32.317406)"
+       id="g27062-6">
+      <circle
+         id="path3755-51-1-92-4"
+         cx="97.874535"
+         cy="134.44199"
+         style="fill:#ffffff;fill-opacity:1;stroke:url(#linearGradient6771-2-4-3-7);stroke-width:1"
+         r="10.022608"
+         d="m 107.89714,134.44199 c 0,5.53533 -4.48727,10.0226 -10.022605,10.0226 -5.535334,0 -10.022608,-4.48727 -10.022608,-10.0226 0,-5.53534 4.487274,-10.02261 10.022608,-10.02261 5.535335,0 10.022605,4.48727 10.022605,10.02261 z"
+         sodipodi:cx="97.874535"
+         sodipodi:cy="134.44199"
+         sodipodi:rx="10.022608"
+         sodipodi:ry="10.022608">
+        <title
+           id="title6795-4-4-0-6">init</title>
+      </circle>
+      <text
+         xml:space="preserve"
+         style="font-size:4.03145266px;font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;text-align:start;line-height:1.25;letter-spacing:0px;word-spacing:0px;writing-mode:lr-tb;text-anchor:start;fill:#000000;fill-opacity:1;stroke:none;font-family:sans-serif;-inkscape-font-specification:'sans-serif, Normal'"
+         x="89.817535"
+         y="135.84946"
+         id="text8485-2-4-5-9"><tspan
+           sodipodi:role="line"
+           id="tspan8483-5-4-3-9"
+           x="89.817535"
+           y="135.84946">正常工作</tspan></text>
+    </g>
+    <g
+       transform="matrix(0.7043574,0,0,0.79550416,32.089229,13.385683)"
+       id="g27062-5">
+      <circle
+         id="path3755-51-1-92-2"
+         cx="97.874535"
+         cy="134.44199"
+         style="fill:#ffffff;fill-opacity:1;stroke:url(#linearGradient6771-2-4-3-75);stroke-width:1"
+         r="10.022608"
+         d="m 107.89714,134.44199 c 0,5.53533 -4.48727,10.0226 -10.022605,10.0226 -5.535334,0 -10.022608,-4.48727 -10.022608,-10.0226 0,-5.53534 4.487274,-10.02261 10.022608,-10.02261 5.535335,0 10.022605,4.48727 10.022605,10.02261 z"
+         sodipodi:cx="97.874535"
+         sodipodi:cy="134.44199"
+         sodipodi:rx="10.022608"
+         sodipodi:ry="10.022608">
+        <title
+           id="title6795-4-4-0-7">init</title>
+      </circle>
+      <text
+         xml:space="preserve"
+         style="font-size:4.03145266px;font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;text-align:start;line-height:1.25;letter-spacing:0px;word-spacing:0px;writing-mode:lr-tb;text-anchor:start;fill:#000000;fill-opacity:1;stroke:none;font-family:sans-serif;-inkscape-font-specification:'sans-serif, Normal'"
+         x="93.843079"
+         y="135.85339"
+         id="text8485-2-4-5-8"><tspan
+           sodipodi:role="line"
+           id="tspan8483-5-4-3-5"
+           x="93.843079"
+           y="135.85339">复位</tspan></text>
+      <ellipse
+         style="fill:#000000;fill-opacity:1;stroke-width:1.33592546;stroke-miterlimit:4;stroke-dasharray:none"
+         id="path34548"
+         cx="28.434896"
+         cy="42.552818"
+         rx="3.4150641"
+         ry="3.1917627"
+         d="m 31.849961,42.552818 c 0,1.762762 -1.528977,3.191763 -3.415065,3.191763 -1.886087,0 -3.415064,-1.429001 -3.415064,-3.191763 0,-1.762762 1.528977,-3.191762 3.415064,-3.191762 1.886088,0 3.415065,1.429 3.415065,3.191762 z"
+         sodipodi:cx="28.434896"
+         sodipodi:cy="42.552818"
+         sodipodi:rx="3.4150641"
+         sodipodi:ry="3.1917627" />
+      <g
+         id="g35148">
+        <ellipse
+           ry="3.1917627"
+           rx="3.4150641"
+           cy="168.12347"
+           cx="150.23886"
+           id="path34548-8"
+           style="fill:#000000;fill-opacity:1;stroke-width:1.33592546;stroke-miterlimit:4;stroke-dasharray:none"
+           d="m 153.65393,168.12347 c 0,1.76277 -1.52898,3.19177 -3.41507,3.19177 -1.88609,0 -3.41506,-1.429 -3.41506,-3.19177 0,-1.76276 1.52897,-3.19176 3.41506,-3.19176 1.88609,0 3.41507,1.429 3.41507,3.19176 z"
+           sodipodi:cx="150.23886"
+           sodipodi:cy="168.12347"
+           sodipodi:rx="3.4150641"
+           sodipodi:ry="3.1917627" />
+        <ellipse
+           ry="4.4516687"
+           rx="4.9328704"
+           cy="168.12347"
+           cx="150.23886"
+           id="path34565"
+           style="fill:url(#linearGradient35144);fill-opacity:1;fill-rule:evenodd;stroke:url(#linearGradient35138);stroke-width:0.66796273;stroke-miterlimit:4;stroke-opacity:1;stroke-dasharray:none"
+           d="m 155.17173,168.12347 c 0,2.45859 -2.20852,4.45167 -4.93287,4.45167 -2.72435,0 -4.93287,-1.99308 -4.93287,-4.45167 0,-2.45858 2.20852,-4.45166 4.93287,-4.45166 2.72435,0 4.93287,1.99308 4.93287,4.45166 z"
+           sodipodi:cx="150.23886"
+           sodipodi:cy="168.12347"
+           sodipodi:rx="4.9328704"
+           sodipodi:ry="4.4516687" />
+      </g>
+      <path
+         style="fill:none;stroke:#000000;stroke-width:0.35402025;stroke-linecap:butt;stroke-linejoin:miter;stroke-opacity:1;stroke-miterlimit:4;stroke-dasharray:none;marker-end:url(#Arrow1Lend)"
+         d="m 29.971887,44.116641 18.24527,23.519453"
+         id="path35150"
+         inkscape:connector-curvature="0" />
+      <path
+         style="fill:none;stroke:#000000;stroke-width:0.35346361999999998px;stroke-linecap:butt;stroke-linejoin:miter;stroke-opacity:1;marker-end:url(#Arrow1Lend)"
+         d="M 62.974358,73.456564 H 132.19906"
+         id="path35152"
+         inkscape:connector-curvature="0" />
+      <path
+         style="fill:none;stroke:#000000;stroke-width:0.35346361999999998px;stroke-linecap:butt;stroke-linejoin:miter;stroke-opacity:1;marker-end:url(#Arrow1Lend)"
+         d="M 137.3375,85.725606 105.08411,127.05054"
+         id="path35154"
+         inkscape:connector-curvature="0" />
+      <path
+         style="fill:none;stroke:#000000;stroke-width:0.35346361999999998px;stroke-linecap:butt;stroke-linejoin:miter;stroke-opacity:1;marker-end:url(#Arrow1Lend)"
+         d="M 57.273215,86.733532 91.423858,125.70664"
+         id="path35156"
+         inkscape:connector-curvature="0" />
+      <path
+         style="fill:none;stroke:#000000;stroke-width:0.35346361999999998px;stroke-linecap:butt;stroke-linejoin:miter;stroke-opacity:1;marker-end:url(#Arrow1Lend)"
+         d="m 143.60235,87.116848 7.24445,76.260042"
+         id="path35158"
+         inkscape:connector-curvature="0" />
+      <path
+         style="fill:none;stroke:#000000;stroke-width:0.35346361999999998px;stroke-linecap:butt;stroke-linejoin:miter;stroke-opacity:1;marker-end:url(#Arrow1Lend)"
+         d="m 104.56284,141.758 41.32017,24.23216"
+         id="path35160"
+         inkscape:connector-curvature="0" />
+      <path
+         style="fill:none;stroke:#000000;stroke-width:0.35346361999999998px;stroke-linecap:butt;stroke-linejoin:miter;stroke-opacity:1;marker-end:url(#Arrow1Lend)"
+         d="m 45.320489,83.205795 c 0,0 -2.706734,33.461435 4.142774,48.495695 5.226994,11.47294 10.377734,20.27526 26.725326,28.59164 16.347593,8.31637 70.255751,10.26617 70.255751,10.26617"
+         id="path35168"
+         inkscape:connector-curvature="0"
+         sodipodi:nodetypes="cazc" />
+      <text
+         xml:space="preserve"
+         style="font-size:3.65880775px;font-style:normal;font-weight:normal;line-height:125%;letter-spacing:0px;word-spacing:0px;fill:#000000;fill-opacity:1;stroke:none;font-family:Sans"
+         x="37.759499"
+         y="55.005211"
+         id="text3287"
+         sodipodi:linespacing="125%"
+         transform="scale(1.0627343,0.94096898)"><tspan
+           sodipodi:role="line"
+           id="tspan3289"
+           x="37.759499"
+           y="55.005211">设备初始化/创建设备</tspan></text>
+      <text
+         xml:space="preserve"
+         style="font-size:3.65880799px;font-style:normal;font-weight:normal;line-height:125%;letter-spacing:0px;word-spacing:0px;fill:#000000;fill-opacity:1;stroke:none;font-family:Sans"
+         x="71.615021"
+         y="72.895538"
+         id="text3287-8"
+         sodipodi:linespacing="125%"
+         transform="scale(1.0627343,0.94096898)"><tspan
+           sodipodi:role="line"
+           id="tspan3289-7"
+           x="71.615021"
+           y="72.895538">start_dev/config</tspan></text>
+      <text
+         xml:space="preserve"
+         style="font-size:3.65880799px;font-style:normal;font-weight:normal;line-height:125%;letter-spacing:0px;word-spacing:0px;fill:#000000;fill-opacity:1;stroke:none;font-family:Sans"
+         x="60.063961"
+         y="98.239746"
+         id="text3287-8-7"
+         sodipodi:linespacing="125%"
+         transform="scale(1.0627343,0.94096898)"><tspan
+           sodipodi:role="line"
+           id="tspan3289-7-1"
+           x="60.063961"
+           y="98.239746">reset信号/设置reset flag</tspan></text>
+      <text
+         xml:space="preserve"
+         style="font-size:3.65880799px;font-style:normal;font-weight:normal;line-height:125%;letter-spacing:0px;word-spacing:0px;fill:#000000;fill-opacity:1;stroke:none;font-family:Sans"
+         x="31.690212"
+         y="169.84061"
+         id="text3287-8-1"
+         sodipodi:linespacing="125%"
+         transform="scale(1.0627343,0.94096898)"><tspan
+           sodipodi:role="line"
+           id="tspan3289-7-6"
+           x="31.690212"
+           y="169.84061">uninit/释放设备资源</tspan></text>
+      <text
+         xml:space="preserve"
+         style="font-size:3.65880799px;font-style:normal;font-weight:normal;line-height:125%;letter-spacing:0px;word-spacing:0px;fill:#000000;fill-opacity:1;stroke:none;font-family:Sans"
+         x="89.961128"
+         y="169.65018"
+         id="text3287-8-4"
+         sodipodi:linespacing="125%"
+         transform="scale(1.0627343,0.94096898)"><tspan
+           sodipodi:role="line"
+           id="tspan3289-7-8"
+           x="89.961128"
+           y="169.65018">关闭设备/释放资源</tspan></text>
+      <text
+         xml:space="preserve"
+         style="font-size:3.65880799px;font-style:normal;font-weight:normal;line-height:125%;letter-spacing:0px;word-spacing:0px;fill:#000000;fill-opacity:1;stroke:none;font-family:Sans"
+         x="108.24221"
+         y="144.51372"
+         id="text3287-8-3"
+         sodipodi:linespacing="125%"
+         transform="scale(1.0627343,0.94096898)"><tspan
+           sodipodi:role="line"
+           id="tspan3289-7-3"
+           x="108.24221"
+           y="144.51372">关闭设备/释放资源</tspan></text>
+      <text
+         xml:space="preserve"
+         style="font-size:3.65880799px;font-style:normal;font-weight:normal;line-height:125%;letter-spacing:0px;word-spacing:0px;fill:#000000;fill-opacity:1;stroke:none;font-family:Sans"
+         x="71.627525"
+         y="112.47165"
+         id="text3287-8-7-0"
+         sodipodi:linespacing="125%"
+         transform="scale(1.0627343,0.94096898)"><tspan
+           sodipodi:role="line"
+           id="tspan3289-7-1-2"
+           x="71.627525"
+           y="112.47165">reset信号/设置reset flag</tspan></text>
+    </g>
+  </g>
+</svg>

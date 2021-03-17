@@ -1,0 +1,54 @@
+To build the lpc rpm package, you need do like below:
+
+1. Install all the kernel-devel packages for the kernel version that this package will be built against.
+
+$ sudo yum install -y kernel-devel.aarch64
+$ sudo yum install -y rpm-build.aarch64
+
+2. Create a new user for building rpm.
+
+$ useradd ibuilder
+$ su - ibuilder
+
+3. Check out which directory is the topdir. (You can modify it or just use the default configuration.)
+
+$ rpmbuild --showrc | grep topdir 
+ 
+-14: _builddir  %{_topdir}/BUILD 
+-14: _buildrootdir  %{_topdir}/BUILDROOT 
+-14: _rpmdir    %{_topdir}/RPMS 
+-14: _sourcedir %{_topdir}/SOURCES 
+-14: _specdir   %{_topdir}/SPECS 
+-14: _srcrpmdir %{_topdir}/SRPMS 
+-14: _topdir    %{getenv:HOME}/rpmbuild
+
+4. Create the topdir and the necessary directories.
+
+$ mkdir ~/rpmbuild
+$ cd ~/rpmbuild  
+$ mkdir -pv {BUILD,BUILDROOT,RPMS,SOURCES,SPECS,SRPMS}
+
+5. Put the source code package to SOURCES directory.
+$ cp   SOURCES
+
+6. Create a ipmi_hisi_lpc_bt.spec file in SPECS directory.
+
+$ cd SPECS
+$ vim ipmi_hisi_lpc_bt.spec		# you can find it in this directory
+
+
+7. Build the package.
+
+$ rpmbuild -bb ipmi_hisi_lpc_bt.spec 
+
+8. Do test of install & uninstall.
+
+$ cd ../RPMS/aarch64/
+$ sudo rpm -ivh kmod-ipmi_hisi_lpc_bt-1.0-0.aarch64.rpm
+$ sudo ipmitool fru
+$ sudo rpm -e kmod-ipmi_hisi_lpc_bt-1.0-0.aarch64.rpm
+
+9. You can also use other hosts to connect this server for testing.
+
+$ ipmitool -H xx.xx.xx.xx -U root -P xxxx -I lanplus sol deactivate
+$ ipmitool -H xx.xx.xx.xx -U root -P xxxx -I lanplus sol activate

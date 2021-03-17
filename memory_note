@@ -1,0 +1,68 @@
+
+
+0xffff000000000000 - 0xffff7fffffff   128T     kernel
+
+0xffff800000000000 - 0xffff9fffffff   32T      kasan shadow   8 byte 对 1 byte
+
+0xffffa00000000000 - 0xffffa00007ffffff   128MB   bpf jit
+
+							modules
+
+							vmalloc
+
+							fixed
+
+					16MB		PCI I/O space IO BAR
+
+					          2T	vmemmap 放struct page
+
+arm64 内核Image被放到vmalloc区域，但是是虚拟地址连续，物理地址也连续的。
+内核随机地址映射
+
+pte      pmd       pud    pgd
+4k    2^21 2MB     30 1G
+
+arch/arm64/mm/ptddump.c 开对应的配置，在/sys/debug/kenrel/xxxx ??
+
+kasan shadow   modules vmalloc 都是vmalloc
+
+有一个page，调用kmap得到va使用。
+
+
+arm64
+vmemmap:
+
+mem_section 16MB 用2MB大页 8个 --> 1G内存
+
+mem_section
+
+mem_section
+
+mem_section
+
+x86 2MB   --> 128MB
+
+patch: Free some vmmemap pages of hugetlb page
+
+
+巨页在linux是复合页
+就是说2MB巨页也是多个4K struct page构成的。
+
+
+compound page  --> 用这个标记__GFP_COMP            PG_head
+非compound page可以一个页一个页单独释放。 先申请16页，单独释放最后两页。
+
+Enhance memory utilization with DMEMFS
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -1,0 +1,10 @@
+Add dev_dgb in your kernel code
+-------------------------------
+
+1. kernel configure: DYNAMIC_DEBUG = y
+
+2. should also configure as showed in HELP of DYNAMIC_DEBUG to enable specific
+   module/function/... printk
+
+3. if your module is configured as Y, you should add kernel parameters in kernel
+   cmdline, e.g. hisi_zip.dynbdg = +p

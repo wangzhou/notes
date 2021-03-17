@@ -1,0 +1,60 @@
+测试openssl的性能
+=================
+
+-v0.1 2020.11.20 Sherlock init
+
+简介: 文本介绍openssl性能测试的相关方法，包括openssl自带的speed测试，加硬件engine
+      的测试，以及和nginix测试的相关方法。
+
+1. openssl基本命令
+------------------
+
+AES对称加解密：
+
+openssl enc -aes-128-cbc -in data -out key_encrypt -K 12345678901234567890 -iv 12345678
+openssl enc -aes-128-cbc -in key_encrypt -out key_decrypt -K 12345678901234567890 -iv 12345678 -d
+
+公钥加密：
+openssl rsautl -encrypt -in rsa_test -inkey test_pub.key -pubin -out rsa_test.en -engine uadk
+
+公钥生成：
+openssl rsa -in test.key -pubout -out test_pub.key -engine uadk
+
+私钥生成:
+openssl genrsa -out test.key -engine uadk 4096
+
+私钥解密：
+openssl rsautl -decrypt -in rsa_test.en -inkey test.key -out rsa_test.de -engine uadk
+
+签名：
+openssl rsautl -sign -in msg.txt -inkey prikey.pem -out signed.txt -engine uadk
+
+认证：
+openssl rsautl -verify -in signed.txt -inkey pubkey.pem -pubin -out verified.txt -engine uadk
+
+哈希:
+openssl md5/sha1/sha256/sm3 -engine uadk data
+openssl md5/sha1/sha256/sm3 data
+
+如上，有-engine xxx的表示用执行的硬件加解密engine做任务，没有指定就是用openssl
+里提供的软件计算方法搞。
+
+2. openssl speed命令
+--------------------
+
+openssl speed aes
+
+openssl speed rsa
+
+openssl speed -engine uadk -async_jobs 1 -evp md5
+
+openssl speed -engine uadk -async_jobs 1 -evp aes-128-cbc
+
+openssl speed -engine uadk -elapsed rsa2048
+
+openssl speed -engine uadk -elapsed -async_jobs 1 rsa2048
+
+openssl speed -engine uadk -elapsed -async_jobs 36 rsa2048
+
+如上，加了-async_jobs使用了openssl里的异步机制，如果engine里使用过了openssl里的
+异步机制，这里就会触发engine里的异步机制生效(fix me: ...)

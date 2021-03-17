@@ -1,0 +1,68 @@
+Linux DMA buffer子系统
+----------------------
+
+-v0.1 2019.11.28 Sherlock init
+
+简介：本文简要分析Linux DMA buffer子系统，作为以后系统设计的基础。
+
+1. 要解决的问题
+---------------
+
+ DMA buf子系统主要是解决两个不同设备共享DMA buffer的问题。比如，一个设备生产
+ 的数据，一个设备要对这些数据做处理，如果有共享的DMA buffer, 那么第一个设备可以
+ 把他生产的数据写到这个DMA buffer里，第二个设备直接从这个DMA buffer里取数据就好。
+
+ 可以看到整个使用场景是这样的：
+```
+    +------+               +------+
+    |user A|               |user B|
+    +------+               +------+
+       \                     /
+        \   mmap            /   mmap           user space
+---------\-----------------/------------
+          \               /                    kernel space
+           \             /
+           +---------------+
+           |physical memory|
+           +---------------+
+           /                \
+   +------+                 +------+
+   |smmu A|                 |smmu B|
+   +------+                 +------+
+      ^                        ^
+   +------+                 +------+
+   |dev A |                 |dev B |
+   +------+                 +------+
+```
+ 上图中dev A, dev B可能绑定的是不同驱动, user A和user B可能是不同的进程。
+                                                                        
+ 可以相像到，同一个DMA buf要最多被6个master看到: 他们是use A, user B, dev A,
+ dev B, 驱动A的内核态cpu地址, 驱动B的内核态cpu地址。
+
+2. 如何使用
+-----------
+ DMA buf的分析可以参考:
+ https://elinux.org/images/a/a8/DMA_Buffer_Sharing-_An_Introduction.pdf
+ 具体驱动中使用DMA buf的例子可以参考：drivers/misc/fastrpc.c
+
+ 我们就拿fastrpc.c这个驱动分析下怎么使用dma_buf。这个驱动里会用一个ioclt命令
+ 分配dma buf的内存然后把这个内存export出去，为这个dma buf创建对应的文件，并通过
+ 相同的ioctl的参数把文件对应的fd返回给用户态。
+```
+	fastrpc_device_ioctl
+	  +-> fastrpc_dmabuf_alloc
+	    /*
+	     * dma_buf自己的一组回调含函数, 这些回调函数和进程之间share dma_buf
+	     * 有关，attach/detach用于第二个进程attach和detech dma_buf，map_dma_buf
+	     * unmap_dma_buf用于叫第二个设备获得dma_buf的dma地址，mmap是向用户态
+	     * map dma_buf的地址，map/vmap可以获得dma_buf的内核态虚拟地址。
+	     */
+	    +-> exp_info.ops = &fastrpc_dma_buf_ops;
+	    +-> dma_buf_export(&exp_info)
+	      /* 创建dma_buf对应的文件 */
+	      +-> dma_buf_getfile
+```
+
+3. 实现分析
+-----------
+ (to do: ...)

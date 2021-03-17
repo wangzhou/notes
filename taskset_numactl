@@ -1,0 +1,19 @@
+taskset和numactl
+----------------
+
+-v0.1 2021.3.7 Sherlock init
+
+taskset，Linux的命令，用来绑定一个进程或者线程到特定的CPU上运行。用strace运行这
+个命令，可见使用sched_getaffinity, sched_setaffinity系统调用实现的。
+
+可以看到并没有对内存进行绑定。注意这个进程的各个线程也获得同样的绑定CPU?
+
+numactl是libnuma库里的一个用户态工具，可以查看系统中numa相关的信息。
+还可以绑定CPU、绑定Memory。绑定CPU的时候可以帮到一个numa节点的CPU上：
+--cpubind=1 帮到numa1节点的CPU上，也可以-C A-B，绑到CPU A-B上。和taskset一样，
+numactl绑CPU也是用sched_setaffinity系统调用实现。
+
+numactl还可以把进程的memory绑定到一个numa的内存上：--membind=1，绑定到numa节点
+1的内存上。本后的系统调用是get_mempolicy, set_mempolicy。
+
+--membind后，没有了缺页？

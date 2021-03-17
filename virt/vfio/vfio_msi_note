@@ -1,0 +1,90 @@
+
+6. how to route MSI to VM
+-------------------------
+```
+      +--------------------+
+      |  guest view        |
+      |                    |
+      |     +-------+      |
+      |     |  ITS  |      | IRQ_v = f(vBDF)
+      |     +-------+      |
+      |                    |
+      |     +-------+      |           qemu set fd for vfio driver and KVM
+      |     |  VF   | vBDF |--------------------------+--------------+
+      |     +-------+      |                          |              |
+      +--------------------+                          |              |
+                                                      V              V
+      +------------------------------------------------------------------+
+      |  host view                                                       |
+      |                     IRQ = f(BDF)              fd            fd   |
+      |     +-------+   +---------------+   +-----------------+   +----+ |
+      |     |  ITS  |-->|  Device_table |-->| vfio irq handler|-->|KVM | |
+      |     +-------+   +---------------+   +-----------------+   +----+ |
+      |         ^                                              -->       |
+      |     +-------+                             eventfd triggers IRQ_v |
+      |     |  VF   | BDF                                                |
+      |     +-------+                                                    |
+      +------------------------------------------------------------------+
+```
+From the view of guest, guest has ITS hardware, VF hardware, and there are ITS
+driver and VF driver running in guest kernel. irq handler of VF will use the
+irq number which will be indexed by vBDF.
+
+when a physical interrupt in VF happened, we should make "ITS hardware" in guest
+know this interrupt, then related irq handler set by VF driver can be called.
+
+before we use VF in VM, VF driver in host will be unbinded and vfio driver will
+be binded to VF in host, which means interrupts from VF will also handled by
+vfio driver. In irq handler of VF in host in vfio driver, an eventfd will be
+sent to KVM GIC system to trigger irq handler in VM.
+
+two points here: 1. KVM GIC support to simulate the "ITS hardware" in guest, so
+we can trigger it for VM here. 2. BDF and vBDF above are different, so qemu VF
+hareware should help to build the map between BDF and vBDF by eventfd.
+
+for the details of code, still need more investigation.(to do)
+
+vfio msi support
+----------------
+
+In qemu:
+/* hw/vfio/pci.c */
+vfio_pci_write_config
+    --> vfio_msi_enable(VFIOPCIDevice *vdev)
+            /* get fd for msi interrupt */
+        --> event_notifier_init(&vector->interrupt, 0)
+                /*
+                 * KVM_IRQFD
+                 * how to build the connection between virq and irq handler in quest kernel?
+                 */
+            --> vfio_add_kvm_msi_virq(vdev, vector, i, false)
+                ...
+                --> kvm_irqchip_assign_irqfd
+                    --> kvm_vm_ioctl(s, KVM_IRQFD, &irqfd)
+            --> vfio_enable_vectors
+                --> ioctl(vdev->vbasedev.fd, VFIO_DEVICE_SET_IRQS, irq_set)
+
+In kernel:
+/* how to call vfio_pci_set_msi_trigger */
+struct vfio_device_ops vfio_pci_ops
+               +--> ioctl = vfio_pci_ioctl
+                                  in the case: VFIO_DEVICE_SET_IRQS
+                                        --> vfio_pci_set_irqs_ioctl
+                                            --> vfio_pci_set_msi_trigger
+vfio_pci_set_msi_trigger
+    --> vfio_msi_enable
+    --> vfio_msi_set_block
+        --> vfio_msi_set_vector_signal
+        --> request_irq(irq, vfio_msihandler, 0, vdev->ctx[vector].name, trigger);
+vfio_msihandler
+    --> eventfd_signal(trigger, 1)
+
+
+vfio_intx_enable_kvm  
+    --> kvm_vm_ioctl
+    --> ioctl(vdev->vbasedev.fd, VFIO_DEVICE_SET_IRQS, irq_set);
+
+vfio_initfn
+    --> vfio_intx_enable
+
+

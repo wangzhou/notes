@@ -1,0 +1,111 @@
+ACS note
+========
+
+-v0.1 2017.8.26 sherlock init
+-v0.2 2017.9.18 sherlock add 82599 bug analysis and chip hardware implement
+
+
+1. Spec
+-------
+
+ PCIe has an ACS capability to offer ACS related functions. We have ACS Capabality
+ Register and ACS Control Register.
+
+ Related bit in above registers are V, B, R, C, U, E, T.
+ in Linux kernel, we call them SV, TB, RR, CR, UF, EC, DT(include/uapi/linux/pci_regs.h)
+
+ Normally, V means RP will check the Request ID to make sure it is in the right
+ bus range; U means that a TLP's target address which is in a RP's mem window
+ will be upforward to upstream bus; R means that a P2P stream will be redirects
+ to upstream bus; C means(to do).
+
+ So only if V, R, C, U have been set, can we make sure that different PCI devices
+ in the PCIe domain are isolated.
+
+2. Linux kernel
+---------------
+
+ ACS support will effect kernel binding multiple devices to one iommu_group or
+ binding one device to its related iommu_group.
+
+ According to the analysis in blog.csdn.net/scarecrow_byr/article/details/70215333
+ iommu_group will be created and bind to a PCIe device in arm_smmu_add_device,
+ and this function will be called when a PCIe device will be added into pci bus.
+```
+        arm_smmu_add_device
+                --> iommu_group_get_for_dev
+                            /* arm_smmu_device_group */
+                        --> ops->device_group
+                                --> pci_device_group
+```           
+ in pci_device_group, there is:
+```
+	for (bus = pdev->bus; !pci_is_root_bus(bus); bus = bus->parent) {
+		if (!bus->self)
+			continue;
+
+                /* to do: pci_acs_flags_enabled */
+		if (pci_acs_path_enabled(bus->self, NULL, REQ_ACS_FLAGS))
+			break;
+
+		pdev = bus->self;
+
+		group = iommu_group_get(&pdev->dev);
+		if (group)
+			return group;
+	}
+        ...
+	return iommu_group_alloc();
+```
+ the logic of above code is if system enable ACS isolation in one path(if we have
+ a switch, to do here), we break here and alloc a new iommu_group for it. If ACS
+ is not supported in related path, we continue to check it parent device to get
+ an old iommu_group if parent device has one iommu_group. If we can not get an
+ iommu_group from its parent device, we allocate a new one for it.
+
+ Now in v4.13-rc6, a 82599 NIC is connected to a RP. Even we do not support V,R,C,U,
+ we can get the one to one device - iommu_group binding. This is no right from
+ the view of semantics.
+
+ From the debug log, it seems that:
+
+  - 82599 driver load and trigger to call arm_smmu_add_device to create and bind
+    device and iommu_group. 82599 ACS check fails, but its parent dose not have
+    iommu_group, so it allocates a new iommu_group for 82599.
+    (to do: where to call arm_smmu_add_device?)
+
+  - pcie port driver, call device_add to call arm_smmu_add_device. PR ACS check
+    fails, but it has no parent device, so it allocates RP a new iommu_group.
+    (to do: bus notifier did not register to pcie_port_bus_type, where to call
+     above function?)
+
+  - So when we enable VF, as the analysis above, VF ACS check fails, then it finds
+    VF's parent device(RP), so it adds this VF to RP's iommu_group.
+
+
+It was mentioned that we do not support V, R, C, U at this time. In fact, there
+are two problems here.
+
+  - The logic of ACS shows that if there has a ACS cap and cap = ctrl, we think
+    hardware has offered the ACS isolation.
+
+  - If above is the fact, why did we get 82599 ACS check fails, indeed, there is
+    a bug in current kernel, which is pci_acs_enable = 1(drivers/pci/pci.c) will
+    be set too late. pci_acs_enable = 1 will be set in smmu-v3 driver which is
+    loaded after PCI ACPI/DT driver. We set ACS cap = ctrl in PCI ACPI/DT driver
+    (PCI enumeration) if pci_acs_enable = 1 been set.
+
+    So ACS cap = ctrl not set, ACS check will fail above.
+ 
+
+Now our chip's RP only enable ACS V and B, but indeed our chip will upforward
+all TPLs to SMMU to use VA -> PA map in SMMU to get PA, then we transfer data to
+PA. And we do not allow P2P translation. We can see that indeed our chip's RP
+already supports V, U, R, C, which mean it has ACS-like isolation.
+
+In fact, we can also enable U, R, C in UEFI, however, even if we do not enable
+U, R, C in UEFI, from the logic of ACS in kernel, it believes our chip's RP(a
+device has ACS cap) has ACS isolation.
+
+So let's try to set pci_acs_enable = 1 to hack this kernel bug tempoarily.
+(to do: why 82599 load before pcie port driver?)

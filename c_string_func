@@ -1,0 +1,39 @@
+glibc字符串处理笔记
+
+-v0.1 2020.2.2 Sherlock init
+
+strcmp / strncmp
+----------------
+
+strcpy / strncpy
+----------------
+
+strcat / strncat
+----------------
+
+strrchr / strchr
+----------------
+	char * file_type(char *f)
+	/* returns 'extension' of file */
+	{
+	        char    *cp;
+	        if ( (cp = strrchr(f, '.' )) != NULL )
+	                return cp+1;
+	        return "";
+	}
+	
+	ends_in_cgi(char *f)
+	{
+	        return ( strcmp( file_type(f), "cgi" ) == 0 );
+	}
+
+
+strstr
+------
+
+
+isalnum
+-------
+	isxxx
+
+

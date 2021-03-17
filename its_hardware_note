@@ -1,0 +1,95 @@
+GIC ITS NOTE 2
+==============
+
+-v0.1 2015.10.18   Sherlock  init: analysis about ITS details based on v4.3-rc4
+
+1. ITS basic software structure
+-------------------------------
+
+/* its_node indicates a physical ITS hardware */
+struct its_node {
+	raw_spinlock_t		lock;
+	struct list_head	entry;
+	void __iomem		*base;
+	unsigned long		phys_base;
+	/* cmd_base, cmd_write are command queue pointers */
+	struct its_cmd_block	*cmd_base;
+	struct its_cmd_block	*cmd_write;
+	void			*tables[GITS_BASER_NR_REGS];
+	struct its_collection	*collections;
+	struct list_head	its_device_list;
+	u64			flags;
+	u32			ite_size;
+};
+
+/* its_device indicates a device which sends out MSI to an ITS */
+struct its_device {
+	struct list_head	entry;
+	struct its_node		*its;
+	struct event_lpi_map	event_map;
+	void			*itt;
+	u32			nr_ites;
+	u32			device_id;
+};
+
+2. ITS software init flow
+-------------------------
+
+how to build up basic gic lpi:
+gic_of_init
+    --> gic_data.domain = irq_domain_add_tree(node, &gic_irq_domain_ops, &gic_data);
+    --> its_init(node, &gic_data.rdists, gic_data.domain);
+        --> its_probe(np, parent_domain);
+            --> its_alloc_tables(node->full_name, its);
+            --> its_alloc_collections(its);
+            --> irq_domain_add_tree(node, &its_domain_ops, its);
+        --> its_alloc_lpi_tables();
+            --> gic_rdists->prop_page = alloc_pages()
+        --> its_lpi_init(rdists->id_bits);
+            --> lpi_bitmap = kzalloc()
+    --> gic_cpu_init();
+        --> its_cpu_init();
+            --> its_cpu_init_lpis();
+                --> gic_data_rdist()->pend_page = pend_page;
+            --> its_cpu_init_collection();
+                --> target = gic_data_rdist()->phys_base;
+                --> its->collections[cpu].target_address = target;
+
+a lot init configuration above: its, lpi, its_cpu
+
+3. ITS hardware
+---------------
+
+some hardware tables:
+
+its device table
+its ITT
+its collection table
+lpi pending table
+lpi configure table
+
+in its_alloc_tables, allocate its device table
+it seems that there are its device table, collection GITS_BASERn, and reading
+from GITS_TYPER, we can get how many device id this ITS support.
+
+we assign 2^order size memory to its->table[i].
+but why we assign alloc_size = (1 << order) * PAGE_SIZE to GITS_BASERn
+
+/* easy one, just allocate its->collection memory */
+its_alloc_collections
+
+/* just allocate memory to gic_rdists->prop_page */
+its_alloc_lpi_tables
+
+/* GICD_TYPER 0x0004 [23:19] indicates how many lpi ?
+ * one lpi one bit, so 32 lpi per lpi_chunk, and lpi_bitmap points to this map ?
+ */
+its_lpi_init
+
+/* pend_page = gic_data_rdist()->pend_page, allocate pend table */
+its_cpu_init_lpis
+    /* write lpi config table to register GICR_PROPBASER */
+    --> writeq_relaxed(val, rbase + GICR_PROPBASER)
+    /* configure pend table pointer to register GICR_PENDBASER */
+    --> writeq_relaxed(val, rbase + GICR_PENDBASER)
+

@@ -1,0 +1,44 @@
+lspci read/write config space
+-----------------------------
+
+-v0.1 2017.9.18 Sherlock init
+
+1. lspci
+--------
+ In pciutils/lib/init.c, there is struct pci_methods, we use functions in
+ pm_linux_sysfs to read/write pcie cfg.
+```
+        struct pci_methods pm_linux_sysfs = {
+          "linux-sysfs",
+          "The sys filesystem on Linux",
+          sysfs_config,
+          sysfs_detect,
+          sysfs_init,
+          sysfs_cleanup,
+          sysfs_scan,
+          sysfs_fill_info,
+          sysfs_read,
+          sysfs_write,
+          sysfs_read_vpd,
+          NULL,					/* init_dev */
+          sysfs_cleanup_dev
+        };
+```
+ In sysfs_read/sysfs_write, firstly we open /sys/bus/pci/devices/"BDF"/config in
+ sysfs for a device, then we call read/write to this opened fd. These read/write
+ will finally call pci_read_config/pci_write_config in kernel.
+
+2. kernel
+---------
+``` 
+        /* drivers/pci/pci-sysfs.c */
+        static struct bin_attribute pcie_config_attr = {
+                .attr =	{
+                        .name = "config",
+                        .mode = S_IRUGO | S_IWUSR,
+                },
+                .size = PCI_CFG_SPACE_EXP_SIZE,
+                .read = pci_read_config,
+                .write = pci_write_config,
+        };
+```

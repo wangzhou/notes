@@ -1,0 +1,41 @@
+tty0 test
+---------
+
+-v0.1 2017.6.7 Sherlock init
+
+This test is for the update firmware,
+bios-crypt-image-SPC010B030-ec.hpm cpldhv3main-crypt-image.hpm 
+
+
+```
+    +--------------+-------------------------------+------------------------------+
+    |              |            install ISO        |        boot system           |
+    +--------------+-------------------------------+------------------------------+
+    | disable SPCR | VRC output during the whole   | VRC output during the whole  |
+    |              | process;                      | process, but no kernel boot  |
+    |              |                               | up log output, directly      |
+    |              |                               | show the login interface;    |
+    |              |                               |                              |
+    |              | SP also output, but there is  | SP also output, but there is |
+    |              | no output once ISO installing | no output once kernel starts |
+    |              | kernel boots up               | to boot up                   |
+    +--------------+-------------------------------+------------------------------+
+    | enable SPCR  | SP output during the whole    | SP output during the whole   |
+    |              | process;                      | process;                     |
+    |              |                               |                              |
+    |              |                               | SP output from ttyAMA0 here. |
+    |              |                               |                              |
+    |              | VRC also output, but there is | VRC output during the whole  |
+    |              | no output once ISO installing | process, but no kernel boot  |
+    |              | kernel boots up               | up log output, directly      |
+    |              |                               | show the login interface;    |
+    |              |                               |                              |
+    |              |                               | VRC output from tty1 here.   |
+    +--------------+-------------------------------+------------------------------+
+```
+
+
+NOTE:
+
+ VRC: virtural remote console
+ SP: serial port

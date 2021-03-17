@@ -1,0 +1,35 @@
+ACC
+
+v0.1 2020.10.23 Sherlock init
+
+1. Do DMA engine like Intel DMA engine?
+---------------------------------------
+ 
+2. ARM64 spec add RSA like Intel?
+---------------------------------
+
+3. SM2 upstream into kernel mainline by Ali guys, how to use?
+-------------------------------------------------------------
+
+4. Our ZIP engine use cases
+---------------------------
+
+ 1) In kernel, zswap, zram, zcache? (IBM guy already done with zswap)
+
+ 2) Working together with cephe? (Intel guy is doing)
+
+ 3) Working together with SPDK??
+
+4. Our SEC engine used cases
+----------------------------
+
+ 1) openssl engine(we all know this)
+
+ 2) Working together with DPDK? (Intel guy is doing)
+
+ 3) In kernel, with IPSec??
+
+5. SVA
+------
+
+ we all know this

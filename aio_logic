@@ -1,0 +1,8 @@
+linux aio note
+--------------
+
+morining meeting from ken
+
+1. aio_read/aio_write 立即返回
+2. 有数据准备好后，触发一个信号，然后在信号处理函数里再做操作
+...

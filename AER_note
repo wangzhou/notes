@@ -1,0 +1,77 @@
+Linux PCIe AER Arch analysis
+----------------------------
+
+-v0.1 2016.5.28 sherlock init
+-v0.2 2016.6.1  sherlock add pcie_port driver and aer driver
+
+
+Backgroud
+----------
+
+This document helps to analyze the AER driver in Linux, help to find what we
+should do to support AER under this framework.
+
+
+Code position and related system
+--------------------------------
+
+drivers/pci/pcie/*, drivers/pci/pcie/aer/*, include/ras/ras_event.h
+
+Ftrace will be involved in to report Error to users.[1]
+
+
+High level arch
+---------------
+
+module_init(pcie_portdrv_init) in portdrv_pci.c
+```
+pcie_portdrv_init
+    --> pcie_port_bus_register  /* bus_type: pcie_port_bus_type */
+    --> pci_register_driver  /* register pcie_port driver */
+            --> pcie_port_device_register(dev) /* where to get the dev ? */
+                    /* check if this PCIe device support PM, HP, VC, DPC, AER */
+                --> get_port_device_capability
+                    /* try to allocate interrupts for PM, HP, VC, DPC, AER */
+                --> init_service_irqs
+                    /* add pcie_device for PM ... AER pcie_port_bus_type bus */
+                --> pcie_device_init
+```
+```
+module_init(aer_service_init) in drivers/pci/pcie/aer/aerdrv.c
+        /* register AER service into pcie_port driver */
+    --> pcie_port_service_register(&aerdriver)
+                                       +--> aer_probe
+                                            aer_root_reset
+                                            ...
+        --> aer_acpi_firmware_first() //##
+        --> aer_probe
+            --> aer_alloc_rpc
+            --> request_irq
+            --> aer_enable_rootport
+```
+pcie_port driver
+
+pcie aer driver: prepare interrupt server routin to handle error.
+                 prepare structure to collect error information. 
+
+cper_print_aer in drivers/pci/pcie/aer/aerdrv_errprint.c
+        /* add tracepoint about AER */
+    --> trace_aer_event
+
+
+Problem we met to support Hi1612/Hi1616 AER
+-------------------------------------------
+
+PCIe spec say that MSI/MSI-X/INTx should be used as interrupt to trigger AER message.
+However in our Hi161x system, we use a dedicated interrupt which is connected to MBIGEN
+to do this.
+
+It seems freescale SoC also met this problem, they posted a patch to community to
+solve this problem.[2]
+
+In function init_service_irqs, linux allocate interrupt for PM, HP, VC, DPC and AER.
+
+Note
+----
+1. TRACE_EVENT(): http://lwn.net/Articles/383362/
+2. https://lkml.org/lkml/2016/5/26/37

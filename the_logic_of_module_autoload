@@ -1,0 +1,77 @@
+The logic of Linux autoload module
+----------------------------------
+
+-v0.1 2018/4/15 Sherlock init
+-v0.2 2018/5/4  Sherlock add logic of part 2 and 3, shenzhen airport
+
+本文梳理一下Linux发行版中自动加载模块的基本逻辑。
+https://blog.csdn.net/luckyapple1028/article/details/44261391, 这篇文章其实已经
+讲的很好。本文只是梳理其中的逻辑。
+
+https://blog.csdn.net/hunanchenxingyu/article/details/38867931
+
+本文从系统安装的过程和一个已安装系统的启动过程分别分析其中的逻辑。这里的系统
+安装过程指的是一个linux发行版ISO的安装过程，启动过程指的是linux系统的boot过程。
+
+1. 安装系统
+-----------
+
+  安装一个Linux系统的时候，需要先在机器上运行一个Linux系统，然后在这个linux系统
+  里安装需要安装的系统。所以，我们要考虑的是:
+
+  1. 这个首先运行的Linux系统上的模块可否自动加载，满足正真开始安装系统的需求
+     比如，至少在这个先运行起来的Linux系统上硬盘相关的驱动要自动加载起来，不然，
+     安装程序将无法找到硬盘。
+
+  2. 安装Linux的系统的时候会在生成的initramfs里放哪些模块。
+
+
+2. 系统启动过程
+---------------
+
+  这里讨论的是一般Linux发行版启动过程中的模块自动加载。首先Linux发行版内核加载
+  后启动的第一个文件系统是一个initramfs的内存文件系统。
+
+  这里需要搞清楚一个问题，在加载initramfs之前，系统已经扫描到了一些设备，比如
+  PCIe枚举到的一堆PCIe设备。对于这些设备的模块，系统是怎么自动加载的。因为，系统
+  检测到设备的时候，initramfs还没有挂载，udevd更是无从运行。
+
+
+3. 热插拔设备
+-------------
+
+  1. 物理上插入一个设备
+
+  2. 该设备的总线调用uevent的函数，通过netlink向用户态发送消息。
+
+  3. 运行在用户态的udevd检测到上面的消息，利用之前生成的ko可以驱动的设备的信息，
+     识别到要加载哪个ko, 调用modprobe加载需要的模块, modprobe在加载ko的时候会
+     检查/lib/modules/xxx/modules.dep的文件里的依赖关系，然后调用insmod先加载
+     依赖的模块，然后加载需要加载的模块。
+
+     (kernel里module_xxx宏的作用，module_alias?)
+
+
+NOTE
+----
+
+  1. make; make modules_install; make install 过程中怎么生成initramfs
+
+  2. make rpm; yum install kernel.rpm 过程中怎么生成initramfs
+     
+     rpm包的script里应该在install rpm的时候调用了dracut生成对应的initramfs
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

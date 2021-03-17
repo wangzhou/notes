@@ -1,0 +1,14 @@
+pcie port irq analysis
+======================
+
+-v0.1 2016.9.13 sherlock init
+
+This document analyzes how to request interrupts in pcie port service subsystem.
+So the analysis will focus on:
+```
+init_service_irqs(struct pci_dev *dev, int *irqs, int mask)
+```
+If here requesting irq for RP, dev means pci_dev of this RP, irq means
+irqs[PCIE_PORT_DEVICE_MAXSERVICES], mask means pcie capability.
+
+pcie_port_enable_msix(dev, irqs, mask)

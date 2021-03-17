@@ -1,0 +1,24 @@
+vga problem
+-----------
+
+-v0.1 2017.7.12 Sherlock init
+
+
+/* drivers/gpu/vga/vgaarb.c */
+vga_arb_write
+    --> vga_tryget
+        --> __vga_tryget
+                /* defined in drivers/pci/pci.c */
+            --> pci_set_vga_state
+
+
+/* set default vga here */
+vga_arb_device_init
+    --> vga_arbiter_add_pci_device
+            /*
+             * if vga enble bit was not set 1, will not go to
+             * vga_set_default_device to set default vga.
+             */
+        --> pci_read_config_word(bridge, PCI_BRIDGE_CONTROL, &l)
+
+
