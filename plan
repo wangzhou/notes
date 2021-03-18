@@ -92,3 +92,4 @@ sm2相关算法
 RISC-V spec
 Linux CAP_SYS权限
 qemu里完成模拟一个设备
+shell wait

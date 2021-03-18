@@ -25,7 +25,8 @@ linux/Documentation/admin-guide/mm/transhuge.rst
 
  第一类接口配置THP的使用范围: /sys/kernel/mm/transparent_hugepage/enabled
  alway是指在整个系统里使用THP, madvise是指可以用madvise指定使用THP的地址范围，
- never是关掉THP。
+ never是关掉THP。内核提供了CONFIG_TRANSPARENT_HUGEPAGE_ALWAYS以及
+ CONFIG_TRANSPARENT_HUGEPAGE_MADVISE去配置如上enable里的默认值。
 
  第二类接口配置生成大页的方式：/sys/kernel/mm/transparent_hugepage/defrag
  always是在内存申请或者madvise的时候直接stall住内存申请，直到内核通过各种手段
