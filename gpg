@@ -1,0 +1,16 @@
+Linux gpg note
+==============
+
+-v0.1 2021.3.18 Sherlock init
+
+1. 对称加解密
+-------------
+
+ gpg -c test_file
+
+ 在弹出的对话框里输入密码，生成对test_file使用AES192加密的文件 test_file.gpg
+
+ gpg -o test_file -d test_file.gpg
+
+ 解密命令如上，-o是输出的文件，-d是加密后的文件。在一个Linux主机的账户下解密不
+ 需要输入密码，在另一台机器解密时，需要在弹出的对话框输入密码。
