@@ -1,8 +1,9 @@
 Linux THP分析
 =============
 
--v0.1 2021.3.1 Sherlock init
--v0.1 2021.3.6 Sherlock add part1,2
+-v0.1 2021.3.1  Sherlock init
+-v0.2 2021.3.6  Sherlock add part1,2
+-v0.3 2021.3.27 Sherlock add collapse_huge_page页表同步分析
 
 0. THP是什么
 ------------
@@ -56,6 +57,10 @@ linux/Documentation/admin-guide/mm/transhuge.rst
 	munmap(p, MEM_SIZE);
 ```
 
+ 实际上, 现在的内核代码和defrag中的定义已经没有严格对应。比如在enable: always,
+ defrag: madvise的时候，vma merge还是会把大于2MB的vma扔给khugepaged线程去扫描、
+ 然后触发huge page collapse。
+
 2. THP内核代码分析
 ------------------
 
@@ -91,13 +96,28 @@ linux/Documentation/admin-guide/mm/transhuge.rst
 ```
 	khugepaged
 	  +-> khugepaged_do_scan
-	    /*
-	     * 似乎有这两个入口做collapse huge page，前者把聚合在一起的小页拼
-	     * 成大页，后者可以把离散的小页通过移动拼成大页?
-	     */
+	    /* 一般情况不会进去这里 */
 	    +-> collapse_pte_mapped_thp
+	    /*
+	     * 有这两个入口做小页换成大页的操作, 第一个和file-back的内存有关系，
+	     * 下面调用的是: collapse_file。第二个处理匿名页或者是堆上的内存，
+	     * 下面调用的是：collapse_huge_page。
+	     */
+	    +-> khugepaged_scan_file
+	    /* 先扫描整个pmd下的页，可以做collapase的时候，最后走到collapse_huge_page */
 	    +-> khugepaged_scan_pmd
+	      /*
+	       * 这个是小页换成大页的核心函数，先分配2MB连续页面，然后断开pmd，
+	       * 同时做tlb invalidate，然后把小页的内存copy到大页，然后把pmd页表
+	       * 安装上。其中涉及的同步逻辑在最后collapse_huge_page页表同步里
+	       * 展开分析。
+	       */
+	      +-> collapse_huge_page
 ```
+ 
+ khugepaged的扫描需要内核的其他部分提供需要扫描的对象，这个入口函数是
+ khugepaged_enter。可以发现整个系统里有mm/mmap.c、mm/huge_memory.c、mm/shmem.c
+ 里调用了。
 
  madvise系统调用，mm/madvise.c
 ```
@@ -110,5 +130,39 @@ linux/Documentation/admin-guide/mm/transhuge.rst
 	      */
 	   +-> __khugepaged_enter
 ```
- 
- Todo: 涉及TLB相关的操作
+ mmap.c里的调用是在mmap或者brk系统调用，在不断的做vma_merge的时候，如果发现有
+ vma的range跨越了2MB的连续va，就会把对应的vma交给khugepaged扫描，做大页的替换。
+
+ collapse_huge_page页表同步分析:
+```
+      /* 分配大页 */
+  +-> khugepaged_alloc_page
+
+  +-> mmap_write_lock
+  
+      /* 做secondory mmu tlbi */
+  +-> mmu_notifier_invalidate_range_start
+
+      /* 清空pmd页表项，做cpu tlbi */
+  +-> pmdp_collapse_flush
+
+  +-> mmu_notifier_invalidate_range_end
+
+      /* 清空pte页表, free相关页面 */
+  +-> __collapse_huge_page_isolate
+
+      /* 把小页里的内容copy到大页 */
+  +-> __collapse_huge_page_copy
+
+  [...]
+
+      /* 装大页页表 */
+  +-> set_pmd_at
+
+  +-> mmap_write_unlock
+```
+  注意其他的cpu或者设备可以这个过程中还在写原来的小页内存，这些操作和如上页表
+  变动的同步点在上面两个tlbi处，tlbi和随后的barrier可以保证之前正在总线上的相关
+  地址操作都完成。这样在barrier后的新访存操作都会触发fault，这些fault都会在
+  mmap_write_lock上排队。等到新访问的fault可以执行的时候，发现已经有大页，就可以
+  做后续的处理。
