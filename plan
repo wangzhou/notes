@@ -67,7 +67,7 @@ open share lib problem
 share lib name
 github review code	  xx
 dpdk mempool		  xx
-openssl cmd
+openssl cmd		  xx
 如何写一个openssl engine
 如何用automake组织一个项目
 openssl 异步机制分析

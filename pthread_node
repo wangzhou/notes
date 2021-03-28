@@ -7,6 +7,35 @@ pthread笔记
 1. 线程的创建和退出
 -------------------
 
+ Linux系统下线程和进程的概念是比较模糊的。一般来说，线程是调度的单位，进程是资源
+ 的单位。本质上来说，内核看到都是一个个线程，但是线程之间可以通过共享资源，相互
+ 之间又划分到不同的进程里。
+
+ 从内核视角上看各种不同的ID会比较清楚。之前的这篇文章对进程ID, 线程ID，进程组，
+ 线程组，会话已经有了简单描述：
+ https://blog.csdn.net/scarecrow_byr/article/details/50437626?spm=1001.2014.3001.5501
+
+ 在一个进程的多个线程里调用getpid，这个是一个c库对getpid系统调用的封装，所以这
+ 个函数返回调用线程的进程ID, 这个ID其实就是这个线程组的线程组ID，也是这个线程组
+ 的主线程的内核pid，这个从kernel代码kernel/sys.c getpid的系统调用可以看的很清楚。
+ 使用gettid系统调用可以得到一个线程的对应内核pid。
+
+ 而所谓pthread库的pthread_self()得到的只是pthread库自定义的线程ID，这个东西和上
+ 面内核里真正的各种ID是完全不同的。
+
+ 线程的创建用pthread_create, 用的系统调用是clone。我们考虑线程结束的方法，线程执
+ 行完线程函数后自己会退出，这其中也包括线程函数自己调用pthread_exit把自己结束。
+ 线程也可以被进程中的其他线程取消，取消一个线程使用的函数是：pthread_cancel(pthread_t tid)。
+ 用strace跟踪下，可以发现pthread_cancel中的系统调用是tgkill(tgid, tid, SIGRTMIN),
+ 这个系统调用向线程组tgid里的tid线程发送SIGRTMIN信号。
+
+ 线程可以用pthread_jorn在阻塞等待相关线程结束，并且得到线程结束所带的返回值。
+
+ 线程可以注册退出的时候要调用的函数。使用pthread_cleanup_push, pthread_cleanup_pop。
+ 注册的函数在线程调用pthread_exit或者是线程被pthread_cancel的时候执行，线程正常
+ 执行结束时不执行。用strace -f跟踪进程中所有线程的系统调用可以发现，对应的系统调用
+ 是set_robust_list。
+
 2. 线程同步的锁
 ---------------
 
