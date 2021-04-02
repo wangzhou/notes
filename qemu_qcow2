@@ -9,9 +9,13 @@
       介绍的是在qemu虚拟机上安装标准发行版的方法，使用这样的文件系统可以克服上面
       提到的两个缺点。
 
+      本文的测试系统是ubuntu18.04 x86构架CPU
+
  1. qemu-img create -f qcow2 debian.img 10G
  
  2. sudo kvm -hda debian.img -cdrom debian-10.2.0-amd64-netinst.iso -m 2048
+
+    这一步是把这个debian的iso安装到debian.img这个文件上。
  
  3. qemu command:
  ```
@@ -22,19 +26,6 @@
  -hda ./debian.img \
  -nographic \
  ```
- 
- 4. 如果debian.img这个文件是在NFS文件系统上的，那么要用nfs3, 不然无法挂在qemu
-    的文件系统。
- 
-    具体把nfs3作为rootfs的配置方法: (to do)
-
- 5. mysql -uroot -pmyroot
-
-    mysql忘记密码，mysql: CREATE TABLE... to do
-
-    sysbench --oltp-read-write .... to do
-    
-    prepare, run, clearup
-
-    cgroup... to do
-
+    如上启动虚拟机，可以发现自己已经可以使用如上安装的debian系统。我们在第二步
+    安装系统的时候可以把需要的程序都装上，在这样的虚拟机里做测试，会方便很多。
+    而且你在虚拟机里创建的文件下次启动虚拟机的时候都还在。
