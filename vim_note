@@ -1,6 +1,8 @@
 vim使用技巧
 -----------
 
+-v0.1 2021.4.3 Sherlock add vim plug easymotion
+
 1. 水平创建一个terminal:
 
    vert term
@@ -31,9 +33,26 @@ vim使用技巧
 
 11. cw 普通模式下，删除当前位置到单词结尾，change word
 
-12. f + char，跳到本行第一个字符
+12. f + char，跳到本行第一个字符; t + char, 光标移动到char的前一个字符
 
 13. 全局替换：%s/xxx/yyy/g
 
 14. 转换成大写: 可视状态选要转换的部分，gU
 
+15. 快速移动光标可以使用叫easymotion的vim插件。
+    
+    在~/.vim/bundle下git clone https://github.com/easymotion/vim-easymotion.git
+    在再~/.vim/bundle下git clone https://github.com/VundleVim/Vundle.vim.git
+    后者是一个vim插件的管理器，可以用来安装easymotion。之后，按照Vundle.vim里
+    README.md的提示, 把“3. Configure Plugins”的一段配置copy到.vimrc里，把其中
+    的Plugin xxx都删了，改成Plugin 'easymotion/vim-easymotion'。代开vim run:
+    PluginInstall, 会有easymotion安装提示出来，并显示已经装好了。打开vim run:
+    help easymotion.txt, 可以看到easymotion的help文档。
+
+    具体使用的时候在.vimrc里加入一行快捷键的映射，可以是：
+    nmap ss <Plug>(easymotion-s2)  这样的效果是当你按ss的后会进入easymotion的
+    搜索输入，这个时候输入想要调到的地方的两个连续字符，之后整个屏幕凡是有这
+    两个连续字符的地方都会高亮，并且出现一个标记的字符，直接按这个字符就可以把
+    光标跳到对应的位置。
+
+    太太强大了！
