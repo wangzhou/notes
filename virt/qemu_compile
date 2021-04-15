@@ -2,6 +2,7 @@ ARM64 qemu native build
 -----------------------
 
 -v0.1 2016.3.28 sherlock init
+-v1.0 2021.4.14 sherlock use this, and add fix
 
  base on ARM64 ubuntu rootfs in Openlab: http://open-estuary.org/
  
@@ -31,3 +32,5 @@ ARM64 qemu native build
 
     root@linaro-developer:~/qemu/build# qemu-system-aarch64 --version
     QEMU emulator version 2.5.50, Copyright (c) 2003-2008 Fabrice Bellard
+
+In aarch64 ubuntu-16.04, there is doc: cnblogs.com/from-zero/p/14327440.html
