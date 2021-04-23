@@ -1,0 +1,19 @@
+
+
+    arm event queue handler                       fault workqueue
+               |                                             |
+               v                                             v
+	reading eventq entry                  >         handle_fault
+	  ^    |                             /               |
+          |    v                            /                v
+          |  iommu_report_device_fault     /            iommu_page_response 
+          |                               /
+          |                              /
+          |         if fault list empty /  <---------------- remove from fault list
+	  |         update time expire /
+          |                           /
+	  |    add fault list        /                       if fault list empty
+          |                         /                        del_timer!
+	  |    report to wq  ------/
+          |       |
+          +-------+
