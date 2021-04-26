@@ -15,3 +15,13 @@ qemu是一个虚拟机，加载到qemu里的linux kernel的启动和随后的she
 qemu monitor里的命令可以查看当前虚拟机的信息。e.g.
 
 info qtree 查看整个qemu虚拟机的每个设备的信息。
+info pci 查看qemu里的pci设备。
+...
+
+qemu启动参数加上 --trace "smmuv3_*" 可以打印出qemu里关于smmuv3的trace打印，这个
+打印会直接打印到qemu的输出和系统的输出混在一起。如果还想跟踪其他的可以再加--trace，
+比如再加一个vfio的跟踪 --trace "vfio_*"
+
+在qemu的启动项里加上如下的cmd，在host下可以用 ssh -p 5555 root@127.0.0.1 放把
+ssh的访问映射到虚拟机的22端口，这样在host下就可以用过ssh访问虚拟机:
+-device e1000,netdev=net0 -netdev user,id=net0,hostfwd=tcp:127.0.0.1:5555-:22

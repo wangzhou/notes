@@ -1,0 +1,1351 @@
+wangzhou@ubuntu:~$
+wangzhou@ubuntu:~$ sudo ./qemu_kernel.sh
+vfio_realize  (0000:75:00.1) group 38
+vfio_connect_new_container group=38 new container fd=20
+vfio_dma_map_ram region_add [ram] 0x90a0000 - 0x90a0fff [0xffff05400000]
+vfio_dma_map_ram region_add [ram] 0x40000000 - 0xbfffffff [0xffff0e200000]
+vfio_listener_region_add_iommu region_add [iommu] 0x0 - 0xffffffffffff
+smmuv3_notify_flag_add ADD SMMUNotifier node for iommu mr=smmuv3-iommu-memory-region-24-0
+vfio_mdev  (0000:75:00.1) is_mdev 0
+vfio_get_device Device 0000:75:00.1 flags: 3, regions: 11, irqs: 6
+vfio_region_setup Device 0000:75:00.1, region 0 "0000:75:00.1 BAR 0", flags: 0x0, offset: 0x0, size: 0x0
+vfio_region_setup Device 0000:75:00.1, region 1 "0000:75:00.1 BAR 1", flags: 0x0, offset: 0x10000000000, size: 0x0
+vfio_region_setup Device 0000:75:00.1, region 2 "0000:75:00.1 BAR 2", flags: 0x7, offset: 0x20000000000, size: 0x10000
+vfio_region_setup Device 0000:75:00.1, region 3 "0000:75:00.1 BAR 3", flags: 0x0, offset: 0x30000000000, size: 0x0
+vfio_region_setup Device 0000:75:00.1, region 4 "0000:75:00.1 BAR 4", flags: 0x0, offset: 0x40000000000, size: 0x0
+vfio_region_setup Device 0000:75:00.1, region 5 "0000:75:00.1 BAR 5", flags: 0x0, offset: 0x50000000000, size: 0x0
+vfio_populate_device_config Device 0000:75:00.1 config:
+  size: 0x1000, offset: 0x70000000000, flags: 0x3
+vfio_get_dev_region 0000:75:00.1 index 9, 00000004/18
+vfio_region_sparse_mmap_header Device 0000:75:00.1 region 9: 1 sparse mmap entries
+vfio_region_sparse_mmap_entry sparse entry 0 [0x1000 - 0x9000]
+vfio_region_setup Device 0000:75:00.1, region 9 "0000:75:00.1 DMA FAULT 9", flags: 0xf, offset: 0x90000000000, size: 0x9000
+vfio_region_mmap Region 0000:75:00.1 DMA FAULT 9 mmaps[0] [0x1000 - 0x8fff]
+vfio_get_dev_region 0000:75:00.1 index 9, 00000004/18
+vfio_get_dev_region 0000:75:00.1 index 10, 00000004/28
+vfio_region_sparse_mmap_header Device 0000:75:00.1 region 10: 1 sparse mmap entries
+vfio_region_sparse_mmap_entry sparse entry 0 [0x1000 - 0x4000]
+vfio_region_setup Device 0000:75:00.1, region 10 "0000:75:00.1 DMA FAULT RESPONSE 10", flags: 0xf, offset: 0xa0000000000, size: 0x4000
+vfio_region_mmap Region 0000:75:00.1 DMA FAULT RESPONSE 10 mmaps[0] [0x1000 - 0x3fff]
+vfio_region_mmap Region 0000:75:00.1 BAR 2 mmaps[0] [0x0 - 0xffff]
+vfio_check_pm_reset 0000:75:00.1 Supports PM reset
+vfio_msi_setup 0000:75:00.1 PCI MSI CAP @0x80
+vfio_check_pcie_flr 0000:75:00.1 Supports FLR via PCIe cap
+vfio_add_ext_cap_dropped 0000:75:00.1 0xe@0x450
+vfio_pci_read_config  (0000:75:00.1, @0x3d, len=0x1) 0x0
+vfio_get_dev_irq 0000:75:00.1 index 5, 00000001/18
+vfio_pci_reset  (0000:75:00.1)
+vfio_pci_read_config  (0000:75:00.1, @0xb4, len=0x2) 0x0
+vfio_pci_read_config  (0000:75:00.1, @0x4, len=0x2) 0x2
+vfio_pci_write_config  (0000:75:00.1, @0x4, 0x0, len=0x2)
+vfio_pci_reset_flr 0000:75:00.1 FLR/VFIO_DEVICE_RESET
+vfio_pci_read_config  (0000:75:00.1, @0x3d, len=0x1) 0x0
+[    0.000000] Booting Linux on physical CPU 0x0000000000 [0x481fd010]
+[    0.000000] Linux version 5.12.0-rc1-g6d7fa2a177c0-dirty (wangzhou@ubuntu) (gcc (Ubuntu/Linaro 5.4.0-6ubuntu1~16.04.12) 5.4.0 20160609, GNU ld (GNU Binutils for Ubuntu) 2.26.1) #105 SMP P
+REEMPT Mon Apr 26 03:56:57 UTC 2021
+[    0.000000] Machine model: linux,dummy-virt
+[    0.000000] earlycon: pl11 at MMIO 0x0000000009000000 (options '')
+[    0.000000] printk: bootconsole [pl11] enabled
+[    0.000000] efi: UEFI not found.
+[    0.000000] NUMA: No NUMA configuration found
+[    0.000000] NUMA: Faking a node at [mem 0x0000000040000000-0x00000000bfffffff]
+[    0.000000] NUMA: NODE_DATA [mem 0xbfbf4f00-0xbfbf6fff]
+[    0.000000] Zone ranges:
+[    0.000000]   DMA      [mem 0x0000000040000000-0x00000000bfffffff]
+[    0.000000]   DMA32    empty
+[    0.000000]   Normal   empty
+[    0.000000] Movable zone start for each node
+[    0.000000] Early memory node ranges
+[    0.000000]   node   0: [mem 0x0000000040000000-0x00000000bfffffff]
+[    0.000000] Initmem setup node 0 [mem 0x0000000040000000-0x00000000bfffffff]
+[    0.000000] psci: probing for conduit method from DT.
+[    0.000000] psci: PSCIv1.0 detected in firmware.
+[    0.000000] psci: Using standard PSCI v0.2 function IDs
+[    0.000000] psci: Trusted OS migration not required
+[    0.000000] psci: SMC Calling Convention v1.1
+[    0.000000] percpu: Embedded 33 pages/cpu s94936 r8192 d32040 u135168
+[    0.000000] Detected VIPT I-cache on CPU0
+[    0.000000] CPU features: detected: GIC system register CPU interface
+[    0.000000] CPU features: kernel page table isolation forced OFF by kpti command line option
+[    0.000000] CPU features: detected: Hardware dirty bit management
+[    0.000000] CPU features: detected: Spectre-v4
+[    0.000000] Built 1 zonelists, mobility grouping on.  Total pages: 516096
+[    0.000000] Policy zone: DMA
+[    0.000000] Kernel command line: rdinit=init console=ttyAMA0 earlycon=pl011,0x9000000 kpti=off
+[    0.000000] Dentry cache hash table entries: 262144 (order: 9, 2097152 bytes, linear)
+[    0.000000] Inode-cache hash table entries: 131072 (order: 8, 1048576 bytes, linear)
+[    0.000000] mem auto-init: stack:off, heap alloc:off, heap free:off
+[    0.000000] Memory: 1991760K/2097152K available (16640K kernel code, 3762K rwdata, 8956K rodata, 8832K init, 520K bss, 105392K reserved, 0K cma-reserved)
+[    0.000000] SLUB: HWalign=64, Order=0-3, MinObjects=0, CPUs=1, Nodes=1
+[    0.000000] ftrace: allocating 58131 entries in 228 pages
+[    0.000000] ftrace: allocated 228 pages with 4 groups
+[    0.000000] rcu: Preemptible hierarchical RCU implementation.
+[    0.000000] rcu:     RCU event tracing is enabled.
+[    0.000000] rcu:     RCU restricting CPUs from NR_CPUS=256 to nr_cpu_ids=1.
+[    0.000000]  Trampoline variant of Tasks RCU enabled.
+[    0.000000]  Rude variant of Tasks RCU enabled.
+[    0.000000]  Tracing variant of Tasks RCU enabled.
+[    0.000000] rcu: RCU calculated value of scheduler-enlistment delay is 25 jiffies.
+[    0.000000] rcu: Adjusting geometry for rcu_fanout_leaf=16, nr_cpu_ids=1
+[    0.000000] NR_IRQS: 64, nr_irqs: 64, preallocated irqs: 0
+[    0.000000] GICv3: 256 SPIs implemented
+[    0.000000] GICv3: 0 Extended SPIs implemented
+[    0.000000] GICv3: Distributor has no Range Selector support
+[    0.000000] GICv3: 16 PPIs implemented
+[    0.000000] GICv3: CPU0: found redistributor 0 region 0:0x00000000080a0000
+[    0.000000] ITS [mem 0x08080000-0x0809ffff]
+[    0.000000] ITS@0x0000000008080000: allocated 8192 Devices @429a0000 (indirect, esz 8, psz 64K, shr 1)
+[    0.000000] ITS@0x0000000008080000: allocated 8192 Interrupt Collections @429b0000 (flat, esz 8, psz 64K, shr 1)
+[    0.000000] GICv3: using LPI property table @0x00000000429c0000
+[    0.000000] GICv3: CPU0: using allocated LPI pending table @0x00000000429d0000
+[    0.000000] random: get_random_bytes called from start_kernel+0x3b0/0x548 with crng_init=0
+[    0.000000] arch_timer: cp15 timer(s) running at 100.00MHz (virt).
+[    0.000000] clocksource: arch_sys_counter: mask: 0xffffffffffffff max_cycles: 0x171024e7e0, max_idle_ns: 440795205315 ns
+[    0.000000] sched_clock: 56 bits at 100MHz, resolution 10ns, wraps every 4398046511100ns
+[    0.001167] arm-pv: using stolen time PV
+[    0.001773] Console: colour dummy device 80x25
+[    0.002392] Calibrating delay loop (skipped), value calculated using timer frequency.. 200.00 BogoMIPS (lpj=400000)
+[    0.003790] pid_max: default: 32768 minimum: 301
+[    0.004423] LSM: Security Framework initializing
+[    0.005314] Mount-cache hash table entries: 4096 (order: 3, 32768 bytes, linear)
+[    0.006354] Mountpoint-cache hash table entries: 4096 (order: 3, 32768 bytes, linear)
+[    0.007844] rcu: Hierarchical SRCU implementation.
+[    0.008646] Platform MSI: its@8080000 domain created
+[    0.009336] PCI/MSI: /intc@8000000/its@8080000 domain created
+[    0.010124] fsl-mc MSI: its@8080000 domain created
+[    0.010965] EFI services will not be available.
+[    0.011613] smp: Bringing up secondary CPUs ...
+[    0.012229] smp: Brought up 1 node, 1 CPU
+[    0.012776] SMP: Total of 1 processors activated.
+[    0.013408] CPU features: detected: Privileged Access Never
+[    0.014162] CPU features: detected: LSE atomic instructions
+[    0.014952] CPU features: detected: Common not Private translations
+[    0.015812] CPU features: detected: RAS Extension Support
+[    0.016548] CPU features: detected: CRC32 instructions
+[    0.049012] CPU: All CPU(s) started at EL1
+[    0.049634] alternatives: patching kernel code
+[    0.050779] devtmpfs: initialized
+[    0.051771] KASLR enabled
+[    0.052194] clocksource: jiffies: mask: 0xffffffff max_cycles: 0xffffffff, max_idle_ns: 7645041785100000 ns
+[    0.053544] futex hash table entries: 256 (order: 2, 16384 bytes, linear)
+[    0.054501] pinctrl core: initialized pinctrl subsystem
+[    0.055454]
+[    0.055666] *************************************************************
+[    0.056576] **     NOTICE NOTICE NOTICE NOTICE NOTICE NOTICE NOTICE    **
+[    0.057491] **                                                         **
+[    0.058410] **  IOMMU DebugFS SUPPORT HAS BEEN ENABLED IN THIS KERNEL  **
+[    0.059355] **                                                         **
+[    0.060285] ** This means that this kernel is built to expose internal **
+[    0.061198] ** IOMMU data structures, which may compromise security on **
+[    0.062108] ** your system.                                            **
+[    0.063036] **                                                         **
+[    0.063994] ** If you see this message and you are not debugging the   **
+[    0.064911] ** kernel, report this immediately to your vendor!         **
+[    0.065821] **                                                         **
+[    0.066738] **     NOTICE NOTICE NOTICE NOTICE NOTICE NOTICE NOTICE    **
+[    0.067647] *************************************************************
+[    0.068658] DMI not present or invalid.
+[    0.069322] NET: Registered protocol family 16
+[    0.070049] DMA: preallocated 256 KiB GFP_KERNEL pool for atomic allocations
+[    0.071050] DMA: preallocated 256 KiB GFP_KERNEL|GFP_DMA pool for atomic allocations
+[    0.072145] DMA: preallocated 256 KiB GFP_KERNEL|GFP_DMA32 pool for atomic allocations
+[    0.073307] audit: initializing netlink subsys (disabled)
+[    0.074251] thermal_sys: Registered thermal governor 'step_wise'
+[    0.074253] thermal_sys: Registered thermal governor 'power_allocator'
+[    0.075142] audit: type=2000 audit(0.072:1): state=initialized audit_enabled=0 res=1
+[    0.077100] cpuidle: using governor menu
+[    0.077701] hw-breakpoint: found 6 breakpoint and 4 watchpoint registers.
+[    0.078635] ASID allocator initialised with 65536 entries
+[    0.079889] Serial: AMBA PL011 UART driver
+[    0.083372] 9000000.pl011: ttyAMA0 at MMIO 0x9000000 (irq = 51, base_baud = 0) is a PL011 rev1
+[    0.084657] printk: console [ttyAMA0] enabled
+[    0.084657] printk: console [ttyAMA0] enabled
+[    0.085709] printk: bootconsole [pl11] disabled
+[    0.085709] printk: bootconsole [pl11] disabled
+[    0.089072] HugeTLB registered 1.00 GiB page size, pre-allocated 0 pages
+[    0.089893] HugeTLB registered 32.0 MiB page size, pre-allocated 0 pages
+[    0.090611] HugeTLB registered 2.00 MiB page size, pre-allocated 0 pages
+[    0.091308] HugeTLB registered 64.0 KiB page size, pre-allocated 0 pages
+[    0.410455] cryptd: max_cpu_qlen set to 1000
+[    0.416777] ACPI: Interpreter disabled.
+[    0.417620] iommu: Default domain type: Translated
+[    0.418230] vgaarb: loaded
+[    0.418634] SCSI subsystem initialized
+[    0.419146] usbcore: registered new interface driver usbfs
+[    0.419739] usbcore: registered new interface driver hub
+[    0.420314] usbcore: registered new device driver usb
+[    0.421021] pps_core: LinuxPPS API ver. 1 registered
+[    0.421558] pps_core: Software ver. 5.3.6 - Copyright 2005-2007 Rodolfo Giometti <giometti@linux.it>
+[    0.422620] PTP clock support registered
+[    0.423074] EDAC MC: Ver: 3.0.0
+[    0.423723] FPGA manager framework
+[    0.424125] Advanced Linux Sound Architecture Driver Initialized.
+[    0.424973] clocksource: Switched to clocksource arch_sys_counter
+[    0.441073] VFS: Disk quotas dquot_6.6.0
+[    0.441589] VFS: Dquot-cache hash table entries: 512 (order 0, 4096 bytes)
+[    0.442370] pnp: PnP ACPI: disabled
+[    0.443887] NET: Registered protocol family 2
+[    0.449033] tcp_listen_portaddr_hash hash table entries: 1024 (order: 2, 16384 bytes, linear)
+[    0.450016] TCP established hash table entries: 16384 (order: 5, 131072 bytes, linear)
+[    0.450872] TCP bind hash table entries: 16384 (order: 6, 262144 bytes, linear)
+[    0.451948] TCP: Hash tables configured (established 16384 bind 16384)
+[    0.452656] UDP hash table entries: 1024 (order: 3, 32768 bytes, linear)
+[    0.453427] UDP-Lite hash table entries: 1024 (order: 3, 32768 bytes, linear)
+[    0.454217] NET: Registered protocol family 1
+[    0.461027] RPC: Registered named UNIX socket transport module.
+[    0.461727] RPC: Registered udp transport module.
+[    0.462224] RPC: Registered tcp transport module.
+[    0.462732] RPC: Registered tcp NFSv4.1 backchannel transport module.
+[    0.463407] PCI: CLS 0 bytes, default 64
+[    0.463861] Unpacking initramfs...
+[    0.949710] Freeing initrd memory: 25344K
+[    0.998621] hw perfevents: enabled with armv8_pmuv3 PMU driver, 13 counters available
+[    0.999561] kvm [1]: HYP mode not available
+[    1.013625] Initialise system trusted keyrings
+[    1.014211] workingset: timestamp_bits=42 max_order=19 bucket_order=0
+[    1.016790] squashfs: version 4.0 (2009/01/31) Phillip Lougher
+[    1.017994] NFS: Registering the id_resolver key type
+[    1.018628] Key type id_resolver registered
+[    1.019106] Key type id_legacy registered
+[    1.019598] nfs4filelayout_init: NFSv4 File Layout Driver Registering...
+[    1.020410] 9p: Installing v9fs 9p2000 file system support
+[    1.033325] Key type asymmetric registered
+[    1.033815] Asymmetric key parser 'x509' registered
+[    1.034399] Block layer SCSI generic (bsg) driver version 0.4 loaded (major 244)
+[    1.035265] io scheduler mq-deadline registered
+[    1.035781] io scheduler kyber registered
+[    1.038417] pl061_gpio 9030000.pl061: PL061 GPIO chip registered
+[    1.039509] pci-host-generic 4010000000.pcie: host bridge /pcie@10000000 ranges:
+[    1.040370] pci-host-generic 4010000000.pcie:       IO 0x003eff0000..0x003effffff -> 0x0000000000
+[    1.041428] pci-host-generic 4010000000.pcie:      MEM 0x0010000000..0x003efeffff -> 0x0010000000
+[    1.042430] pci-host-generic 4010000000.pcie:      MEM 0x8000000000..0xffffffffff -> 0x8000000000
+[    1.043464] pci-host-generic 4010000000.pcie: Memory resource size exceeds max for 32 bits
+[    1.044413] pci-host-generic 4010000000.pcie: ECAM at [mem 0x4010000000-0x401fffffff] for [bus 00-ff]
+[    1.045545] pci-host-generic 4010000000.pcie: PCI host bridge to bus 0000:00
+[    1.046349] pci_bus 0000:00: root bus resource [bus 00-ff]
+[    1.047041] pci_bus 0000:00: root bus resource [io  0x0000-0xffff]
+[    1.047742] pci_bus 0000:00: root bus resource [mem 0x10000000-0x3efeffff]
+[    1.048525] pci_bus 0000:00: root bus resource [mem 0x8000000000-0xffffffffff]
+[    1.049431] pci 0000:00:00.0: [1b36:0008] type 00 class 0x060000
+[    1.050370] pci 0000:00:01.0: [1af4:1009] type 00 class 0x000200
+[    1.051123] pci 0000:00:01.0: reg 0x10: [io  0x0000-0x001f]
+[    1.051771] pci 0000:00:01.0: reg 0x14: [mem 0x00000000-0x00000fff]
+[    1.052537] pci 0000:00:01.0: reg 0x20: [mem 0x00000000-0x00003fff 64bit pref]
+[    1.053664] pci 0000:00:02.0: [8086:100e] type 00 class 0x020000
+[    1.054399] pci 0000:00:02.0: reg 0x10: [mem 0x00000000-0x0001ffff]
+[    1.055143] pci 0000:00:02.0: reg 0x14: [io  0x0000-0x003f]
+[    1.055855] pci 0000:00:02.0: reg 0x30: [mem 0x00000000-0x0003ffff pref]
+vfio_pci_read_config  (0000:75:00.1, @0x0, len=0x4) 0xa25119e5
+vfio_pci_read_config  (0000:75:00.1, @0xe, len=0x1) 0x0
+vfio_pci_read_config  (0000:75:00.1, @0x6, len=0x2) 0x10
+vfio_pci_read_config  (0000:75:00.1, @0x34, len=0x1) 0x40
+vfio_pci_read_config  (0000:75:00.1, @0x40, len=0x2) 0x8010
+vfio_pci_read_config  (0000:75:00.1, @0x42, len=0x2) 0x92
+vfio_pci_read_config  (0000:75:00.1, @0x44, len=0x2) 0x8020
+vfio_pci_read_config  (0000:75:00.1, @0x8, len=0x4) 0x12000021
+vfio_pci_read_config  (0000:75:00.1, @0x100, len=0x4) 0x4581000d
+vfio_pci_read_config  (0000:75:00.1, @0x0, len=0x4) 0xa25119e5
+vfio_pci_read_config  (0000:75:00.1, @0x100, len=0x4) 0x4581000d
+vfio_pci_read_config  (0000:75:00.1, @0x100, len=0x4) 0x4581000d
+vfio_pci_read_config  (0000:75:00.1, @0x458, len=0x4) 0x1001b
+[    1.056816] pci 0000:00:03.0: [19e5:a251] type 00 class 0x120000
+vfio_pci_read_config  (0000:75:00.1, @0x4, len=0x2) 0x0
+vfio_pci_write_config  (0000:75:00.1, @0x4, 0x400, len=0x2)
+vfio_pci_read_config  (0000:75:00.1, @0x4, len=0x2) 0x400
+vfio_pci_write_config  (0000:75:00.1, @0x4, 0x0, len=0x2)
+vfio_pci_read_config  (0000:75:00.1, @0x3d, len=0x1) 0x0
+vfio_pci_read_config  (0000:75:00.1, @0x4, len=0x2) 0x0
+vfio_pci_read_config  (0000:75:00.1, @0x10, len=0x4) 0x0
+vfio_pci_write_config  (0000:75:00.1, @0x10, 0xffffffff, len=0x4)
+vfio_pci_read_config  (0000:75:00.1, @0x10, len=0x4) 0x0
+vfio_pci_write_config  (0000:75:00.1, @0x10, 0x0, len=0x4)
+vfio_pci_read_config  (0000:75:00.1, @0x4, len=0x2) 0x0
+vfio_pci_read_config  (0000:75:00.1, @0x14, len=0x4) 0x0
+vfio_pci_write_config  (0000:75:00.1, @0x14, 0xffffffff, len=0x4)
+vfio_pci_read_config  (0000:75:00.1, @0x14, len=0x4) 0x0
+vfio_pci_write_config  (0000:75:00.1, @0x14, 0x0, len=0x4)
+vfio_pci_read_config  (0000:75:00.1, @0x4, len=0x2) 0x0
+vfio_pci_read_config  (0000:75:00.1, @0x18, len=0x4) 0xc
+vfio_pci_write_config  (0000:75:00.1, @0x18, 0xffffffff, len=0x4)
+vfio_pci_read_config  (0000:75:00.1, @0x18, len=0x4) 0xffff000c
+vfio_pci_write_config  (0000:75:00.1, @0x18, 0xc, len=0x4)
+vfio_pci_read_config  (0000:75:00.1, @0x1c, len=0x4) 0x0
+vfio_pci_write_config  (0000:75:00.1, @0x1c, 0xffffffff, len=0x4)
+vfio_pci_read_config  (0000:75:00.1, @0x1c, len=0x4) 0xffffffff
+vfio_pci_write_config  (0000:75:00.1, @0x1c, 0x0, len=0x4)
+[    1.057717] pci 0000:00:03.0: reg 0x18: [mem 0x00000000-0x0000ffff 64bit pref]
+vfio_pci_read_config  (0000:75:00.1, @0x4, len=0x2) 0x0
+vfio_pci_read_config  (0000:75:00.1, @0x20, len=0x4) 0x0
+vfio_pci_write_config  (0000:75:00.1, @0x20, 0xffffffff, len=0x4)
+vfio_pci_read_config  (0000:75:00.1, @0x20, len=0x4) 0x0
+vfio_pci_write_config  (0000:75:00.1, @0x20, 0x0, len=0x4)
+vfio_pci_read_config  (0000:75:00.1, @0x4, len=0x2) 0x0
+vfio_pci_read_config  (0000:75:00.1, @0x24, len=0x4) 0x0
+vfio_pci_write_config  (0000:75:00.1, @0x24, 0xffffffff, len=0x4)
+vfio_pci_read_config  (0000:75:00.1, @0x24, len=0x4) 0x0
+vfio_pci_write_config  (0000:75:00.1, @0x24, 0x0, len=0x4)
+vfio_pci_read_config  (0000:75:00.1, @0x4, len=0x2) 0x0
+vfio_pci_read_config  (0000:75:00.1, @0x30, len=0x4) 0x0
+vfio_pci_write_config  (0000:75:00.1, @0x30, 0xfffff800, len=0x4)
+vfio_pci_read_config  (0000:75:00.1, @0x30, len=0x4) 0x0
+vfio_pci_write_config  (0000:75:00.1, @0x30, 0x0, len=0x4)
+vfio_pci_read_config  (0000:75:00.1, @0x2c, len=0x2) 0x0
+vfio_pci_read_config  (0000:75:00.1, @0x2e, len=0x2) 0x0
+vfio_pci_read_config  (0000:75:00.1, @0x48, len=0x2) 0x0
+vfio_pci_write_config  (0000:75:00.1, @0x48, 0x0, len=0x2)
+vfio_pci_read_config  (0000:75:00.1, @0x44, len=0x4) 0x10008020
+vfio_pci_read_config  (0000:75:00.1, @0x48, len=0x2) 0x0
+[    1.058648] pci 0000:00:03.0: enabling Extended Tags
+vfio_pci_read_config  (0000:75:00.1, @0x48, len=0x2) 0x0
+vfio_pci_write_config  (0000:75:00.1, @0x48, 0x100, len=0x2)
+vfio_pci_read_config  (0000:75:00.1, @0x48, len=0x2) 0x0
+vfio_pci_read_config  (0000:75:00.1, @0x100, len=0x4) 0x4581000d
+vfio_pci_read_config  (0000:75:00.1, @0x458, len=0x4) 0x1001b
+vfio_pci_read_config  (0000:75:00.1, @0x64, len=0x4) 0x10
+vfio_pci_read_config  (0000:75:00.1, @0x64, len=0x4) 0x10
+vfio_pci_read_config  (0000:75:00.1, @0x6, len=0x2) 0x10
+vfio_pci_read_config  (0000:75:00.1, @0x34, len=0x1) 0x40
+vfio_pci_read_config  (0000:75:00.1, @0x40, len=0x2) 0x8010
+vfio_pci_read_config  (0000:75:00.1, @0x80, len=0x2) 0xb005
+vfio_pci_read_config  (0000:75:00.1, @0xb0, len=0x2) 0x1
+vfio_pci_read_config  (0000:75:00.1, @0x6, len=0x2) 0x10
+vfio_pci_read_config  (0000:75:00.1, @0x34, len=0x1) 0x40
+vfio_pci_read_config  (0000:75:00.1, @0x40, len=0x2) 0x8010
+vfio_pci_read_config  (0000:75:00.1, @0x80, len=0x2) 0xb005
+vfio_pci_read_config  (0000:75:00.1, @0x82, len=0x2) 0x184
+vfio_pci_read_config  (0000:75:00.1, @0x6, len=0x2) 0x10
+vfio_pci_read_config  (0000:75:00.1, @0x34, len=0x1) 0x40
+vfio_pci_read_config  (0000:75:00.1, @0x40, len=0x2) 0x8010
+vfio_pci_read_config  (0000:75:00.1, @0x80, len=0x2) 0xb005
+vfio_pci_read_config  (0000:75:00.1, @0xb0, len=0x2) 0x1
+vfio_pci_read_config  (0000:75:00.1, @0x6, len=0x2) 0x10
+vfio_pci_read_config  (0000:75:00.1, @0x34, len=0x1) 0x40
+vfio_pci_read_config  (0000:75:00.1, @0x40, len=0x2) 0x8010
+vfio_pci_read_config  (0000:75:00.1, @0x6, len=0x2) 0x10
+vfio_pci_read_config  (0000:75:00.1, @0x34, len=0x1) 0x40
+vfio_pci_read_config  (0000:75:00.1, @0x40, len=0x2) 0x8010
+vfio_pci_read_config  (0000:75:00.1, @0x80, len=0x2) 0xb005
+vfio_pci_read_config  (0000:75:00.1, @0xb0, len=0x2) 0x1
+vfio_pci_read_config  (0000:75:00.1, @0x100, len=0x4) 0x4581000d
+vfio_pci_read_config  (0000:75:00.1, @0x458, len=0x4) 0x1001b
+vfio_pci_read_config  (0000:75:00.1, @0x100, len=0x4) 0x4581000d
+vfio_pci_read_config  (0000:75:00.1, @0x458, len=0x4) 0x1001b
+vfio_pci_read_config  (0000:75:00.1, @0x100, len=0x4) 0x4581000d
+vfio_pci_read_config  (0000:75:00.1, @0x458, len=0x4) 0x1001b
+vfio_pci_read_config  (0000:75:00.1, @0x100, len=0x4) 0x4581000d
+vfio_pci_read_config  (0000:75:00.1, @0x458, len=0x4) 0x1001b
+vfio_pci_read_config  (0000:75:00.1, @0x6, len=0x2) 0x10
+vfio_pci_read_config  (0000:75:00.1, @0x34, len=0x1) 0x40
+vfio_pci_read_config  (0000:75:00.1, @0x40, len=0x2) 0x8010
+vfio_pci_read_config  (0000:75:00.1, @0x80, len=0x2) 0xb005
+vfio_pci_read_config  (0000:75:00.1, @0xb0, len=0x2) 0x1
+vfio_pci_read_config  (0000:75:00.1, @0xb2, len=0x2) 0x3
+vfio_pci_read_config  (0000:75:00.1, @0x6, len=0x2) 0x10
+vfio_pci_read_config  (0000:75:00.1, @0x6, len=0x2) 0x10
+vfio_pci_read_config  (0000:75:00.1, @0x34, len=0x1) 0x40
+vfio_pci_read_config  (0000:75:00.1, @0x40, len=0x2) 0x8010
+vfio_pci_read_config  (0000:75:00.1, @0x80, len=0x2) 0xb005
+vfio_pci_read_config  (0000:75:00.1, @0xb0, len=0x2) 0x1
+vfio_pci_read_config  (0000:75:00.1, @0x100, len=0x4) 0x4581000d
+vfio_pci_read_config  (0000:75:00.1, @0x458, len=0x4) 0x1001b
+vfio_pci_read_config  (0000:75:00.1, @0x100, len=0x4) 0x4581000d
+vfio_pci_read_config  (0000:75:00.1, @0x458, len=0x4) 0x1001b
+vfio_pci_read_config  (0000:75:00.1, @0x100, len=0x4) 0x4581000d
+vfio_pci_read_config  (0000:75:00.1, @0x458, len=0x4) 0x1001b
+vfio_pci_read_config  (0000:75:00.1, @0x100, len=0x4) 0x4581000d
+vfio_pci_read_config  (0000:75:00.1, @0x44, len=0x4) 0x10008020
+[    1.059791] pci 0000:00:02.0: BAR 6: assigned [mem 0x10000000-0x1003ffff pref]
+[    1.060550] pci 0000:00:02.0: BAR 0: assigned [mem 0x10040000-0x1005ffff]
+[    1.061300] pci 0000:00:03.0: BAR 2: assigned [mem 0x8000000000-0x800000ffff 64bit pref]
+vfio_pci_read_config  (0000:75:00.1, @0x4, len=0x2) 0x0
+vfio_pci_write_config  (0000:75:00.1, @0x4, 0x0, len=0x2)
+vfio_pci_write_config  (0000:75:00.1, @0x18, 0xc, len=0x4)
+vfio_pci_read_config  (0000:75:00.1, @0x18, len=0x4) 0xc
+vfio_pci_write_config  (0000:75:00.1, @0x1c, 0x80, len=0x4)
+vfio_pci_read_config  (0000:75:00.1, @0x1c, len=0x4) 0x80
+vfio_pci_write_config  (0000:75:00.1, @0x4, 0x0, len=0x2)
+[    1.062197] pci 0000:00:01.0: BAR 4: assigned [mem 0x8000010000-0x8000013fff 64bit pref]
+[    1.063071] pci 0000:00:01.0: BAR 1: assigned [mem 0x10060000-0x10060fff]
+[    1.063787] pci 0000:00:02.0: BAR 1: assigned [io  0x1000-0x103f]
+[    1.064429] pci 0000:00:01.0: BAR 0: assigned [io  0x1040-0x105f]
+[    1.069361] Serial: 8250/16550 driver, 4 ports, IRQ sharing enabled
+[    1.070686] SuperH (H)SCI(F) driver initialized
+[    1.071352] msm_serial: driver initialized
+smmuv3_read_mmio addr: 0x0 val:0xc40103a size: 0x4(0)
+smmuv3_read_mmio addr: 0x4 val:0x2730410 size: 0x4(0)
+smmuv3_read_mmio addr: 0xc val:0x404 size: 0x4(0)
+smmuv3_read_mmio addr: 0x14 val:0x55 size: 0x4(0)
+[    1.072224] arm-smmu-v3 9050000.smmuv3: ias 48-bit, oas 48-bit (features 0x00038b05)
+[    1.073863] arm-smmu-v3 9050000.smmuv3: allocated 262144 entries for cmdq
+[    1.075393] arm-smmu-v3 9050000.smmuv3: allocated 131072 entries for evtq
+smmuv3_read_mmio addr: 0x20 val:0x0 size: 0x4(0)
+smmuv3_write_mmio addr: 0x20 val:0x0 size: 0x4(0)
+smmuv3_read_mmio addr: 0x24 val:0x0 size: 0x4(0)
+smmuv3_write_mmio addr: 0x28 val:0xd75 size: 0x4(0)
+smmuv3_write_mmio addr: 0x2c val:0x2 size: 0x4(0)
+smmuv3_write_mmio addr: 0x80 val:0x4000000049046000 size: 0x8(0)
+smmuv3_write_mmio addr: 0x88 val:0x10210 size: 0x4(0)
+smmuv3_write_mmio addr: 0x90 val:0x4000000048c00012 size: 0x8(0)
+smmuv3_write_mmio addr: 0x98 val:0x0 size: 0x4(0)
+smmuv3_write_mmio addr: 0x9c val:0x0 size: 0x4(0)
+smmuv3_cmdq_consume_out prod:0, cons:0, prod_wrap:0, cons_wrap:0
+smmuv3_write_mmio addr: 0x20 val:0x8 size: 0x4(0)
+smmuv3_read_mmio addr: 0x24 val:0x8 size: 0x4(0)
+smmuv3_cmdq_consume prod=1 cons=0 prod.wrap=0 cons.wrap=0
+smmuv3_cmdq_opcode <--- SMMU_CMD_CFGI_STE_RANGE
+smmuv3_cmdq_cfgi_ste_range start=0x0 - end=0xffffffff
+smmuv3_cmdq_consume_out prod:1, cons:1, prod_wrap:0, cons_wrap:0
+smmuv3_write_mmio addr: 0x98 val:0x1 size: 0x4(0)
+smmuv3_cmdq_consume prod=2 cons=1 prod.wrap=0 cons.wrap=0
+smmuv3_cmdq_opcode <--- SMMU_CMD_SYNC
+smmuv3_cmdq_consume_out prod:2, cons:2, prod_wrap:0, cons_wrap:0
+smmuv3_write_mmio addr: 0x98 val:0x2 size: 0x4(0)
+smmuv3_read_mmio addr: 0x9c val:0x2 size: 0x4(0)
+smmuv3_cmdq_consume prod=3 cons=2 prod.wrap=0 cons.wrap=0
+smmuv3_cmdq_opcode <--- SMMU_CMD_TLBI_NSNH_ALL
+smmuv3_cmdq_tlbi_nh
+smmuv3_cmdq_consume_out prod:3, cons:3, prod_wrap:0, cons_wrap:0
+smmuv3_write_mmio addr: 0x98 val:0x3 size: 0x4(0)
+smmuv3_cmdq_consume prod=4 cons=3 prod.wrap=0 cons.wrap=0
+smmuv3_cmdq_opcode <--- SMMU_CMD_SYNC
+smmuv3_cmdq_consume_out prod:4, cons:4, prod_wrap:0, cons_wrap:0
+smmuv3_write_mmio addr: 0x98 val:0x4 size: 0x4(0)
+smmuv3_read_mmio addr: 0x9c val:0x4 size: 0x4(0)
+smmuv3_write_mmio addr: 0xa0 val:0x4000000048800011 size: 0x8(0)
+smmuv3_write_mmio addr: 0xa8 val:0x0 size: 0x4(0)
+smmuv3_write_mmio addr: 0xac val:0x0 size: 0x4(0)
+smmuv3_cmdq_consume_out prod:4, cons:4, prod_wrap:0, cons_wrap:0
+smmuv3_write_mmio addr: 0x20 val:0xc size: 0x4(0)
+smmuv3_read_mmio addr: 0x24 val:0xc size: 0x4(0)
+smmuv3_write_mmio addr: 0x50 val:0x0 size: 0x4(0)
+smmuv3_read_mmio addr: 0x54 val:0x0 size: 0x4(0)
+smmuv3_write_mmio addr: 0x68 val:0x0 size: 0x8(0)
+smmuv3_write_mmio addr: 0xb0 val:0x0 size: 0x8(0)
+smmuv3_write_mmio addr: 0x50 val:0x5 size: 0x4(0)
+smmuv3_read_mmio addr: 0x54 val:0x5 size: 0x4(0)
+smmuv3_cmdq_consume_out prod:4, cons:4, prod_wrap:0, cons_wrap:0
+smmuv3_write_mmio addr: 0x20 val:0xd size: 0x4(0)
+smmuv3_read_mmio addr: 0x24 val:0xd size: 0x4(0)
+[    1.076625] cacheinfo: Unable to detect cache hierarchy for CPU 0
+[    1.079293] loop: module loaded
+[    1.079864] megasas: 07.714.04.00-rc1
+[    1.080712] physmap-flash 0.flash: physmap platform flash device: [mem 0x00000000-0x03ffffff]
+[    1.104113] 0.flash: Found 2 x16 devices at 0x0 in 32-bit bank. Manufacturer ID 0x000000 Chip ID 0x000000
+[    1.105267] Intel/Sharp Extended Query Table at 0x0031
+[    1.107313] Using buffer write method
+[    1.107761] physmap-flash 0.flash: physmap platform flash device: [mem 0x04000000-0x07ffffff]
+[    1.110185] 0.flash: Found 2 x16 devices at 0x0 in 32-bit bank. Manufacturer ID 0x000000 Chip ID 0x000000
+[    1.111288] Intel/Sharp Extended Query Table at 0x0031
+[    1.114579] Using buffer write method
+[    1.115636] Concatenating MTD devices:
+[    1.116078] (0): "0.flash"
+[    1.116396] (1): "0.flash"
+[    1.116708] into device "0.flash"
+[    1.119735] libphy: Fixed MDIO Bus: probed
+[    1.120525] tun: Universal TUN/TAP device driver, 1.6
+[    1.121371] thunder_xcv, ver 1.0
+[    1.121779] thunder_bgx, ver 1.0
+[    1.122178] nicpf, ver 1.0
+[    1.122792] hclge is initializing
+[    1.123198] hns3: Hisilicon Ethernet Network Driver for Hip08 Family - version
+[    1.124039] hns3: Copyright (c) 2017 Huawei Corporation.
+[    1.124654] e1000: Intel(R) PRO/1000 Network Driver
+[    1.125261] e1000: Copyright (c) 1999-2006 Intel Corporation.
+[    1.125956] e1000 0000:00:02.0: Adding to iommu group 0
+smmuv3_cmdq_consume prod=5 cons=4 prod.wrap=0 cons.wrap=0
+smmuv3_cmdq_opcode <--- SMMU_CMD_SYNC
+smmuv3_cmdq_consume_out prod:5, cons:5, prod_wrap:0, cons_wrap:0
+smmuv3_write_mmio addr: 0x98 val:0x5 size: 0x4(0)
+smmuv3_read_mmio addr: 0x9c val:0x5 size: 0x4(0)
+smmuv3_cmdq_consume prod=6 cons=5 prod.wrap=0 cons.wrap=0
+smmuv3_cmdq_opcode <--- SMMU_CMD_SYNC
+smmuv3_cmdq_consume_out prod:6, cons:6, prod_wrap:0, cons_wrap:0
+smmuv3_write_mmio addr: 0x98 val:0x6 size: 0x4(0)
+smmuv3_read_mmio addr: 0x9c val:0x6 size: 0x4(0)
+smmuv3_cmdq_consume prod=7 cons=6 prod.wrap=0 cons.wrap=0
+smmuv3_cmdq_opcode <--- SMMU_CMD_CFGI_STE
+smmuv3_cmdq_cfgi_ste streamid= 0x10
+smmuv3_config_cache_inv Config cache INV for sid=0x10
+smmuv3_cmdq_consume_out prod:7, cons:7, prod_wrap:0, cons_wrap:0
+smmuv3_write_mmio addr: 0x98 val:0x7 size: 0x4(0)
+smmuv3_cmdq_consume prod=8 cons=7 prod.wrap=0 cons.wrap=0
+smmuv3_cmdq_opcode <--- SMMU_CMD_SYNC
+smmuv3_cmdq_consume_out prod:8, cons:8, prod_wrap:0, cons_wrap:0
+smmuv3_write_mmio addr: 0x98 val:0x8 size: 0x4(0)
+smmuv3_read_mmio addr: 0x9c val:0x8 size: 0x4(0)
+smmuv3_cmdq_consume prod=9 cons=8 prod.wrap=0 cons.wrap=0
+smmuv3_cmdq_opcode <--- SMMU_CMD_CFGI_STE
+smmuv3_cmdq_cfgi_ste streamid= 0x10
+smmuv3_config_cache_inv Config cache INV for sid=0x10
+smmuv3_cmdq_consume_out prod:9, cons:9, prod_wrap:0, cons_wrap:0
+smmuv3_write_mmio addr: 0x98 val:0x9 size: 0x4(0)
+smmuv3_cmdq_consume prod=10 cons=9 prod.wrap=0 cons.wrap=0
+smmuv3_cmdq_opcode <--- SMMU_CMD_SYNC
+smmuv3_cmdq_consume_out prod:10, cons:10, prod_wrap:0, cons_wrap:0
+smmuv3_write_mmio addr: 0x98 val:0xa size: 0x4(0)
+smmuv3_read_mmio addr: 0x9c val:0xa size: 0x4(0)
+smmuv3_cmdq_consume prod=11 cons=10 prod.wrap=0 cons.wrap=0
+smmuv3_cmdq_opcode <--- SMMU_CMD_PREFETCH_CONFIG
+smmuv3_cmdq_consume_out prod:11, cons:11, prod_wrap:0, cons_wrap:0
+smmuv3_write_mmio addr: 0x98 val:0xb size: 0x4(0)
+smmuv3_cmdq_consume prod=12 cons=11 prod.wrap=0 cons.wrap=0
+smmuv3_cmdq_opcode <--- SMMU_CMD_TLBI_NH_ASID
+smmuv3_cmdq_tlbi_nh_asid asid=1
+smmuv3_s1_asid_inval asid=1
+vfio_iommu_asid_inv_iotlb nested IOTLB invalidate asid=1
+smmuv3_cmdq_consume_out prod:12, cons:12, prod_wrap:0, cons_wrap:0
+smmuv3_write_mmio addr: 0x98 val:0xc size: 0x4(0)
+smmuv3_cmdq_consume prod=13 cons=12 prod.wrap=0 cons.wrap=0
+smmuv3_cmdq_opcode <--- SMMU_CMD_SYNC
+smmuv3_cmdq_consume_out prod:13, cons:13, prod_wrap:0, cons_wrap:0
+smmuv3_write_mmio addr: 0x98 val:0xd size: 0x4(0)
+smmuv3_read_mmio addr: 0x9c val:0xd size: 0x4(0)
+[    1.126862] e1000 0000:00:02.0: enabling device (0000 -> 0003)
+[    1.491414] e1000 0000:00:02.0 eth0: (PCI:33MHz:32-bit) 52:54:00:12:34:56
+[    1.492231] e1000 0000:00:02.0 eth0: Intel(R) PRO/1000 Network Connection
+[    1.493063] e1000e: Intel(R) PRO/1000 Network Driver
+[    1.493622] e1000e: Copyright(c) 1999 - 2015 Intel Corporation.
+[    1.494294] igb: Intel(R) Gigabit Ethernet Network Driver
+[    1.494912] igb: Copyright (c) 2007-2014 Intel Corporation.
+[    1.495548] igbvf: Intel(R) Gigabit Virtual Function Network Driver
+[    1.496239] igbvf: Copyright (c) 2009 - 2012 Intel Corporation.
+[    1.497137] sky2: driver version 1.30
+[    1.497903] VFIO - User Level meta-driver version: 0.3
+[    1.499061] ehci_hcd: USB 2.0 'Enhanced' Host Controller (EHCI) Driver
+[    1.499802] ehci-pci: EHCI PCI platform driver
+[    1.500304] ehci-platform: EHCI generic platform driver
+[    1.500933] ehci-orion: EHCI orion driver
+[    1.501480] ehci-exynos: EHCI Exynos driver
+[    1.501988] ohci_hcd: USB 1.1 'Open' Host Controller (OHCI) Driver
+[    1.502685] ohci-pci: OHCI PCI platform driver
+[    1.503214] ohci-platform: OHCI generic platform driver
+[    1.503829] ohci-exynos: OHCI Exynos driver
+[    1.504441] usbcore: registered new interface driver usb-storage
+[    1.506022] rtc-pl031 9010000.pl031: registered as rtc0
+[    1.506647] rtc-pl031 9010000.pl031: setting system clock to 2021-04-26T03:57:56 UTC (1619409476)
+[    1.507833] i2c /dev entries driver
+[    1.509778] sdhci: Secure Digital Host Controller Interface driver
+[    1.510489] sdhci: Copyright(c) Pierre Ossman
+[    1.511127] Synopsys Designware Multimedia Card Interface Driver
+[    1.512048] sdhci-pltfm: SDHCI platform and OF driver helper
+[    1.513091] ledtrig-cpu: registered to indicate activity on CPUs
+vfio_pci_read_config  (0000:75:00.1, @0x45c, len=0x2) 0x1000
+vfio_pci_read_config  (0000:75:00.1, @0x45c, len=0x2) 0x1000
+vfio_pci_read_config  (0000:75:00.1, @0x45c, len=0x2) 0x1000
+vfio_pci_write_config  (0000:75:00.1, @0x45e, 0x1, len=0x2)
+[    1.514169] hisi_zip 0000:00:03.0: Adding to iommu group 1
+smmuv3_cmdq_consume prod=14 cons=13 prod.wrap=0 cons.wrap=0
+smmuv3_cmdq_opcode <--- SMMU_CMD_SYNC
+smmuv3_cmdq_consume_out prod:14, cons:14, prod_wrap:0, cons_wrap:0
+smmuv3_write_mmio addr: 0x98 val:0xe size: 0x4(0)
+smmuv3_read_mmio addr: 0x9c val:0xe size: 0x4(0)
+smmuv3_cmdq_consume prod=15 cons=14 prod.wrap=0 cons.wrap=0
+smmuv3_cmdq_opcode <--- SMMU_CMD_SYNC
+smmuv3_cmdq_consume_out prod:15, cons:15, prod_wrap:0, cons_wrap:0
+smmuv3_write_mmio addr: 0x98 val:0xf size: 0x4(0)
+smmuv3_read_mmio addr: 0x9c val:0xf size: 0x4(0)
+smmuv3_cmdq_consume prod=16 cons=15 prod.wrap=0 cons.wrap=0
+smmuv3_cmdq_opcode <--- SMMU_CMD_CFGI_STE
+smmuv3_cmdq_cfgi_ste streamid= 0x18
+smmuv3_config_cache_inv Config cache INV for sid=0x18
+smmuv3_config_cache_miss Config cache MISS for sid=0x18 (hits=0, misses=1, hit rate=0)
+smmuv3_find_ste sid=0x18 features:0x1, sid_split:0x8
+smmuv3_find_ste_2lvl strtab_base:0x4000000049046000 l1ptr:0x49046000 l1_off:0x0, l2ptr:0x492b4000 l2_off:0x18 max_l2_ste:511
+smmuv3_get_ste STE addr: 0x492b4600
+smmuv3_notify_config_change iommu mr=smmuv3-iommu-memory-region-24-0 config=3 s1ctxptr=0x0
+smmuv3_cmdq_consume_out prod:16, cons:16, prod_wrap:0, cons_wrap:0
+smmuv3_write_mmio addr: 0x98 val:0x10 size: 0x4(0)
+smmuv3_cmdq_consume prod=17 cons=16 prod.wrap=0 cons.wrap=0
+smmuv3_cmdq_opcode <--- SMMU_CMD_SYNC
+smmuv3_cmdq_consume_out prod:17, cons:17, prod_wrap:0, cons_wrap:0
+smmuv3_write_mmio addr: 0x98 val:0x11 size: 0x4(0)
+smmuv3_read_mmio addr: 0x9c val:0x11 size: 0x4(0)
+smmuv3_cmdq_consume prod=18 cons=17 prod.wrap=0 cons.wrap=0
+smmuv3_cmdq_opcode <--- SMMU_CMD_CFGI_STE
+smmuv3_cmdq_cfgi_ste streamid= 0x18
+smmuv3_config_cache_inv Config cache INV for sid=0x18
+smmuv3_config_cache_miss Config cache MISS for sid=0x18 (hits=0, misses=2, hit rate=0)
+smmuv3_find_ste sid=0x18 features:0x1, sid_split:0x8
+smmuv3_find_ste_2lvl strtab_base:0x4000000049046000 l1ptr:0x49046000 l1_off:0x0, l2ptr:0x492b4000 l2_off:0x18 max_l2_ste:511
+smmuv3_get_ste STE addr: 0x492b4600
+smmuv3_get_cd CD addr: 0x49300000
+smmuv3_decode_cd oas=48
+smmuv3_decode_cd_tt TT[0]:tsz:16 ttb:0x492c5000 granule_sz:12 had:0
+smmuv3_notify_config_change iommu mr=smmuv3-iommu-memory-region-24-0 config=1 s1ctxptr=0x49300000
+smmuv3_cmdq_consume_out prod:18, cons:18, prod_wrap:0, cons_wrap:0
+smmuv3_write_mmio addr: 0x98 val:0x12 size: 0x4(0)
+smmuv3_cmdq_consume prod=19 cons=18 prod.wrap=0 cons.wrap=0
+smmuv3_cmdq_opcode <--- SMMU_CMD_SYNC
+smmuv3_cmdq_consume_out prod:19, cons:19, prod_wrap:0, cons_wrap:0
+smmuv3_write_mmio addr: 0x98 val:0x13 size: 0x4(0)
+smmuv3_read_mmio addr: 0x9c val:0x13 size: 0x4(0)
+smmuv3_cmdq_consume prod=20 cons=19 prod.wrap=0 cons.wrap=0
+smmuv3_cmdq_opcode <--- SMMU_CMD_PREFETCH_CONFIG
+smmuv3_cmdq_consume_out prod:20, cons:20, prod_wrap:0, cons_wrap:0
+smmuv3_write_mmio addr: 0x98 val:0x14 size: 0x4(0)
+smmuv3_cmdq_consume prod=21 cons=20 prod.wrap=0 cons.wrap=0
+smmuv3_cmdq_opcode <--- SMMU_CMD_TLBI_NH_ASID
+smmuv3_cmdq_tlbi_nh_asid asid=2
+smmuv3_s1_asid_inval asid=2
+vfio_iommu_asid_inv_iotlb nested IOTLB invalidate asid=2
+smmuv3_cmdq_consume_out prod:21, cons:21, prod_wrap:0, cons_wrap:0
+smmuv3_write_mmio addr: 0x98 val:0x15 size: 0x4(0)
+smmuv3_cmdq_consume prod=22 cons=21 prod.wrap=0 cons.wrap=0
+smmuv3_cmdq_opcode <--- SMMU_CMD_SYNC
+smmuv3_cmdq_consume_out prod:22, cons:22, prod_wrap:0, cons_wrap:0
+smmuv3_write_mmio addr: 0x98 val:0x16 size: 0x4(0)
+smmuv3_read_mmio addr: 0x9c val:0x16 size: 0x4(0)
+vfio_pci_read_config  (0000:75:00.1, @0x3d, len=0x1) 0x0
+vfio_pci_write_config  (0000:75:00.1, @0x3c, 0x0, len=0x1)
+[    1.515200] hisi_zip 0000:00:03.0: SMMU Opened, iommu type = 3
+vfio_pci_read_config  (0000:75:00.1, @0xb4, len=0x2) 0x0
+vfio_pci_read_config  (0000:75:00.1, @0x4, len=0x2) 0x0
+[    1.515845] hisi_zip 0000:00:03.0: enabling device (0000 -> 0002)
+vfio_pci_write_config  (0000:75:00.1, @0x4, 0x2, len=0x2)
+vfio_dma_map_ram region_add [ram] 0x8000000000 - 0x800000ffff [0xffff8e202000]
+vfio_pci_read_config  (0000:75:00.1, @0x3d, len=0x1) 0x0
+vfio_pci_read_config  (0000:75:00.1, @0x4, len=0x2) 0x2
+vfio_pci_write_config  (0000:75:00.1, @0x4, 0x6, len=0x2)
+vfio_pci_read_config  (0000:75:00.1, @0x82, len=0x2) 0x184
+vfio_pci_read_config  (0000:75:00.1, @0x82, len=0x2) 0x184
+vfio_pci_write_config  (0000:75:00.1, @0x82, 0x184, len=0x2)
+vfio_pci_read_config  (0000:75:00.1, @0x82, len=0x2) 0x184
+vfio_pci_read_config  (0000:75:00.1, @0x90, len=0x4) 0x0
+vfio_pci_write_config  (0000:75:00.1, @0x90, 0xf, len=0x4)
+vfio_pci_read_config  (0000:75:00.1, @0x82, len=0x2) 0x184
+vfio_pci_write_config  (0000:75:00.1, @0x82, 0x194, len=0x2)
+vfio_pci_write_config  (0000:75:00.1, @0x84, 0xfffff040, len=0x4)
+vfio_pci_write_config  (0000:75:00.1, @0x88, 0x0, len=0x4)
+vfio_pci_write_config  (0000:75:00.1, @0x8c, 0x0, len=0x2)
+vfio_pci_read_config  (0000:75:00.1, @0x4, len=0x2) 0x6
+vfio_pci_write_config  (0000:75:00.1, @0x4, 0x406, len=0x2)
+vfio_pci_read_config  (0000:75:00.1, @0x82, len=0x2) 0x194
+vfio_pci_write_config  (0000:75:00.1, @0x82, 0x195, len=0x2)
+smmuv3_config_cache_hit Config cache HIT for sid=0x18 (hits=1, misses=2, hit rate=33)
+smmuv3_translate_success smmuv3-iommu-memory-region-24-0 sid=0x18 iova=0xfffff040 translated=0x8090040 perm=0x2
+smmuv3_config_cache_hit Config cache HIT for sid=0x18 (hits=2, misses=2, hit rate=50)
+smmuv3_translate_success smmuv3-iommu-memory-region-24-0 sid=0x18 iova=0xfffff040 translated=0x8090040 perm=0x2
+smmuv3_config_cache_hit Config cache HIT for sid=0x18 (hits=3, misses=2, hit rate=60)
+smmuv3_translate_success smmuv3-iommu-memory-region-24-0 sid=0x18 iova=0xfffff040 translated=0x8090040 perm=0x2
+vfio_register_msi_binding 0000:75:00.1: register vector 0 gIOVA=0xfffff040-> gDB=0x8090040 stage 1 mapping
+smmuv3_config_cache_hit Config cache HIT for sid=0x18 (hits=4, misses=2, hit rate=66)
+smmuv3_translate_success smmuv3-iommu-memory-region-24-0 sid=0x18 iova=0xfffff040 translated=0x8090040 perm=0x2
+vfio_register_msi_binding 0000:75:00.1: register vector 1 gIOVA=0xfffff040-> gDB=0x8090040 stage 1 mapping
+vfio_msi_enable  (0000:75:00.1) Enabled 2 MSI vectors
+vfio_pci_write_config  (0000:75:00.1, @0x90, 0xe, len=0x4)
+smmuv3_config_cache_hit Config cache HIT for sid=0x18 (hits=5, misses=2, hit rate=71)
+smmuv3_translate_success smmuv3-iommu-memory-region-24-0 sid=0x18 iova=0xfffff040 translated=0x8090040 perm=0x2
+smmuv3_config_cache_hit Config cache HIT for sid=0x18 (hits=6, misses=2, hit rate=75)
+smmuv3_translate_success smmuv3-iommu-memory-region-24-0 sid=0x18 iova=0xfffff040 translated=0x8090040 perm=0x2
+vfio_pci_write_config  (0000:75:00.1, @0x90, 0xc, len=0x4)
+smmuv3_config_cache_hit Config cache HIT for sid=0x18 (hits=7, misses=2, hit rate=77)
+smmuv3_translate_success smmuv3-iommu-memory-region-24-0 sid=0x18 iova=0xfffff040 translated=0x8090040 perm=0x2
+smmuv3_config_cache_hit Config cache HIT for sid=0x18 (hits=8, misses=2, hit rate=80)
+smmuv3_translate_success smmuv3-iommu-memory-region-24-0 sid=0x18 iova=0xfffff040 translated=0x8090040 perm=0x2
+smmuv3_cmdq_consume prod=24 cons=22 prod.wrap=0 cons.wrap=0
+smmuv3_cmdq_opcode <--- SMMU_CMD_TLBI_NH_VA
+smmuv3_s1_range_inval vmid=0 asid=2 addr=0xf0fbf000 tg=1 num_pages=0x1 ttl=3 leaf=1
+smmuv3_inv_notifiers_iova iommu mr=smmuv3-iommu-memory-region-24-0 asid=2 iova=0xf0fbf000 tg=1 num_pages=0x1
+vfio_iommu_addr_inv_iotlb nested IOTLB invalidate asid=2, addr=0xf0fbf000 granule_size=0x1000 nb_granules=0x1 leaf=1
+smmuv3_cmdq_consume prod=24 cons=23 prod.wrap=0 cons.wrap=0
+smmuv3_cmdq_opcode <--- SMMU_CMD_SYNC
+smmuv3_cmdq_consume_out prod:24, cons:24, prod_wrap:0, cons_wrap:0
+smmuv3_write_mmio addr: 0x98 val:0x18 size: 0x4(0)
+smmuv3_read_mmio addr: 0x9c val:0x18 size: 0x4(0)
+smmuv3_cmdq_consume prod=26 cons=24 prod.wrap=0 cons.wrap=0
+smmuv3_cmdq_opcode <--- SMMU_CMD_TLBI_NH_VA
+smmuv3_s1_range_inval vmid=0 asid=2 addr=0xf0fbf000 tg=1 num_pages=0x1 ttl=3 leaf=1
+smmuv3_inv_notifiers_iova iommu mr=smmuv3-iommu-memory-region-24-0 asid=2 iova=0xf0fbf000 tg=1 num_pages=0x1
+vfio_iommu_addr_inv_iotlb nested IOTLB invalidate asid=2, addr=0xf0fbf000 granule_size=0x1000 nb_granules=0x1 leaf=1
+smmuv3_cmdq_consume prod=26 cons=25 prod.wrap=0 cons.wrap=0
+smmuv3_cmdq_opcode <--- SMMU_CMD_SYNC
+smmuv3_cmdq_consume_out prod:26, cons:26, prod_wrap:0, cons_wrap:0
+smmuv3_write_mmio addr: 0x98 val:0x1a size: 0x4(0)
+smmuv3_read_mmio addr: 0x9c val:0x1a size: 0x4(0)
+smmuv3_cmdq_consume prod=28 cons=26 prod.wrap=0 cons.wrap=0
+smmuv3_cmdq_opcode <--- SMMU_CMD_TLBI_NH_VA
+smmuv3_s1_range_inval vmid=0 asid=2 addr=0xf0fbf000 tg=1 num_pages=0x1 ttl=3 leaf=1
+smmuv3_inv_notifiers_iova iommu mr=smmuv3-iommu-memory-region-24-0 asid=2 iova=0xf0fbf000 tg=1 num_pages=0x1
+vfio_iommu_addr_inv_iotlb nested IOTLB invalidate asid=2, addr=0xf0fbf000 granule_size=0x1000 nb_granules=0x1 leaf=1
+smmuv3_cmdq_consume prod=28 cons=27 prod.wrap=0 cons.wrap=0
+smmuv3_cmdq_opcode <--- SMMU_CMD_SYNC
+smmuv3_cmdq_consume_out prod:28, cons:28, prod_wrap:0, cons_wrap:0
+smmuv3_write_mmio addr: 0x98 val:0x1c size: 0x4(0)
+smmuv3_read_mmio addr: 0x9c val:0x1c size: 0x4(0)
+smmuv3_cmdq_consume prod=30 cons=28 prod.wrap=0 cons.wrap=0
+smmuv3_cmdq_opcode <--- SMMU_CMD_TLBI_NH_VA
+smmuv3_s1_range_inval vmid=0 asid=2 addr=0xf0fbf000 tg=1 num_pages=0x1 ttl=3 leaf=1
+smmuv3_inv_notifiers_iova iommu mr=smmuv3-iommu-memory-region-24-0 asid=2 iova=0xf0fbf000 tg=1 num_pages=0x1
+vfio_iommu_addr_inv_iotlb nested IOTLB invalidate asid=2, addr=0xf0fbf000 granule_size=0x1000 nb_granules=0x1 leaf=1
+smmuv3_cmdq_consume prod=30 cons=29 prod.wrap=0 cons.wrap=0
+smmuv3_cmdq_opcode <--- SMMU_CMD_SYNC
+smmuv3_cmdq_consume_out prod:30, cons:30, prod_wrap:0, cons_wrap:0
+smmuv3_write_mmio addr: 0x98 val:0x1e size: 0x4(0)
+smmuv3_read_mmio addr: 0x9c val:0x1e size: 0x4(0)
+smmuv3_cmdq_consume prod=32 cons=30 prod.wrap=0 cons.wrap=0
+smmuv3_cmdq_opcode <--- SMMU_CMD_TLBI_NH_VA
+smmuv3_s1_range_inval vmid=0 asid=2 addr=0xf0fbf000 tg=1 num_pages=0x1 ttl=3 leaf=1
+smmuv3_inv_notifiers_iova iommu mr=smmuv3-iommu-memory-region-24-0 asid=2 iova=0xf0fbf000 tg=1 num_pages=0x1
+vfio_iommu_addr_inv_iotlb nested IOTLB invalidate asid=2, addr=0xf0fbf000 granule_size=0x1000 nb_granules=0x1 leaf=1
+smmuv3_cmdq_consume prod=32 cons=31 prod.wrap=0 cons.wrap=0
+smmuv3_cmdq_opcode <--- SMMU_CMD_SYNC
+smmuv3_cmdq_consume_out prod:32, cons:32, prod_wrap:0, cons_wrap:0
+smmuv3_write_mmio addr: 0x98 val:0x20 size: 0x4(0)
+smmuv3_read_mmio addr: 0x9c val:0x20 size: 0x4(0)
+smmuv3_cmdq_consume prod=34 cons=32 prod.wrap=0 cons.wrap=0
+smmuv3_cmdq_opcode <--- SMMU_CMD_TLBI_NH_VA
+smmuv3_s1_range_inval vmid=0 asid=2 addr=0xf0fbf000 tg=1 num_pages=0x1 ttl=3 leaf=1
+smmuv3_inv_notifiers_iova iommu mr=smmuv3-iommu-memory-region-24-0 asid=2 iova=0xf0fbf000 tg=1 num_pages=0x1
+vfio_iommu_addr_inv_iotlb nested IOTLB invalidate asid=2, addr=0xf0fbf000 granule_size=0x1000 nb_granules=0x1 leaf=1
+smmuv3_cmdq_consume prod=34 cons=33 prod.wrap=0 cons.wrap=0
+smmuv3_cmdq_opcode <--- SMMU_CMD_SYNC
+smmuv3_cmdq_consume_out prod:34, cons:34, prod_wrap:0, cons_wrap:0
+smmuv3_write_mmio addr: 0x98 val:0x22 size: 0x4(0)
+smmuv3_read_mmio addr: 0x9c val:0x22 size: 0x4(0)
+[    1.741993] hisi_zip 0000:00:03.0: compress fail in qp0: 65, output: 14
+smmuv3_cmdq_consume prod=36 cons=34 prod.wrap=0 cons.wrap=0
+smmuv3_cmdq_opcode <--- SMMU_CMD_TLBI_NH_VA
+smmuv3_s1_range_inval vmid=0 asid=2 addr=0xf0fbf000 tg=1 num_pages=0x1 ttl=3 leaf=1
+smmuv3_inv_notifiers_iova iommu mr=smmuv3-iommu-memory-region-24-0 asid=2 iova=0xf0fbf000 tg=1 num_pages=0x1
+vfio_iommu_addr_inv_iotlb nested IOTLB invalidate asid=2, addr=0xf0fbf000 granule_size=0x1000 nb_granules=0x1 leaf=1
+smmuv3_cmdq_consume prod=36 cons=35 prod.wrap=0 cons.wrap=0
+smmuv3_cmdq_opcode <--- SMMU_CMD_SYNC
+smmuv3_cmdq_consume_out prod:36, cons:36, prod_wrap:0, cons_wrap:0
+smmuv3_write_mmio addr: 0x98 val:0x24 size: 0x4(0)
+smmuv3_read_mmio addr: 0x9c val:0x24 size: 0x4(0)
+smmuv3_cmdq_consume prod=38 cons=36 prod.wrap=0 cons.wrap=0
+smmuv3_cmdq_opcode <--- SMMU_CMD_TLBI_NH_VA
+smmuv3_s1_range_inval vmid=0 asid=2 addr=0xf0cff000 tg=1 num_pages=0x1 ttl=3 leaf=1
+smmuv3_inv_notifiers_iova iommu mr=smmuv3-iommu-memory-region-24-0 asid=2 iova=0xf0cff000 tg=1 num_pages=0x1
+vfio_iommu_addr_inv_iotlb nested IOTLB invalidate asid=2, addr=0xf0cff000 granule_size=0x1000 nb_granules=0x1 leaf=1
+smmuv3_cmdq_consume prod=38 cons=37 prod.wrap=0 cons.wrap=0
+smmuv3_cmdq_opcode <--- SMMU_CMD_SYNC
+smmuv3_cmdq_consume_out prod:38, cons:38, prod_wrap:0, cons_wrap:0
+smmuv3_write_mmio addr: 0x98 val:0x26 size: 0x4(0)
+smmuv3_read_mmio addr: 0x9c val:0x26 size: 0x4(0)
+[    1.742911] alg: acomp: compression failed on test 1 for hisi-zlib-acomp: ret=5
+smmuv3_cmdq_consume prod=40 cons=38 prod.wrap=0 cons.wrap=0
+smmuv3_cmdq_opcode <--- SMMU_CMD_TLBI_NH_VA
+smmuv3_s1_range_inval vmid=0 asid=2 addr=0xf0e00000 tg=1 num_pages=0x1 ttl=3 leaf=1
+smmuv3_inv_notifiers_iova iommu mr=smmuv3-iommu-memory-region-24-0 asid=2 iova=0xf0e00000 tg=1 num_pages=0x1
+vfio_iommu_addr_inv_iotlb nested IOTLB invalidate asid=2, addr=0xf0e00000 granule_size=0x1000 nb_granules=0x1 leaf=1
+smmuv3_cmdq_consume prod=40 cons=39 prod.wrap=0 cons.wrap=0
+smmuv3_cmdq_opcode <--- SMMU_CMD_SYNC
+smmuv3_cmdq_consume_out prod:40, cons:40, prod_wrap:0, cons_wrap:0
+smmuv3_write_mmio addr: 0x98 val:0x28 size: 0x4(0)
+smmuv3_read_mmio addr: 0x9c val:0x28 size: 0x4(0)
+smmuv3_cmdq_consume prod=42 cons=40 prod.wrap=0 cons.wrap=0
+smmuv3_cmdq_opcode <--- SMMU_CMD_TLBI_NH_VA
+smmuv3_s1_range_inval vmid=0 asid=2 addr=0xf0e01000 tg=1 num_pages=0x1 ttl=3 leaf=1
+smmuv3_inv_notifiers_iova iommu mr=smmuv3-iommu-memory-region-24-0 asid=2 iova=0xf0e01000 tg=1 num_pages=0x1
+vfio_iommu_addr_inv_iotlb nested IOTLB invalidate asid=2, addr=0xf0e01000 granule_size=0x1000 nb_granules=0x1 leaf=1
+smmuv3_cmdq_consume prod=42 cons=41 prod.wrap=0 cons.wrap=0
+smmuv3_cmdq_opcode <--- SMMU_CMD_SYNC
+smmuv3_cmdq_consume_out prod:42, cons:42, prod_wrap:0, cons_wrap:0
+smmuv3_write_mmio addr: 0x98 val:0x2a size: 0x4(0)
+smmuv3_read_mmio addr: 0x9c val:0x2a size: 0x4(0)
+smmuv3_cmdq_consume prod=44 cons=42 prod.wrap=0 cons.wrap=0
+smmuv3_cmdq_opcode <--- SMMU_CMD_TLBI_NH_VA
+smmuv3_s1_range_inval vmid=0 asid=2 addr=0xf0e02000 tg=1 num_pages=0x1 ttl=3 leaf=1
+smmuv3_inv_notifiers_iova iommu mr=smmuv3-iommu-memory-region-24-0 asid=2 iova=0xf0e02000 tg=1 num_pages=0x1
+vfio_iommu_addr_inv_iotlb nested IOTLB invalidate asid=2, addr=0xf0e02000 granule_size=0x1000 nb_granules=0x1 leaf=1
+smmuv3_cmdq_consume prod=44 cons=43 prod.wrap=0 cons.wrap=0
+smmuv3_cmdq_opcode <--- SMMU_CMD_SYNC
+smmuv3_cmdq_consume_out prod:44, cons:44, prod_wrap:0, cons_wrap:0
+smmuv3_write_mmio addr: 0x98 val:0x2c size: 0x4(0)
+smmuv3_read_mmio addr: 0x9c val:0x2c size: 0x4(0)
+smmuv3_cmdq_consume prod=46 cons=44 prod.wrap=0 cons.wrap=0
+smmuv3_cmdq_opcode <--- SMMU_CMD_TLBI_NH_VA
+smmuv3_s1_range_inval vmid=0 asid=2 addr=0xf0e03000 tg=1 num_pages=0x1 ttl=3 leaf=1
+smmuv3_inv_notifiers_iova iommu mr=smmuv3-iommu-memory-region-24-0 asid=2 iova=0xf0e03000 tg=1 num_pages=0x1
+vfio_iommu_addr_inv_iotlb nested IOTLB invalidate asid=2, addr=0xf0e03000 granule_size=0x1000 nb_granules=0x1 leaf=1
+smmuv3_cmdq_consume prod=46 cons=45 prod.wrap=0 cons.wrap=0
+smmuv3_cmdq_opcode <--- SMMU_CMD_SYNC
+smmuv3_cmdq_consume_out prod:46, cons:46, prod_wrap:0, cons_wrap:0
+smmuv3_write_mmio addr: 0x98 val:0x2e size: 0x4(0)
+smmuv3_read_mmio addr: 0x9c val:0x2e size: 0x4(0)
+smmuv3_cmdq_consume prod=48 cons=46 prod.wrap=0 cons.wrap=0
+smmuv3_cmdq_opcode <--- SMMU_CMD_TLBI_NH_VA
+smmuv3_s1_range_inval vmid=0 asid=2 addr=0xf0e04000 tg=1 num_pages=0x1 ttl=3 leaf=1
+smmuv3_inv_notifiers_iova iommu mr=smmuv3-iommu-memory-region-24-0 asid=2 iova=0xf0e04000 tg=1 num_pages=0x1
+vfio_iommu_addr_inv_iotlb nested IOTLB invalidate asid=2, addr=0xf0e04000 granule_size=0x1000 nb_granules=0x1 leaf=1
+smmuv3_cmdq_consume prod=48 cons=47 prod.wrap=0 cons.wrap=0
+smmuv3_cmdq_opcode <--- SMMU_CMD_SYNC
+smmuv3_cmdq_consume_out prod:48, cons:48, prod_wrap:0, cons_wrap:0
+smmuv3_write_mmio addr: 0x98 val:0x30 size: 0x4(0)
+smmuv3_read_mmio addr: 0x9c val:0x30 size: 0x4(0)
+smmuv3_cmdq_consume prod=50 cons=48 prod.wrap=0 cons.wrap=0
+smmuv3_cmdq_opcode <--- SMMU_CMD_TLBI_NH_VA
+smmuv3_s1_range_inval vmid=0 asid=2 addr=0xf0e05000 tg=1 num_pages=0x1 ttl=3 leaf=1
+smmuv3_inv_notifiers_iova iommu mr=smmuv3-iommu-memory-region-24-0 asid=2 iova=0xf0e05000 tg=1 num_pages=0x1
+vfio_iommu_addr_inv_iotlb nested IOTLB invalidate asid=2, addr=0xf0e05000 granule_size=0x1000 nb_granules=0x1 leaf=1
+smmuv3_cmdq_consume prod=50 cons=49 prod.wrap=0 cons.wrap=0
+smmuv3_cmdq_opcode <--- SMMU_CMD_SYNC
+smmuv3_cmdq_consume_out prod:50, cons:50, prod_wrap:0, cons_wrap:0
+smmuv3_write_mmio addr: 0x98 val:0x32 size: 0x4(0)
+smmuv3_read_mmio addr: 0x9c val:0x32 size: 0x4(0)
+smmuv3_cmdq_consume prod=52 cons=50 prod.wrap=0 cons.wrap=0
+smmuv3_cmdq_opcode <--- SMMU_CMD_TLBI_NH_VA
+smmuv3_s1_range_inval vmid=0 asid=2 addr=0xf0e06000 tg=1 num_pages=0x1 ttl=3 leaf=1
+smmuv3_inv_notifiers_iova iommu mr=smmuv3-iommu-memory-region-24-0 asid=2 iova=0xf0e06000 tg=1 num_pages=0x1
+vfio_iommu_addr_inv_iotlb nested IOTLB invalidate asid=2, addr=0xf0e06000 granule_size=0x1000 nb_granules=0x1 leaf=1
+smmuv3_cmdq_consume prod=52 cons=51 prod.wrap=0 cons.wrap=0
+smmuv3_cmdq_opcode <--- SMMU_CMD_SYNC
+smmuv3_cmdq_consume_out prod:52, cons:52, prod_wrap:0, cons_wrap:0
+smmuv3_write_mmio addr: 0x98 val:0x34 size: 0x4(0)
+smmuv3_read_mmio addr: 0x9c val:0x34 size: 0x4(0)
+smmuv3_cmdq_consume prod=54 cons=52 prod.wrap=0 cons.wrap=0
+smmuv3_cmdq_opcode <--- SMMU_CMD_TLBI_NH_VA
+smmuv3_s1_range_inval vmid=0 asid=2 addr=0xf0e07000 tg=1 num_pages=0x1 ttl=3 leaf=1
+smmuv3_inv_notifiers_iova iommu mr=smmuv3-iommu-memory-region-24-0 asid=2 iova=0xf0e07000 tg=1 num_pages=0x1
+vfio_iommu_addr_inv_iotlb nested IOTLB invalidate asid=2, addr=0xf0e07000 granule_size=0x1000 nb_granules=0x1 leaf=1
+smmuv3_cmdq_consume prod=54 cons=53 prod.wrap=0 cons.wrap=0
+smmuv3_cmdq_opcode <--- SMMU_CMD_SYNC
+smmuv3_cmdq_consume_out prod:54, cons:54, prod_wrap:0, cons_wrap:0
+smmuv3_write_mmio addr: 0x98 val:0x36 size: 0x4(0)
+smmuv3_read_mmio addr: 0x9c val:0x36 size: 0x4(0)
+smmuv3_cmdq_consume prod=56 cons=54 prod.wrap=0 cons.wrap=0
+smmuv3_cmdq_opcode <--- SMMU_CMD_TLBI_NH_VA
+smmuv3_s1_range_inval vmid=0 asid=2 addr=0xf0e08000 tg=1 num_pages=0x1 ttl=3 leaf=1
+smmuv3_inv_notifiers_iova iommu mr=smmuv3-iommu-memory-region-24-0 asid=2 iova=0xf0e08000 tg=1 num_pages=0x1
+vfio_iommu_addr_inv_iotlb nested IOTLB invalidate asid=2, addr=0xf0e08000 granule_size=0x1000 nb_granules=0x1 leaf=1
+smmuv3_cmdq_consume prod=56 cons=55 prod.wrap=0 cons.wrap=0
+smmuv3_cmdq_opcode <--- SMMU_CMD_SYNC
+smmuv3_cmdq_consume_out prod:56, cons:56, prod_wrap:0, cons_wrap:0
+smmuv3_write_mmio addr: 0x98 val:0x38 size: 0x4(0)
+smmuv3_read_mmio addr: 0x9c val:0x38 size: 0x4(0)
+smmuv3_cmdq_consume prod=58 cons=56 prod.wrap=0 cons.wrap=0
+smmuv3_cmdq_opcode <--- SMMU_CMD_TLBI_NH_VA
+smmuv3_s1_range_inval vmid=0 asid=2 addr=0xf0e09000 tg=1 num_pages=0x1 ttl=3 leaf=1
+smmuv3_inv_notifiers_iova iommu mr=smmuv3-iommu-memory-region-24-0 asid=2 iova=0xf0e09000 tg=1 num_pages=0x1
+vfio_iommu_addr_inv_iotlb nested IOTLB invalidate asid=2, addr=0xf0e09000 granule_size=0x1000 nb_granules=0x1 leaf=1
+smmuv3_cmdq_consume prod=58 cons=57 prod.wrap=0 cons.wrap=0
+smmuv3_cmdq_opcode <--- SMMU_CMD_SYNC
+smmuv3_cmdq_consume_out prod:58, cons:58, prod_wrap:0, cons_wrap:0
+smmuv3_write_mmio addr: 0x98 val:0x3a size: 0x4(0)
+smmuv3_read_mmio addr: 0x9c val:0x3a size: 0x4(0)
+smmuv3_cmdq_consume prod=60 cons=58 prod.wrap=0 cons.wrap=0
+smmuv3_cmdq_opcode <--- SMMU_CMD_TLBI_NH_VA
+smmuv3_s1_range_inval vmid=0 asid=2 addr=0xf0e0a000 tg=1 num_pages=0x1 ttl=3 leaf=1
+smmuv3_inv_notifiers_iova iommu mr=smmuv3-iommu-memory-region-24-0 asid=2 iova=0xf0e0a000 tg=1 num_pages=0x1
+vfio_iommu_addr_inv_iotlb nested IOTLB invalidate asid=2, addr=0xf0e0a000 granule_size=0x1000 nb_granules=0x1 leaf=1
+smmuv3_cmdq_consume prod=60 cons=59 prod.wrap=0 cons.wrap=0
+smmuv3_cmdq_opcode <--- SMMU_CMD_SYNC
+smmuv3_cmdq_consume_out prod:60, cons:60, prod_wrap:0, cons_wrap:0
+smmuv3_write_mmio addr: 0x98 val:0x3c size: 0x4(0)
+smmuv3_read_mmio addr: 0x9c val:0x3c size: 0x4(0)
+smmuv3_cmdq_consume prod=62 cons=60 prod.wrap=0 cons.wrap=0
+smmuv3_cmdq_opcode <--- SMMU_CMD_TLBI_NH_VA
+smmuv3_s1_range_inval vmid=0 asid=2 addr=0xf0e0b000 tg=1 num_pages=0x1 ttl=3 leaf=1
+smmuv3_inv_notifiers_iova iommu mr=smmuv3-iommu-memory-region-24-0 asid=2 iova=0xf0e0b000 tg=1 num_pages=0x1
+vfio_iommu_addr_inv_iotlb nested IOTLB invalidate asid=2, addr=0xf0e0b000 granule_size=0x1000 nb_granules=0x1 leaf=1
+smmuv3_cmdq_consume prod=62 cons=61 prod.wrap=0 cons.wrap=0
+smmuv3_cmdq_opcode <--- SMMU_CMD_SYNC
+smmuv3_cmdq_consume_out prod:62, cons:62, prod_wrap:0, cons_wrap:0
+smmuv3_write_mmio addr: 0x98 val:0x3e size: 0x4(0)
+smmuv3_read_mmio addr: 0x9c val:0x3e size: 0x4(0)
+smmuv3_cmdq_consume prod=64 cons=62 prod.wrap=0 cons.wrap=0
+smmuv3_cmdq_opcode <--- SMMU_CMD_TLBI_NH_VA
+smmuv3_s1_range_inval vmid=0 asid=2 addr=0xf0e0c000 tg=1 num_pages=0x1 ttl=3 leaf=1
+smmuv3_inv_notifiers_iova iommu mr=smmuv3-iommu-memory-region-24-0 asid=2 iova=0xf0e0c000 tg=1 num_pages=0x1
+vfio_iommu_addr_inv_iotlb nested IOTLB invalidate asid=2, addr=0xf0e0c000 granule_size=0x1000 nb_granules=0x1 leaf=1
+smmuv3_cmdq_consume prod=64 cons=63 prod.wrap=0 cons.wrap=0
+smmuv3_cmdq_opcode <--- SMMU_CMD_SYNC
+smmuv3_cmdq_consume_out prod:64, cons:64, prod_wrap:0, cons_wrap:0
+smmuv3_write_mmio addr: 0x98 val:0x40 size: 0x4(0)
+smmuv3_read_mmio addr: 0x9c val:0x40 size: 0x4(0)
+smmuv3_cmdq_consume prod=66 cons=64 prod.wrap=0 cons.wrap=0
+smmuv3_cmdq_opcode <--- SMMU_CMD_TLBI_NH_VA
+smmuv3_s1_range_inval vmid=0 asid=2 addr=0xf0e0d000 tg=1 num_pages=0x1 ttl=3 leaf=1
+smmuv3_inv_notifiers_iova iommu mr=smmuv3-iommu-memory-region-24-0 asid=2 iova=0xf0e0d000 tg=1 num_pages=0x1
+vfio_iommu_addr_inv_iotlb nested IOTLB invalidate asid=2, addr=0xf0e0d000 granule_size=0x1000 nb_granules=0x1 leaf=1
+smmuv3_cmdq_consume prod=66 cons=65 prod.wrap=0 cons.wrap=0
+smmuv3_cmdq_opcode <--- SMMU_CMD_SYNC
+smmuv3_cmdq_consume_out prod:66, cons:66, prod_wrap:0, cons_wrap:0
+smmuv3_write_mmio addr: 0x98 val:0x42 size: 0x4(0)
+smmuv3_read_mmio addr: 0x9c val:0x42 size: 0x4(0)
+smmuv3_cmdq_consume prod=68 cons=66 prod.wrap=0 cons.wrap=0
+smmuv3_cmdq_opcode <--- SMMU_CMD_TLBI_NH_VA
+smmuv3_s1_range_inval vmid=0 asid=2 addr=0xf0e0e000 tg=1 num_pages=0x1 ttl=3 leaf=1
+smmuv3_inv_notifiers_iova iommu mr=smmuv3-iommu-memory-region-24-0 asid=2 iova=0xf0e0e000 tg=1 num_pages=0x1
+vfio_iommu_addr_inv_iotlb nested IOTLB invalidate asid=2, addr=0xf0e0e000 granule_size=0x1000 nb_granules=0x1 leaf=1
+smmuv3_cmdq_consume prod=68 cons=67 prod.wrap=0 cons.wrap=0
+smmuv3_cmdq_opcode <--- SMMU_CMD_SYNC
+smmuv3_cmdq_consume_out prod:68, cons:68, prod_wrap:0, cons_wrap:0
+smmuv3_write_mmio addr: 0x98 val:0x44 size: 0x4(0)
+smmuv3_read_mmio addr: 0x9c val:0x44 size: 0x4(0)
+smmuv3_cmdq_consume prod=70 cons=68 prod.wrap=0 cons.wrap=0
+smmuv3_cmdq_opcode <--- SMMU_CMD_TLBI_NH_VA
+smmuv3_s1_range_inval vmid=0 asid=2 addr=0xf0e0f000 tg=1 num_pages=0x1 ttl=3 leaf=1
+smmuv3_inv_notifiers_iova iommu mr=smmuv3-iommu-memory-region-24-0 asid=2 iova=0xf0e0f000 tg=1 num_pages=0x1
+vfio_iommu_addr_inv_iotlb nested IOTLB invalidate asid=2, addr=0xf0e0f000 granule_size=0x1000 nb_granules=0x1 leaf=1
+smmuv3_cmdq_consume prod=70 cons=69 prod.wrap=0 cons.wrap=0
+smmuv3_cmdq_opcode <--- SMMU_CMD_SYNC
+smmuv3_cmdq_consume_out prod:70, cons:70, prod_wrap:0, cons_wrap:0
+smmuv3_write_mmio addr: 0x98 val:0x46 size: 0x4(0)
+smmuv3_read_mmio addr: 0x9c val:0x46 size: 0x4(0)
+smmuv3_cmdq_consume prod=72 cons=70 prod.wrap=0 cons.wrap=0
+smmuv3_cmdq_opcode <--- SMMU_CMD_TLBI_NH_VA
+smmuv3_s1_range_inval vmid=0 asid=2 addr=0xf0e10000 tg=1 num_pages=0x1 ttl=3 leaf=1
+smmuv3_inv_notifiers_iova iommu mr=smmuv3-iommu-memory-region-24-0 asid=2 iova=0xf0e10000 tg=1 num_pages=0x1
+vfio_iommu_addr_inv_iotlb nested IOTLB invalidate asid=2, addr=0xf0e10000 granule_size=0x1000 nb_granules=0x1 leaf=1
+smmuv3_cmdq_consume prod=72 cons=71 prod.wrap=0 cons.wrap=0
+smmuv3_cmdq_opcode <--- SMMU_CMD_SYNC
+smmuv3_cmdq_consume_out prod:72, cons:72, prod_wrap:0, cons_wrap:0
+smmuv3_write_mmio addr: 0x98 val:0x48 size: 0x4(0)
+smmuv3_read_mmio addr: 0x9c val:0x48 size: 0x4(0)
+smmuv3_cmdq_consume prod=74 cons=72 prod.wrap=0 cons.wrap=0
+smmuv3_cmdq_opcode <--- SMMU_CMD_TLBI_NH_VA
+smmuv3_s1_range_inval vmid=0 asid=2 addr=0xf0e11000 tg=1 num_pages=0x1 ttl=3 leaf=1
+smmuv3_inv_notifiers_iova iommu mr=smmuv3-iommu-memory-region-24-0 asid=2 iova=0xf0e11000 tg=1 num_pages=0x1
+vfio_iommu_addr_inv_iotlb nested IOTLB invalidate asid=2, addr=0xf0e11000 granule_size=0x1000 nb_granules=0x1 leaf=1
+smmuv3_cmdq_consume prod=74 cons=73 prod.wrap=0 cons.wrap=0
+smmuv3_cmdq_opcode <--- SMMU_CMD_SYNC
+smmuv3_cmdq_consume_out prod:74, cons:74, prod_wrap:0, cons_wrap:0
+smmuv3_write_mmio addr: 0x98 val:0x4a size: 0x4(0)
+smmuv3_read_mmio addr: 0x9c val:0x4a size: 0x4(0)
+smmuv3_cmdq_consume prod=76 cons=74 prod.wrap=0 cons.wrap=0
+smmuv3_cmdq_opcode <--- SMMU_CMD_TLBI_NH_VA
+smmuv3_s1_range_inval vmid=0 asid=2 addr=0xf0e12000 tg=1 num_pages=0x1 ttl=3 leaf=1
+smmuv3_inv_notifiers_iova iommu mr=smmuv3-iommu-memory-region-24-0 asid=2 iova=0xf0e12000 tg=1 num_pages=0x1
+vfio_iommu_addr_inv_iotlb nested IOTLB invalidate asid=2, addr=0xf0e12000 granule_size=0x1000 nb_granules=0x1 leaf=1
+smmuv3_cmdq_consume prod=76 cons=75 prod.wrap=0 cons.wrap=0
+smmuv3_cmdq_opcode <--- SMMU_CMD_SYNC
+smmuv3_cmdq_consume_out prod:76, cons:76, prod_wrap:0, cons_wrap:0
+smmuv3_write_mmio addr: 0x98 val:0x4c size: 0x4(0)
+smmuv3_read_mmio addr: 0x9c val:0x4c size: 0x4(0)
+smmuv3_cmdq_consume prod=78 cons=76 prod.wrap=0 cons.wrap=0
+smmuv3_cmdq_opcode <--- SMMU_CMD_TLBI_NH_VA
+smmuv3_s1_range_inval vmid=0 asid=2 addr=0xf0e13000 tg=1 num_pages=0x1 ttl=3 leaf=1
+smmuv3_inv_notifiers_iova iommu mr=smmuv3-iommu-memory-region-24-0 asid=2 iova=0xf0e13000 tg=1 num_pages=0x1
+vfio_iommu_addr_inv_iotlb nested IOTLB invalidate asid=2, addr=0xf0e13000 granule_size=0x1000 nb_granules=0x1 leaf=1
+smmuv3_cmdq_consume prod=78 cons=77 prod.wrap=0 cons.wrap=0
+smmuv3_cmdq_opcode <--- SMMU_CMD_SYNC
+smmuv3_cmdq_consume_out prod:78, cons:78, prod_wrap:0, cons_wrap:0
+smmuv3_write_mmio addr: 0x98 val:0x4e size: 0x4(0)
+smmuv3_read_mmio addr: 0x9c val:0x4e size: 0x4(0)
+smmuv3_cmdq_consume prod=80 cons=78 prod.wrap=0 cons.wrap=0
+smmuv3_cmdq_opcode <--- SMMU_CMD_TLBI_NH_VA
+smmuv3_s1_range_inval vmid=0 asid=2 addr=0xf0e14000 tg=1 num_pages=0x1 ttl=3 leaf=1
+smmuv3_inv_notifiers_iova iommu mr=smmuv3-iommu-memory-region-24-0 asid=2 iova=0xf0e14000 tg=1 num_pages=0x1
+vfio_iommu_addr_inv_iotlb nested IOTLB invalidate asid=2, addr=0xf0e14000 granule_size=0x1000 nb_granules=0x1 leaf=1
+smmuv3_cmdq_consume prod=80 cons=79 prod.wrap=0 cons.wrap=0
+smmuv3_cmdq_opcode <--- SMMU_CMD_SYNC
+smmuv3_cmdq_consume_out prod:80, cons:80, prod_wrap:0, cons_wrap:0
+smmuv3_write_mmio addr: 0x98 val:0x50 size: 0x4(0)
+smmuv3_read_mmio addr: 0x9c val:0x50 size: 0x4(0)
+smmuv3_cmdq_consume prod=82 cons=80 prod.wrap=0 cons.wrap=0
+smmuv3_cmdq_opcode <--- SMMU_CMD_TLBI_NH_VA
+smmuv3_s1_range_inval vmid=0 asid=2 addr=0xf0e15000 tg=1 num_pages=0x1 ttl=3 leaf=1
+smmuv3_inv_notifiers_iova iommu mr=smmuv3-iommu-memory-region-24-0 asid=2 iova=0xf0e15000 tg=1 num_pages=0x1
+vfio_iommu_addr_inv_iotlb nested IOTLB invalidate asid=2, addr=0xf0e15000 granule_size=0x1000 nb_granules=0x1 leaf=1
+smmuv3_cmdq_consume prod=82 cons=81 prod.wrap=0 cons.wrap=0
+smmuv3_cmdq_opcode <--- SMMU_CMD_SYNC
+smmuv3_cmdq_consume_out prod:82, cons:82, prod_wrap:0, cons_wrap:0
+smmuv3_write_mmio addr: 0x98 val:0x52 size: 0x4(0)
+smmuv3_read_mmio addr: 0x9c val:0x52 size: 0x4(0)
+smmuv3_cmdq_consume prod=84 cons=82 prod.wrap=0 cons.wrap=0
+smmuv3_cmdq_opcode <--- SMMU_CMD_TLBI_NH_VA
+smmuv3_s1_range_inval vmid=0 asid=2 addr=0xf0e16000 tg=1 num_pages=0x1 ttl=3 leaf=1
+smmuv3_inv_notifiers_iova iommu mr=smmuv3-iommu-memory-region-24-0 asid=2 iova=0xf0e16000 tg=1 num_pages=0x1
+vfio_iommu_addr_inv_iotlb nested IOTLB invalidate asid=2, addr=0xf0e16000 granule_size=0x1000 nb_granules=0x1 leaf=1
+smmuv3_cmdq_consume prod=84 cons=83 prod.wrap=0 cons.wrap=0
+smmuv3_cmdq_opcode <--- SMMU_CMD_SYNC
+smmuv3_cmdq_consume_out prod:84, cons:84, prod_wrap:0, cons_wrap:0
+smmuv3_write_mmio addr: 0x98 val:0x54 size: 0x4(0)
+smmuv3_read_mmio addr: 0x9c val:0x54 size: 0x4(0)
+smmuv3_cmdq_consume prod=86 cons=84 prod.wrap=0 cons.wrap=0
+smmuv3_cmdq_opcode <--- SMMU_CMD_TLBI_NH_VA
+smmuv3_s1_range_inval vmid=0 asid=2 addr=0xf0e17000 tg=1 num_pages=0x1 ttl=3 leaf=1
+smmuv3_inv_notifiers_iova iommu mr=smmuv3-iommu-memory-region-24-0 asid=2 iova=0xf0e17000 tg=1 num_pages=0x1
+vfio_iommu_addr_inv_iotlb nested IOTLB invalidate asid=2, addr=0xf0e17000 granule_size=0x1000 nb_granules=0x1 leaf=1
+smmuv3_cmdq_consume prod=86 cons=85 prod.wrap=0 cons.wrap=0
+smmuv3_cmdq_opcode <--- SMMU_CMD_SYNC
+smmuv3_cmdq_consume_out prod:86, cons:86, prod_wrap:0, cons_wrap:0
+smmuv3_write_mmio addr: 0x98 val:0x56 size: 0x4(0)
+smmuv3_read_mmio addr: 0x9c val:0x56 size: 0x4(0)
+smmuv3_cmdq_consume prod=88 cons=86 prod.wrap=0 cons.wrap=0
+smmuv3_cmdq_opcode <--- SMMU_CMD_TLBI_NH_VA
+smmuv3_s1_range_inval vmid=0 asid=2 addr=0xf0e18000 tg=1 num_pages=0x1 ttl=3 leaf=1
+smmuv3_inv_notifiers_iova iommu mr=smmuv3-iommu-memory-region-24-0 asid=2 iova=0xf0e18000 tg=1 num_pages=0x1
+vfio_iommu_addr_inv_iotlb nested IOTLB invalidate asid=2, addr=0xf0e18000 granule_size=0x1000 nb_granules=0x1 leaf=1
+smmuv3_cmdq_consume prod=88 cons=87 prod.wrap=0 cons.wrap=0
+smmuv3_cmdq_opcode <--- SMMU_CMD_SYNC
+smmuv3_cmdq_consume_out prod:88, cons:88, prod_wrap:0, cons_wrap:0
+smmuv3_write_mmio addr: 0x98 val:0x58 size: 0x4(0)
+smmuv3_read_mmio addr: 0x9c val:0x58 size: 0x4(0)
+smmuv3_cmdq_consume prod=90 cons=88 prod.wrap=0 cons.wrap=0
+smmuv3_cmdq_opcode <--- SMMU_CMD_TLBI_NH_VA
+smmuv3_s1_range_inval vmid=0 asid=2 addr=0xf0e19000 tg=1 num_pages=0x1 ttl=3 leaf=1
+smmuv3_inv_notifiers_iova iommu mr=smmuv3-iommu-memory-region-24-0 asid=2 iova=0xf0e19000 tg=1 num_pages=0x1
+vfio_iommu_addr_inv_iotlb nested IOTLB invalidate asid=2, addr=0xf0e19000 granule_size=0x1000 nb_granules=0x1 leaf=1
+smmuv3_cmdq_consume prod=90 cons=89 prod.wrap=0 cons.wrap=0
+smmuv3_cmdq_opcode <--- SMMU_CMD_SYNC
+smmuv3_cmdq_consume_out prod:90, cons:90, prod_wrap:0, cons_wrap:0
+smmuv3_write_mmio addr: 0x98 val:0x5a size: 0x4(0)
+smmuv3_read_mmio addr: 0x9c val:0x5a size: 0x4(0)
+smmuv3_cmdq_consume prod=92 cons=90 prod.wrap=0 cons.wrap=0
+smmuv3_cmdq_opcode <--- SMMU_CMD_TLBI_NH_VA
+smmuv3_s1_range_inval vmid=0 asid=2 addr=0xf0e1a000 tg=1 num_pages=0x1 ttl=3 leaf=1
+smmuv3_inv_notifiers_iova iommu mr=smmuv3-iommu-memory-region-24-0 asid=2 iova=0xf0e1a000 tg=1 num_pages=0x1
+vfio_iommu_addr_inv_iotlb nested IOTLB invalidate asid=2, addr=0xf0e1a000 granule_size=0x1000 nb_granules=0x1 leaf=1
+smmuv3_cmdq_consume prod=92 cons=91 prod.wrap=0 cons.wrap=0
+smmuv3_cmdq_opcode <--- SMMU_CMD_SYNC
+smmuv3_cmdq_consume_out prod:92, cons:92, prod_wrap:0, cons_wrap:0
+smmuv3_write_mmio addr: 0x98 val:0x5c size: 0x4(0)
+smmuv3_read_mmio addr: 0x9c val:0x5c size: 0x4(0)
+smmuv3_cmdq_consume prod=94 cons=92 prod.wrap=0 cons.wrap=0
+smmuv3_cmdq_opcode <--- SMMU_CMD_TLBI_NH_VA
+smmuv3_s1_range_inval vmid=0 asid=2 addr=0xf0e1b000 tg=1 num_pages=0x1 ttl=3 leaf=1
+smmuv3_inv_notifiers_iova iommu mr=smmuv3-iommu-memory-region-24-0 asid=2 iova=0xf0e1b000 tg=1 num_pages=0x1
+vfio_iommu_addr_inv_iotlb nested IOTLB invalidate asid=2, addr=0xf0e1b000 granule_size=0x1000 nb_granules=0x1 leaf=1
+smmuv3_cmdq_consume prod=94 cons=93 prod.wrap=0 cons.wrap=0
+smmuv3_cmdq_opcode <--- SMMU_CMD_SYNC
+smmuv3_cmdq_consume_out prod:94, cons:94, prod_wrap:0, cons_wrap:0
+smmuv3_write_mmio addr: 0x98 val:0x5e size: 0x4(0)
+smmuv3_read_mmio addr: 0x9c val:0x5e size: 0x4(0)
+smmuv3_cmdq_consume prod=96 cons=94 prod.wrap=0 cons.wrap=0
+smmuv3_cmdq_opcode <--- SMMU_CMD_TLBI_NH_VA
+smmuv3_s1_range_inval vmid=0 asid=2 addr=0xf0e1c000 tg=1 num_pages=0x1 ttl=3 leaf=1
+smmuv3_inv_notifiers_iova iommu mr=smmuv3-iommu-memory-region-24-0 asid=2 iova=0xf0e1c000 tg=1 num_pages=0x1
+vfio_iommu_addr_inv_iotlb nested IOTLB invalidate asid=2, addr=0xf0e1c000 granule_size=0x1000 nb_granules=0x1 leaf=1
+smmuv3_cmdq_consume prod=96 cons=95 prod.wrap=0 cons.wrap=0
+smmuv3_cmdq_opcode <--- SMMU_CMD_SYNC
+smmuv3_cmdq_consume_out prod:96, cons:96, prod_wrap:0, cons_wrap:0
+smmuv3_write_mmio addr: 0x98 val:0x60 size: 0x4(0)
+smmuv3_read_mmio addr: 0x9c val:0x60 size: 0x4(0)
+smmuv3_cmdq_consume prod=98 cons=96 prod.wrap=0 cons.wrap=0
+smmuv3_cmdq_opcode <--- SMMU_CMD_TLBI_NH_VA
+smmuv3_s1_range_inval vmid=0 asid=2 addr=0xf0e1d000 tg=1 num_pages=0x1 ttl=3 leaf=1vfio_iommu_addr_inv_iotlb nested IOTLB invalidate asid=2, addr=0xf0e21000 granule_size=0x1000 nb_granules=0
+x1 leaf=1
+smmuv3_cmdq_consume prod=106 cons=105 prod.wrap=0 cons.wrap=0
+smmuv3_cmdq_opcode <--- SMMU_CMD_SYNC
+smmuv3_cmdq_consume_out prod:106, cons:106, prod_wrap:0, cons_wrap:0
+smmuv3_write_mmio addr: 0x98 val:0x6a size: 0x4(0)
+smmuv3_read_mmio addr: 0x9c val:0x6a size: 0x4(0)
+smmuv3_cmdq_consume prod=108 cons=106 prod.wrap=0 cons.wrap=0
+smmuv3_cmdq_opcode <--- SMMU_CMD_TLBI_NH_VA
+smmuv3_s1_range_inval vmid=0 asid=2 addr=0xf0e22000 tg=1 num_pages=0x1 ttl=3 leaf=1
+smmuv3_inv_notifiers_iova iommu mr=smmuv3-iommu-memory-region-24-0 asid=2 iova=0xf0e22000 tg=1 num_pages=0x1
+vfio_iommu_addr_inv_iotlb nested IOTLB invalidate asid=2, addr=0xf0e22000 granule_size=0x1000 nb_granules=0x1 leaf=1
+smmuv3_cmdq_consume prod=108 cons=107 prod.wrap=0 cons.wrap=0
+smmuv3_cmdq_opcode <--- SMMU_CMD_SYNC
+smmuv3_cmdq_consume_out prod:108, cons:108, prod_wrap:0, cons_wrap:0
+smmuv3_write_mmio addr: 0x98 val:0x6c size: 0x4(0)
+smmuv3_read_mmio addr: 0x9c val:0x6c size: 0x4(0)
+smmuv3_cmdq_consume prod=110 cons=108 prod.wrap=0 cons.wrap=0
+smmuv3_cmdq_opcode <--- SMMU_CMD_TLBI_NH_VA
+smmuv3_s1_range_inval vmid=0 asid=2 addr=0xf0e23000 tg=1 num_pages=0x1 ttl=3 leaf=1
+smmuv3_inv_notifiers_iova iommu mr=smmuv3-iommu-memory-region-24-0 asid=2 iova=0xf0e23000 tg=1 num_pages=0x1smmuv3_read_mmio addr: 0x9c val:0x98 size: 0x4(0)
+smmuv3_cmdq_consume prod=154 cons=152 prod.wrap=0 cons.wrap=0
+smmuv3_cmdq_opcode <--- SMMU_CMD_TLBI_NH_VA
+smmuv3_s1_range_inval vmid=0 asid=2 addr=0xf0e39000 tg=1 num_pages=0x1 ttl=3 leaf=1
+smmuv3_inv_notifiers_iova iommu mr=smmuv3-iommu-memory-region-24-0 asid=2 iova=0xf0e39000 tg=1 num_pages=0x1
+vfio_iommu_addr_inv_iotlb nested IOTLB invalidate asid=2, addr=0xf0e39000 granule_size=0x1000 nb_granules=0x1 leaf=1
+smmuv3_cmdq_consume prod=154 cons=153 prod.wrap=0 cons.wrap=0
+smmuv3_cmdq_opcode <--- SMMU_CMD_SYNC
+smmuv3_cmdq_consume_out prod:154, cons:154, prod_wrap:0, cons_wrap:0
+smmuv3_write_mmio addr: 0x98 val:0x9a size: 0x4(0)
+smmuv3_read_mmio addr: 0x9c val:0x9a size: 0x4(0)
+smmuv3_cmdq_consume prod=156 cons=154 prod.wrap=0 cons.wrap=0
+smmuv3_cmdq_opcode <--- SMMU_CMD_TLBI_NH_VA
+smmuv3_s1_range_inval vmid=0 asid=2 addr=0xf0e3a000 tg=1 num_pages=0x1 ttl=3 leaf=1smmuv3_cmdq_consume prod=308 cons=307 prod.wrap=0 cons.wrap=0
+smmuv3_cmdq_opcode <--- SMMU_CMD_SYNC
+smmuv3_cmdq_consume_out prod:308, cons:308, prod_wrap:0, cons_wrap:0
+smmuv3_write_mmio addr: 0x98 val:0x134 size: 0x4(0)
+smmuv3_read_mmio addr: 0x9c val:0x134 size: 0x4(0)
+smmuv3_cmdq_consume prod=310 cons=308 prod.wrap=0 cons.wrap=0
+smmuv3_cmdq_opcode <--- SMMU_CMD_TLBI_NH_VA
+smmuv3_s1_range_inval vmid=0 asid=2 addr=0xf0e87000 tg=1 num_pages=0x1 ttl=3 leaf=1
+smmuv3_inv_notifiers_iova iommu mr=smmuv3-iommu-memory-region-24-0 asid=2 iova=0xf0e87000 tg=1 num_pages=0x1
+vfio_iommu_addr_inv_iotlb nested IOTLB invalidate asid=2, addr=0xf0e87000 granule_size=0x1000 nb_granules=0x1 leaf=1
+smmuv3_cmdq_consume prod=310 cons=309 prod.wrap=0 cons.wrap=0
+smmuv3_cmdq_opcode <--- SMMU_CMD_SYNC
+smmuv3_cmdq_consume_out prod:310, cons:310, prod_wrap:0, cons_wrap:0
+smmuv3_write_mmio addr: 0x98 val:0x136 size: 0x4(0)smmuv3_read_mmio addr: 0x9c val:0x164 size: 0x4(0)
+smmuv3_cmdq_consume prod=358 cons=356 prod.wrap=0 cons.wrap=0
+smmuv3_cmdq_opcode <--- SMMU_CMD_TLBI_NH_VA
+smmuv3_s1_range_inval vmid=0 asid=2 addr=0xf0e9f000 tg=1 num_pages=0x1 ttl=3 leaf=1
+smmuv3_inv_notifiers_iova iommu mr=smmuv3-iommu-memory-region-24-0 asid=2 iova=0xf0e9f000 tg=1 num_pages=0x1
+vfio_iommu_addr_inv_iotlb nested IOTLB invalidate asid=2, addr=0xf0e9f000 granule_size=0x1000 nb_granules=0x1 leaf=1
+smmuv3_cmdq_consume prod=358 cons=357 prod.wrap=0 cons.wrap=0
+smmuv3_cmdq_opcode <--- SMMU_CMD_SYNC
+smmuv3_cmdq_consume_out prod:358, cons:358, prod_wrap:0, cons_wrap:0
+smmuv3_write_mmio addr: 0x98 val:0x166 size: 0x4(0)
+smmuv3_read_mmio addr: 0x9c val:0x166 size: 0x4(0)
+smmuv3_cmdq_consume prod=360 cons=358 prod.wrap=0 cons.wrap=0
+smmuv3_cmdq_opcode <--- SMMU_CMD_TLBI_NH_VA
+smmuv3_s1_range_inval vmid=0 asid=2 addr=0xf0ea0000 tg=1 num_pages=0x1 ttl=3 leaf=1smmuv3_s1_range_inval vmid=0 asid=2 addr=0xf0d28000 tg=1 num_pages=0x1 ttl=3 leaf=1
+smmuv3_inv_notifiers_iova iommu mr=smmuv3-iommu-memory-region-24-0 asid=2 iova=0xf0d28000 tg=1 num_pages=0x1
+vfio_iommu_addr_inv_iotlb nested IOTLB invalidate asid=2, addr=0xf0d28000 granule_size=0x1000 nb_granules=0x1 leaf=1
+smmuv3_cmdq_consume prod=504 cons=503 prod.wrap=0 cons.wrap=0
+smmuv3_cmdq_opcode <--- SMMU_CMD_SYNC
+smmuv3_cmdq_consume_out prod:504, cons:504, prod_wrap:0, cons_wrap:0
+smmuv3_write_mmio addr: 0x98 val:0x1f8 size: 0x4(0)
+smmuv3_read_mmio addr: 0x9c val:0x1f8 size: 0x4(0)
+smmuv3_cmdq_consume prod=506 cons=504 prod.wrap=0 cons.wrap=0
+smmuv3_cmdq_opcode <--- SMMU_CMD_TLBI_NH_VA
+smmuv3_s1_range_inval vmid=0 asid=2 addr=0xf0d29000 tg=1 num_pages=0x1 ttl=3 leaf=1
+smmuv3_inv_notifiers_iova iommu mr=smmuv3-iommu-memory-region-24-0 asid=2 iova=0xf0d29000 tg=1 num_pages=0x1
+vfio_iommu_addr_inv_iotlb nested IOTLB invalidate asid=2, addr=0xf0d29000 granule_size=0x1000 nb_granules=0x1 leaf=1
+smmuv3_cmdq_consume prod=506 cons=505 prod.wrap=0 cons.wrap=0
+smmuv3_cmdq_opcode <--- SMMU_CMD_SYNC
+smmuv3_cmdq_consume_out prod:506, cons:506, prod_wrap:0, cons_wrap:0
+smmuv3_write_mmio addr: 0x98 val:0x1fa size: 0x4(0)
+smmuv3_read_mmio addr: 0x9c val:0x1fa size: 0x4(0)
+smmuv3_cmdq_consume prod=508 cons=506 prod.wrap=0 cons.wrap=0
+smmuv3_cmdq_opcode <--- SMMU_CMD_TLBI_NH_VA
+smmuv3_s1_range_inval vmid=0 asid=2 addr=0xf0d2a000 tg=1 num_pages=0x1 ttl=3 leaf=1smmuv3_read_mmio addr: 0x9c val:0x290 size: 0x4(0)
+smmuv3_cmdq_consume prod=658 cons=656 prod.wrap=0 cons.wrap=0
+smmuv3_cmdq_opcode <--- SMMU_CMD_TLBI_NH_VA
+smmuv3_s1_range_inval vmid=0 asid=2 addr=0xf0d75000 tg=1 num_pages=0x1 ttl=3 leaf=1
+smmuv3_inv_notifiers_iova iommu mr=smmuv3-iommu-memory-region-24-0 asid=2 iova=0xf0d75000 tg=1 num_pages=0x1
+vfio_iommu_addr_inv_iotlb nested IOTLB invalidate asid=2, addr=0xf0d75000 granule_size=0x1000 nb_granules=0x1 leaf=1
+smmuv3_cmdq_consume prod=658 cons=657 prod.wrap=0 cons.wrap=0
+smmuv3_cmdq_opcode <--- SMMU_CMD_SYNC
+smmuv3_cmdq_consume_out prod:658, cons:658, prod_wrap:0, cons_wrap:0
+smmuv3_write_mmio addr: 0x98 val:0x292 size: 0x4(0)
+smmuv3_read_mmio addr: 0x9c val:0x292 size: 0x4(0)
+smmuv3_cmdq_consume prod=660 cons=658 prod.wrap=0 cons.wrap=0
+smmuv3_cmdq_opcode <--- SMMU_CMD_TLBI_NH_VA
+smmuv3_s1_range_inval vmid=0 asid=2 addr=0xf0d76000 tg=1 num_pages=0x1 ttl=3 leaf=1smmuv3_cmdq_consume prod=808 cons=806 prod.wrap=0 cons.wrap=0
+smmuv3_cmdq_opcode <--- SMMU_CMD_TLBI_NH_VA
+smmuv3_s1_range_inval vmid=0 asid=2 addr=0xf0cff000 tg=1 num_pages=0x1 ttl=3 leaf=1
+smmuv3_inv_notifiers_iova iommu mr=smmuv3-iommu-memory-region-24-0 asid=2 iova=0xf0cff000 tg=1 num_pages=0x1
+vfio_iommu_addr_inv_iotlb nested IOTLB invalidate asid=2, addr=0xf0cff000 granule_size=0x1000 nb_granules=0x1 leaf=1
+smmuv3_cmdq_consume prod=808 cons=807 prod.wrap=0 cons.wrap=0
+smmuv3_cmdq_opcode <--- SMMU_CMD_SYNC
+smmuv3_cmdq_consume_out prod:808, cons:808, prod_wrap:0, cons_wrap:0
+smmuv3_write_mmio addr: 0x98 val:0x328 size: 0x4(0)
+smmuv3_read_mmio addr: 0x9c val:0x328 size: 0x4(0)
+smmuv3_cmdq_consume prod=810 cons=808 prod.wrap=0 cons.wrap=0
+smmuv3_cmdq_opcode <--- SMMU_CMD_TLBI_NH_VA
+smmuv3_s1_range_inval vmid=0 asid=2 addr=0xf0cff000 tg=1 num_pages=0x1 ttl=3 leaf=1
+smmuv3_inv_notifiers_iova iommu mr=smmuv3-iommu-memory-region-24-0 asid=2 iova=0xf0cff000 tg=1 num_pages=0x1[    1.752490] ------------[ cut here ]------------
+[    1.754515] alg: self-tests for hisi-zlib-acomp (zlib-deflate) failed (rc=-5)
+[    1.754544] WARNING: CPU: 0 PID: 131 at crypto/testmgr.c:5624 alg_test.part.42+0xdc/0x3b0
+[    1.756418] Modules linked in:
+[    1.756749] CPU: 0 PID: 131 Comm: cryptomgr_test Not tainted 5.12.0-rc1-g6d7fa2a177c0-dirty #105
+[    1.757716] Hardware name: linux,dummy-virt (DT)
+[    1.758237] pstate: 60400005 (nZCv daif +PAN -UAO -TCO BTYPE=--)
+[    1.758917] pc : alg_test.part.42+0xdc/0x3b0
+[    1.759399] lr : alg_test.part.42+0xdc/0x3b0
+[    1.759883] sp : ffff80001060bd00
+[    1.760260] x29: ffff80001060bd00 x28: 0000000000000000
+[    1.760853] x27: ffffb2601c8bf000 x26: 00000000000000c9
+[    1.761450] x25: 0000000000000400 x24: ffff000011334a80
+[    1.762047] x23: ffff000011334a00 x22: 000000000000000a
+[    1.762651] x21: 00000000ffffffff x20: ffffb2601d9c9000
+[    1.763255] x19: 00000000fffffffb x18: ffffb2601d9c9948
+[    1.763850] x17: 000000000000000e x16: 0000000000000028
+[    1.764449] x15: ffffb2601dd84aca x14: 00000000fffffffe
+[    1.765050] x13: ffffb2601dd84ac8 x12: ffff0000036d5020
+[    1.765653] x11: 0000000000000000 x10: 0000000000000ad0
+[    1.766256] x9 : ffff80001060bd00 x8 : ffff80001060bd00
+[    1.766861] x7 : 0000000000000001 x6 : c0000000ffffefff
+[    1.767462] x5 : 0000000000017fe8 x4 : ffffb2601da43f38
+[    1.768058] x3 : 00000000ffffffff x2 : ffffb2601d9ebf00
+[    1.768655] x1 : 019b0b66184cab00 x0 : 0000000000000000
+[    1.769254] Call trace:
+[    1.769536]  alg_test.part.42+0xdc/0x3b0
+[    1.769982]  alg_test+0x6c/0xa0
+[    1.770343]  cryptomgr_test+0x50/0x58
+[    1.770766]  kthread+0x12c/0x158
+[    1.771141]  ret_from_fork+0x10/0x1c
+[    1.771553] ---[ end trace 990488d25edd2832 ]---
+[    1.772155] alg: No test for gzip (hisi-gzip-acomp)
+[    1.773145] usbcore: registered new interface driver usbhid
+[    1.773752] usbhid: USB HID core driver
+[    1.775505] NET: Registered protocol family 17
+[    1.776066] 9pnet: Installing 9P2000 support
+[    1.776551] Key type dns_resolver registered
+[    1.777195] registered taskstats version 1
+[    1.777648] Loading compiled-in X.509 certificates
+[    1.778432] virtio-pci 0000:00:01.0: Adding to iommu group 2
+smmuv3_cmdq_consume prod=811 cons=810 prod.wrap=0 cons.wrap=0
+smmuv3_cmdq_opcode <--- SMMU_CMD_SYNC
+smmuv3_cmdq_consume_out prod:811, cons:811, prod_wrap:0, cons_wrap:0
+smmuv3_write_mmio addr: 0x98 val:0x32b size: 0x4(0)
+smmuv3_read_mmio addr: 0x9c val:0x32b size: 0x4(0)
+smmuv3_cmdq_consume prod=812 cons=811 prod.wrap=0 cons.wrap=0
+smmuv3_cmdq_opcode <--- SMMU_CMD_SYNC
+smmuv3_cmdq_consume_out prod:812, cons:812, prod_wrap:0, cons_wrap:0
+smmuv3_write_mmio addr: 0x98 val:0x32c size: 0x4(0)
+smmuv3_read_mmio addr: 0x9c val:0x32c size: 0x4(0)
+smmuv3_cmdq_consume prod=813 cons=812 prod.wrap=0 cons.wrap=0
+smmuv3_cmdq_opcode <--- SMMU_CMD_CFGI_STE
+smmuv3_cmdq_cfgi_ste streamid= 0x8
+smmuv3_config_cache_inv Config cache INV for sid=0x8
+smmuv3_cmdq_consume_out prod:813, cons:813, prod_wrap:0, cons_wrap:0
+smmuv3_write_mmio addr: 0x98 val:0x32d size: 0x4(0)
+smmuv3_cmdq_consume prod=814 cons=813 prod.wrap=0 cons.wrap=0
+smmuv3_cmdq_opcode <--- SMMU_CMD_SYNC
+smmuv3_cmdq_consume_out prod:814, cons:814, prod_wrap:0, cons_wrap:0
+smmuv3_write_mmio addr: 0x98 val:0x32e size: 0x4(0)
+smmuv3_read_mmio addr: 0x9c val:0x32e size: 0x4(0)
+smmuv3_cmdq_consume prod=815 cons=814 prod.wrap=0 cons.wrap=0
+smmuv3_cmdq_opcode <--- SMMU_CMD_CFGI_STE
+smmuv3_cmdq_cfgi_ste streamid= 0x8
+smmuv3_config_cache_inv Config cache INV for sid=0x8
+smmuv3_cmdq_consume_out prod:815, cons:815, prod_wrap:0, cons_wrap:0
+smmuv3_write_mmio addr: 0x98 val:0x32f size: 0x4(0)
+smmuv3_cmdq_consume prod=816 cons=815 prod.wrap=0 cons.wrap=0
+smmuv3_cmdq_opcode <--- SMMU_CMD_SYNC
+smmuv3_cmdq_consume_out prod:816, cons:816, prod_wrap:0, cons_wrap:0
+smmuv3_write_mmio addr: 0x98 val:0x330 size: 0x4(0)
+smmuv3_read_mmio addr: 0x9c val:0x330 size: 0x4(0)
+smmuv3_cmdq_consume prod=817 cons=816 prod.wrap=0 cons.wrap=0
+smmuv3_cmdq_opcode <--- SMMU_CMD_PREFETCH_CONFIG
+smmuv3_cmdq_consume_out prod:817, cons:817, prod_wrap:0, cons_wrap:0
+smmuv3_write_mmio addr: 0x98 val:0x331 size: 0x4(0)
+smmuv3_cmdq_consume prod=818 cons=817 prod.wrap=0 cons.wrap=0
+smmuv3_cmdq_opcode <--- SMMU_CMD_TLBI_NH_ASID
+smmuv3_cmdq_tlbi_nh_asid asid=3
+smmuv3_s1_asid_inval asid=3
+vfio_iommu_asid_inv_iotlb nested IOTLB invalidate asid=3
+smmuv3_cmdq_consume_out prod:818, cons:818, prod_wrap:0, cons_wrap:0
+smmuv3_write_mmio addr: 0x98 val:0x332 size: 0x4(0)
+smmuv3_cmdq_consume prod=819 cons=818 prod.wrap=0 cons.wrap=0
+smmuv3_cmdq_opcode <--- SMMU_CMD_SYNC
+smmuv3_cmdq_consume_out prod:819, cons:819, prod_wrap:0, cons_wrap:0
+smmuv3_write_mmio addr: 0x98 val:0x333 size: 0x4(0)
+smmuv3_read_mmio addr: 0x9c val:0x333 size: 0x4(0)
+[    1.779343] virtio-pci 0000:00:01.0: enabling device (0000 -> 0003)
+[    1.789541] input: gpio-keys as /devices/platform/gpio-keys/input/input0
+[    1.791261] ALSA device list:
+[    1.791602]   No soundcards found.
+[    1.792049] uart-pl011 9000000.pl011: no DMA platform data
+[    1.796050] Freeing unused kernel memory: 8832K
+[    1.805067] Run init as init process
+Starting rcS...
+++ Mounting filesystem
+ifdown: interface lo not configured
+ifdown: interface eth0 not configured
+++ Starting ssh daemon
+[    1.824423] random: sshd: uninitialized urandom read (32 bytes read)
+ip: RTNETLINK answers: File exists
+rcS Complete
+Welcome to Mini Linux
+GNU/Linux 5.12.0-rc1-g6d7fa2a177c0-dirty aarch64
+Version: 1.1.6
+        .--.
+       |o_o |
+       |:_/ |
+      //   \ \
+     (|     | )
+    /'\_   _/`\
+    \___)=(___/
+Documentation: http://open-estuary.org
+E-mail: Chinafengliang@163.com
+udhcpc: started, v1.26.1
+Setting IP address 0.0.0.0 on eth0
+estuary:/$ udhcpc: sending discover
+[    3.844998] e1000: eth0 NIC Link is Up 1000 Mbps Full Duplex, Flow Control: RX
+udhcpc: sending discover
+smmuv3_config_cache_miss Config cache MISS for sid=0x10 (hits=0, misses=1, hit rate=0)
+smmuv3_find_ste sid=0x10 features:0x1, sid_split:0x8
+smmuv3_find_ste_2lvl strtab_base:0x4000000049046000 l1ptr:0x49046000 l1_off:0x0, l2ptr:0x492b4000 l2_off:0x10 max_l2_ste:511
+smmuv3_get_ste STE addr: 0x492b4400
+smmuv3_get_cd CD addr: 0x49296000
+smmuv3_decode_cd oas=48
+smmuv3_decode_cd_tt TT[0]:tsz:16 ttb:0x49295000 granule_sz:12 had:0
+smmuv3_translate_success smmuv3-iommu-memory-region-16-3 sid=0x10 iova=0xfffff000 translated=0x5144c000 perm=0x1
+smmuv3_config_cache_hit Config cache HIT for sid=0x10 (hits=1, misses=1, hit rate=50)
+smmuv3_translate_success smmuv3-iommu-memory-region-16-3 sid=0x10 iova=0xffe59c02 translated=0x42af4c02 perm=0x1
+smmuv3_config_cache_hit Config cache HIT for sid=0x10 (hits=2, misses=1, hit rate=66)
+smmuv3_translate_success smmuv3-iommu-memory-region-16-3 sid=0x10 iova=0xffffe000 translated=0x51451000 perm=0x1
+smmuv3_config_cache_hit Config cache HIT for sid=0x10 (hits=3, misses=1, hit rate=75)
+smmuv3_translate_success smmuv3-iommu-memory-region-16-3 sid=0x10 iova=0xffffd8c0 translated=0x515878c0 perm=0x2
+smmuv3_config_cache_hit Config cache HIT for sid=0x10 (hits=4, misses=1, hit rate=80)
+smmuv3_translate_success smmuv3-iommu-memory-region-16-3 sid=0x10 iova=0xffffe000 translated=0x51451000 perm=0x2
+smmuv3_config_cache_hit Config cache HIT for sid=0x10 (hits=5, misses=1, hit rate=83)
+smmuv3_translate_success smmuv3-iommu-memory-region-16-3 sid=0x10 iova=0xfffff00c translated=0x5144c00c perm=0x2
+smmuv3_cmdq_consume prod=821 cons=819 prod.wrap=0 cons.wrap=0
+smmuv3_cmdq_opcode <--- SMMU_CMD_TLBI_NH_VA
+smmuv3_s1_range_inval vmid=0 asid=1 addr=0xffe59000 tg=1 num_pages=0x1 ttl=3 leaf=1
+smmuv3_inv_notifiers_iova iommu mr=smmuv3-iommu-memory-region-24-0 asid=1 iova=0xffe59000 tg=1 num_pages=0x1
+vfio_iommu_addr_inv_iotlb nested IOTLB invalidate asid=1, addr=0xffe59000 granule_size=0x1000 nb_granules=0x1 leaf=1
+smmuv3_cmdq_consume prod=821 cons=820 prod.wrap=0 cons.wrap=0
+smmuv3_cmdq_opcode <--- SMMU_CMD_SYNC
+smmuv3_cmdq_consume_out prod:821, cons:821, prod_wrap:0, cons_wrap:0
+smmuv3_write_mmio addr: 0x98 val:0x335 size: 0x4(0)
+smmuv3_read_mmio addr: 0x9c val:0x335 size: 0x4(0)
+smmuv3_cmdq_consume prod=823 cons=821 prod.wrap=0 cons.wrap=0
+smmuv3_cmdq_opcode <--- SMMU_CMD_TLBI_NH_VA
+smmuv3_s1_range_inval vmid=0 asid=1 addr=0xffffd000 tg=1 num_pages=0x1 ttl=3 leaf=1
+smmuv3_inv_notifiers_iova iommu mr=smmuv3-iommu-memory-region-24-0 asid=1 iova=0xffffd000 tg=1 num_pages=0x1
+vfio_iommu_addr_inv_iotlb nested IOTLB invalidate asid=1, addr=0xffffd000 granule_size=0x1000 nb_granules=0x1 leaf=1
+smmuv3_cmdq_consume prod=823 cons=822 prod.wrap=0 cons.wrap=0
+smmuv3_cmdq_opcode <--- SMMU_CMD_SYNC
+smmuv3_cmdq_consume_out prod:823, cons:823, prod_wrap:0, cons_wrap:0
+smmuv3_write_mmio addr: 0x98 val:0x337 size: 0x4(0)
+smmuv3_read_mmio addr: 0x9c val:0x337 size: 0x4(0)
+udhcpc: sending select for 10.0.2.15
+smmuv3_config_cache_hit Config cache HIT for sid=0x10 (hits=6, misses=1, hit rate=85)
+smmuv3_translate_success smmuv3-iommu-memory-region-16-3 sid=0x10 iova=0xfffff010 translated=0x5144c010 perm=0x1
+smmuv3_config_cache_hit Config cache HIT for sid=0x10 (hits=7, misses=1, hit rate=87)
+smmuv3_translate_success smmuv3-iommu-memory-region-16-3 sid=0x10 iova=0xffe59c02 translated=0x42af4c02 perm=0x1
+smmuv3_config_cache_hit Config cache HIT for sid=0x10 (hits=8, misses=1, hit rate=88)
+smmuv3_translate_success smmuv3-iommu-memory-region-16-3 sid=0x10 iova=0xffffe010 translated=0x51451010 perm=0x1
+smmuv3_config_cache_hit Config cache HIT for sid=0x10 (hits=9, misses=1, hit rate=90)
+smmuv3_translate_success smmuv3-iommu-memory-region-16-3 sid=0x10 iova=0xffffc140 translated=0x51587140 perm=0x2
+smmuv3_config_cache_hit Config cache HIT for sid=0x10 (hits=10, misses=1, hit rate=90)
+smmuv3_translate_success smmuv3-iommu-memory-region-16-3 sid=0x10 iova=0xffffe010 translated=0x51451010 perm=0x2
+smmuv3_config_cache_hit Config cache HIT for sid=0x10 (hits=11, misses=1, hit rate=91)
+smmuv3_translate_success smmuv3-iommu-memory-region-16-3 sid=0x10 iova=0xfffff01c translated=0x5144c01c perm=0x2
+smmuv3_cmdq_consume prod=825 cons=823 prod.wrap=0 cons.wrap=0
+smmuv3_cmdq_opcode <--- SMMU_CMD_TLBI_NH_VA
+smmuv3_s1_range_inval vmid=0 asid=1 addr=0xffe59000 tg=1 num_pages=0x1 ttl=3 leaf=1
+smmuv3_inv_notifiers_iova iommu mr=smmuv3-iommu-memory-region-24-0 asid=1 iova=0xffe59000 tg=1 num_pages=0x1
+vfio_iommu_addr_inv_iotlb nested IOTLB invalidate asid=1, addr=0xffe59000 granule_size=0x1000 nb_granules=0x1 leaf=1
+smmuv3_cmdq_consume prod=825 cons=824 prod.wrap=0 cons.wrap=0
+smmuv3_cmdq_opcode <--- SMMU_CMD_SYNC
+smmuv3_cmdq_consume_out prod:825, cons:825, prod_wrap:0, cons_wrap:0
+smmuv3_write_mmio addr: 0x98 val:0x339 size: 0x4(0)
+smmuv3_read_mmio addr: 0x9c val:0x339 size: 0x4(0)
+smmuv3_cmdq_consume prod=827 cons=825 prod.wrap=0 cons.wrap=0
+smmuv3_cmdq_opcode <--- SMMU_CMD_TLBI_NH_VA
+smmuv3_s1_range_inval vmid=0 asid=1 addr=0xffffc000 tg=1 num_pages=0x1 ttl=3 leaf=1
+smmuv3_inv_notifiers_iova iommu mr=smmuv3-iommu-memory-region-24-0 asid=1 iova=0xffffc000 tg=1 num_pages=0x1
+vfio_iommu_addr_inv_iotlb nested IOTLB invalidate asid=1, addr=0xffffc000 granule_size=0x1000 nb_granules=0x1 leaf=1
+smmuv3_cmdq_consume prod=827 cons=826 prod.wrap=0 cons.wrap=0
+smmuv3_cmdq_opcode <--- SMMU_CMD_SYNC
+smmuv3_cmdq_consume_out prod:827, cons:827, prod_wrap:0, cons_wrap:0
+smmuv3_write_mmio addr: 0x98 val:0x33b size: 0x4(0)
+smmuv3_read_mmio addr: 0x9c val:0x33b size: 0x4(0)
+udhcpc: lease of 10.0.2.15 obtained, lease time 86400
+Setting IP address 10.0.2.15 on eth0
+Deleting routers
+route: SIOCDELRT: No such process
+Adding router 10.0.2.2
+Recreating /etc/resolv.conf
+ Adding DNS server 10.0.2.3
+
+estuary:/$
+estuary:/$
+estuary:/$ cd /sys/class/uacce/
+estuary:/sys/class/uacce$ ls
+estuary:/sys/class/uacce$ ls
+estuary:/sys/class/uacce$ exit
+Welcome to Mini Linux
+GNU/Linux 5.12.0-rc1-g6d7fa2a177c0-dirty aarch64
+Version: 1.1.6
+        .--.
+       |o_o |
+       |:_/ |
+      //   \ \
+     (|     | )
+    /'\_   _/`\
+    \___)=(___/
+Documentation: http://open-estuary.org
+E-mail: Chinafengliang@163.com
+estuary:/$
+estuary:/$
+estuary:/$
+estuary:/$
+estuary:/$
+estuary:/$ [  425.189309] random: fast init done
+[  838.501316] random: crng init done
+qemu-system-aarch64: terminating on signal 2
+
+wangzhou@ubuntu:~$
