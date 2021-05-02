@@ -23,3 +23,11 @@ If you login your linux system, you can:
 
 	tmux ls: to see the sessions	
 	tmux a -t session_name(or session number): to attach to related session
+
+If you want to copy log in tmux to a file:
+
+	ctl + b + :
+	capture-pane -S -3000 + return  this copied 3000 lines into buffer
+	ctl + b + :
+	save-buffer /path/to/your_file  this copied content in buffer to file,
+	                                in my environment, path should be a full path.

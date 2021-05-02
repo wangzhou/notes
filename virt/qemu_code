@@ -1,0 +1,32 @@
+qemu code analysis
+==================
+
+-v0.1 2021.4.29 Sherlock init
+
+ /* qemu/softmmu/main.c */
+ main
+
+
+ /* qemu/hw/arm/smmuv3.c */
+ smmuv3的父设备的代码里有：
+ smmu_base_realize
+   +-> pci_setup_iommu  smmu_find_add_as
+
+ 把一个smmu的AS相关的信息告知给pci bus，后续pci device初始化的时候会的到这个信息，
+ pci device随后发dma的时候通过这个smmu的as信息得到smmu里的translate函数然后做翻译
+
+ 我们可以看一个具体的intel e1000的虚拟网卡：qemu/hw/net/e1000.c
+ 在这个设备注册的时候会调用：
+
+ /* qemu/hw/pci/pci.c */
+ do_pci_register_device
+   +->pci_init_bus_master
+     +-> AddressSpace *dma_as = pci_device_iommu_address_space
+           /* 这个iommu_fn就是上面的smmu_find_add_as */
+       +-> iommu_bus->iommu_fn
+
+ 设备模拟一个dma读写的实现：
+ pci_dma_read/write
+   ...
+     /* pci_get_address_space_space得到dev->bus_master_as */
+     +-> dma_memory_rw(pci_get_address_space(dev), ...)
