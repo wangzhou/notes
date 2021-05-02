@@ -1,7 +1,7 @@
 pthread笔记
 ===========
 
--v0.1 2021.3.14 Sherlock apeu11,12
+-v0.1 2021.3.14 Sherlock apue11,12
 -v0.2 2021.4. 2 Sherlock 增加线程同步的锁这一部分
 -v0.3 2021.5. 2 Sherlock 增加3/4部分
 
@@ -46,7 +46,7 @@ pthread笔记
  比较了pthread mutex/spinlock，以及自己实现的spinlock的性能:
  https://github.com/wangzhou/tests/blob/master/lock_test/test.c
 
- apeu这里的例子11-5很好的展示了一个引用计数的实现方式。 
+ apue这里的例子11-5很好的展示了一个引用计数的实现方式。 
  一定要避免A-B/B-A这种交叉加锁的情况，但是注意这里只是加锁，减锁的顺序可以随意。
 
  如果一定要出现交叉加锁的情况，要做成如果第二把锁没有抢到(所以，第二把锁要用try
@@ -55,7 +55,7 @@ pthread笔记
 
  11-6的代码对于交叉加锁的处理方式是，需要上第二把锁的时候，直接放开第一把锁，
  然后先上第二把锁，再上第一把锁，由于这个时候有个时间的空隙，可能不满足之前的
- 条件了，所以要再check下之前需要第二把锁的条件。当然apeu举这个例子的目的这里是
+ 条件了，所以要再check下之前需要第二把锁的条件。当然apue举这个例子的目的这里是
  为了说明可以简化加锁，需要在复杂度和性能之间权衡。
  
 3. 条件变量和信号量
@@ -84,7 +84,7 @@ pthread笔记
  可以看到，pthread_key_t key1的create没有和线程绑定。基本的逻辑是，pthread_key_create
  可以在任意一个线程里，pthread_setspecific和pthread_getspecific是在线程里对应的，
  在线程A里set的数据，可以在线程A里通过get拿到，但是在另外的一个线程B里对全局的
- key1使用pthread_getspecific只能拿到NULL。apeu里的例子把pthread_key_create放到
+ key1使用pthread_getspecific只能拿到NULL。apue里的例子把pthread_key_create放到
  了每个线程里，为了只调用一次pthread_key_create, 还介绍只跑一个函数一次的接口：
  int pthread_once(pthread_once_t *initflag, void (*initfn)(void))，可以想象这个
  函数的实现是先上锁，然后检查initflag，initflag没有置上已经跑过的flag就调用initfn，
