@@ -3,16 +3,16 @@ qemu使用笔记
 
 -v0.1 2021.4.22 Sherlock init
 
-qemu是一个虚拟机，加载到qemu里的linux kernel的启动和随后的shell输入输出使能用户
+qemu是一个虚拟机，加载到qemu里的linux kernel的启动和随后的shell输入输出使的用户
 可以使用这个qemu里的系统。
 
 我们还可以通过一个qemu的monitor接口，通过命令的查看qemu这个虚拟机器本身的信息。
 在qemu的启动参数中增加 -monitor telnet:localhost:9000,server,nowait 打开本host
 机器的另外一个命令行窗口，在其中可以使用 telnet 127.0.0.1 9000 连上这台qemu
 虚拟机的monitor。monitor里输入quit是直接终止qemu虚拟机和monitor，要退出monitor
-需要是用ctr + ]，然后quit退出telnet。
+需要使用ctr + ]，然后quit退出telnet。
 
-qemu monitor里的命令可以查看当前虚拟机的信息。e.g.
+qemu monitor里的命令可以查看当前虚拟机的信息。比如：
 
 info qtree 查看整个qemu虚拟机的每个设备的信息。
 info pci 查看qemu里的pci设备。

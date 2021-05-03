@@ -1,7 +1,19 @@
-qemu code analysis
-==================
+qemu code analysis - qom
+========================
 
 -v0.1 2021.4.29 Sherlock init
+
+qemu里使用面向对象的模型来模拟相关的元素，可以想象这样的模拟是很合理的，比如，
+用device描述一个设备的基类，pci_device可以继承device，然后vfio的pci设备又可以
+继承pci_device，同时一个用纯用软件模拟的pci网络设备也可以继承pci_device。
+
+本文描述这个基于面向对象的思路构建起来的qemux模型。
+
+1. 对象的定义
+-------------
+
+2. 对象的生成
+-------------
 
  /* qemu/softmmu/main.c */
  main
