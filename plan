@@ -83,7 +83,7 @@ migratepages分析
 kprobe分析
 irqbalance分析
 /proc/irq/说明, 结合pci的msi_irqs
-linux线程编程
+linux线程编程             xx
 taskset和线程的绑定？     xx
 /proc/sys/vm/overcommit?
 Linux全部系统调用分析(先内存相关)(配合怎么给linux加系统调用?)
@@ -94,3 +94,9 @@ Linux CAP_SYS权限
 qemu里完成模拟一个设备
 shell wait
 write a qemu dma engine device
+qemu qom
+qemu mem
+qemu irq
+qemu cpu
+qemu vfio
+kernel kvm

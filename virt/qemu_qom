@@ -2,6 +2,7 @@ qemu code analysis - qom
 ========================
 
 -v0.1 2021.4.29 Sherlock init
+-v0.2 2021.5.03 Sherlock draft finish 2,3
 
 qemu里使用面向对象的模型来模拟相关的元素，可以想象这样的模拟是很合理的，比如，
 用device描述一个设备的基类，pci_device可以继承device，然后vfio的pci设备又可以
@@ -35,34 +36,37 @@ qemu里使用面向对象的模型来模拟相关的元素，可以想象这样�
 	   ...?
 	       /* 初始化class，哪里会调用？*/
 	   +-> type_initialize
+	       /* e.g. qemu/hw/misc/edu.c会调用到edu_class_init */
+	     +-> edu_class_init
+	           /* 得到PCIDeviceClass的指针是pci edu这个类的么？*/
+	       +-> PCI_DEVICE_CLASS
+     ...
 
+     +-> qemu_opts_parse_noisily(qemu_find_opts("device"), ...)
+     +-> qmp_x_exit_preconfig
+       +-> qemu_create_cli_devices
+             /* 遍历初始化之前扫描到的-device里的信息？*/
+         +-> device_init_func
+	   +-> qdev_device_add
+	     +->qdev_new
+	       +-> object_new
+	       ...
 
- /* 具体device对象的生成？*/
+ /* 具体device对象的生成 */
 
-3. 一个例子
+ 根据命令行参数和class的定义，生成具体的实例。如上main函数里在object_new里生成
+ 一个具体实例。
+
+3.interface是什么
+-----------------
+
+4.properties是什么
+------------------
+
+ link属性
+ child属性
+
+5. 一个例子
 -----------
  
- 这里写一个dma engine的qemu设备，在写一个与之配套的iommu设备。
-
- smmuv3的父设备的代码里有：
- smmu_base_realize
-   +-> pci_setup_iommu  smmu_find_add_as
-
- 把一个smmu的AS相关的信息告知给pci bus，后续pci device初始化的时候会的到这个信息，
- pci device随后发dma的时候通过这个smmu的as信息得到smmu里的translate函数然后做翻译
-
- 我们可以看一个具体的intel e1000的虚拟网卡：qemu/hw/net/e1000.c
- 在这个设备注册的时候会调用：
-
- /* qemu/hw/pci/pci.c */
- do_pci_register_device
-   +->pci_init_bus_master
-     +-> AddressSpace *dma_as = pci_device_iommu_address_space
-           /* 这个iommu_fn就是上面的smmu_find_add_as */
-       +-> iommu_bus->iommu_fn
-
- 设备模拟一个dma读写的实现：
- pci_dma_read/write
-   ...
-     /* pci_get_address_space_space得到dev->bus_master_as */
-     +-> dma_memory_rw(pci_get_address_space(dev), ...)
+ 这里写一个dma engine的qemu设备。
