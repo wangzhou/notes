@@ -1,0 +1,15 @@
+
+master branch: page
+source branch: source to create page above
+
+
+hexo n "subject line"   // create a blog
+hexo clean && hexo g    // create a page
+
+_config.yml  // blog configure
+themes      // put themes
+
+
+
+
+
