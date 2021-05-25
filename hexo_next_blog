@@ -1,0 +1,52 @@
+hexo next blog
+==============
+
+-v0.1 2021.5.24 Sherlock init
+
+这篇文章记录一个简单个人博客的搭建过程，我们使用GitHub page + hexo + next主题的搭建方式。
+整个搭建的环境是在一台arm64 ubuntu20.04机器上。
+
+1. 基础逻辑说明
+---------------
+
+
+2. 搭建过程
+-----------
+
+ * Install npm and nodejs and hexo
+
+   sudo apt install npm nodejs
+   sudo npm install -g hexo-cli
+
+   Note: this nodejs is 10.x.x, which can be found by node -v. We need 12.x.x
+         otherwise there will be error when generating blog.
+
+ * Install 12.x.x nodejs
+
+   curl -sL https://deb.nodesource.com/setup_12.x | sudo -E bash -
+   sudp apt update
+   sudo apt install -y nodejs
+
+ * mkdir hexo; hexo blog init; sudo npm install
+
+ * fork next to your github
+
+ * init blog source repot in your github
+
+ * git submodule add your_next_url themes/next
+
+ * modify blog source and yml config file
+
+   xxxx
+
+   hexo n "article name"
+
+   hexo clean && hexo g
+
+   copy contents in public directory to your blog source local repo
+
+ * git add; git commit; git remote add your_blog_source_url
+
+ * git push --recurse-submodules=on-demand origin master:master
+
+ * git clone --recursive your_blog_source_url
