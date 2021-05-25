@@ -33,40 +33,169 @@ hexo next blog
 2. 搭建过程
 -----------
 
- * Install npm and nodejs and hexo
+ * 安装npm、nodejs和hexo
 
    sudo apt install npm nodejs
    sudo npm install -g hexo-cli
 
-   Note: this nodejs is 10.x.x, which can be found by node -v. We need 12.x.x
-         otherwise there will be error when generating blog.
+   Note: 上面安装的nodejs是10.x.x的，后面生成博客的时候会报错，我们这里需要安装
+         12.x.x的nodejs版本。nodejs的版本可以通过node -v 来看。
 
- * Install 12.x.x nodejs
+ * 安装12.x.x nodejs
 
    curl -sL https://deb.nodesource.com/setup_12.x | sudo -E bash -
    sudp apt update
    sudo apt install -y nodejs
 
- * mkdir hexo; hexo blog init; sudo npm install
+ * 下载hexo和NexT
 
- * fork next to your github
+   mkdir hexo; cd hexo
+   hexo blog init
+   sudo npm install
 
- * init blog source repot in your github
+   把NexT fork到自己的github, 我们用url_priv_next表示自己NexT的github仓库地址。
+   创建一个空的github仓库用来存放Hexo代码, 我们用url_priv_hexo表示自己的这个hexo
+   仓库的github地址。在hexo仓库把自己的NexT仓库设置成自己的hexo仓库的submodule:
 
- * git submodule add your_next_url themes/next
+   git submodule add url_priv_next themes/next
 
- * modify blog source and yml config file
+   到这里为止，基本的仓库以及他们之间的关系我们都搞定了。
 
-   xxxx
+ * 配置hexo以及NexT的配置文件
 
-   hexo n "article name"
+   我自己的配置文件的改动如下, 具体的改动可以看相关地方的注释：
+```
+hexo _config.yml
 
+diff --git a/_config.yml b/_config.yml
+index 2dc35e6..97fc902 100644
+--- a/_config.yml
++++ b/_config.yml
+@@ -97,7 +97,7 @@ ignore:
+ # Extensions
+ ## Plugins: https://hexo.io/plugins/
+ ## Themes: https://hexo.io/themes/
+-theme: landscape
++theme: next  # 使用NexT主题
+
+diff --git a/scaffolds/post.md b/scaffolds/post.md
+index 1f9b9a4..91f86d0 100644
+--- a/scaffolds/post.md
++++ b/scaffolds/post.md
+@@ -2,4 +2,5 @@
+ title: {{ title }}
+ date: {{ date }}
+ tags:
++description:    # 如下使用hexo g 生成新md文档的时候会使用这个地方的模版，如果这里加上description
+                 # 主页就不会展示全部文件，而是只是显示这里的摘要。
+
+```
+```
+NexT _config.yml
+
+diff --git a/_config.yml b/_config.yml
+index 61cc72d..957ae93 100644
+--- a/_config.yml
++++ b/_config.yml
+@@ -67,7 +67,7 @@ footer:
+   copyright:
+ 
+   # Powered by Hexo & NexT
+-  powered: true
++  powered: false    # 个人喜欢极简的风格，所以去掉主页底部的"Powered by Hexo & NexT"
+ 
+   # Beian ICP and gongan information for Chinese users. See: https://beian.miit.gov.cn, http://www.beian.gov.cn
+   beian:
+@@ -97,10 +97,10 @@ creative_commons:
+ # ---------------------------------------------------------------
+ 
+ # Schemes
+-scheme: Muse
++#scheme: Muse
+ #scheme: Mist
+ #scheme: Pisces
+-#scheme: Gemini
++scheme: Gemini     # 换一个带边栏的风格，scheme是NexT内部的风格
+ 
+ # Dark Mode
+ darkmode: false
+@@ -117,10 +117,10 @@ darkmode: false
+ # External url should start with http:// or https://
+ menu:
+   home: / || fa fa-home
+-  #about: /about/ || fa fa-user
+-  #tags: /tags/ || fa fa-tags
++  about: /about || fa fa-user    # 打开about, tags, archives标签
++  tags: /tags || fa fa-tags
+   #categories: /categories/ || fa fa-th
+-  archives: /archives/ || fa fa-archive
++  archives: /archives || fa fa-archive
+   #schedule: /schedule/ || fa fa-calendar
+   #sitemap: /sitemap.xml || fa fa-sitemap
+   #commonweal: /404/ || fa fa-heartbeat
+@@ -138,8 +138,8 @@ menu_settings:
+ 
+ sidebar:
+   # Sidebar Position.
+-  position: left
+-  #position: right
++  #position: left
++  position: right     # 边栏移动到右边
+ 
+   # Manual define the sidebar width. If commented, will be default for:
+   # Muse | Mist: 320
+@@ -261,12 +261,12 @@ tag_icon: false
+ # Front-matter variable (unsupport animation).
+ reward_settings:
+   # If true, reward will be displayed in every article by default.
+-  enable: false
++  enable: true        # 打开打赏的功能
+   animation: false
+   #comment: Donate comment here.
+ 
+ reward:
+-  #wechatpay: /images/wechatpay.png
++  wechatpay: /images/weixinpay.svg       # 把微信的付款二维码放到这个地方
+   #alipay: /images/alipay.png
+   #paypal: /images/paypal.png
+   #bitcoin: /images/bitcoin.png
+@@ -354,7 +354,7 @@ codeblock:
+   # Code Highlight theme
+   # Available values: normal | night | night eighties | night blue | night bright | solarized | solarized dark | galactic
+   # See: https://github.com/chriskempson/tomorrow-theme
+-  highlight_theme: normal
++  highlight_theme: night blue            # 选择嵌入代码的显示风格，这里深蓝色底
+   # Add copy button on codeblock
+   copy_button:
+     enable: false
+@@ -823,7 +823,7 @@ mermaid:
+ # Use velocity to animate everything.
+ # For more information: http://velocityjs.org
+ motion:
+-  enable: true
++  enable: false          # 不禁止这个的话，打开一个文章会有动画，个人不喜欢
+   async: false
+   transition:
+     # Transition variants:
+```
+
+ * 添加文章和生成静态网页
+
+   hexo n "文章名字"
    hexo clean && hexo g
 
-   copy contents in public directory to your blog source local repo
+   会在public目录里生成相关的静态网页，把public里的内容copy出来然后push到如上的
+   username.github.io仓库里。
 
- * git add; git commit; git remote add your_blog_source_url
+   本地调试的话可以先运行: hexo server, 然后在本地浏览器里通过http://localhost:4000
+   观察生成的静态网页。
 
- * git push --recurse-submodules=on-demand origin master:master
+ * 保存本地改动到GitHub
 
- * git clone --recursive your_blog_source_url
+   cd hexo; git add <改动文件>; git commit -s -m <改动描述>;
+   cd hexo/themes/next; git add <改动文件>; git commit -s -m <改动描述>;
+   git remote add url_priv_hexo
+   git push --recurse-submodules=on-demand origin master:master
+
+   在其他地方可以使用如下的方式迭代clone hexo和NexT仓库:
+   git clone --recursive url_priv_hexo
