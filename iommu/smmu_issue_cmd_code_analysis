@@ -1,0 +1,11 @@
+smmu arm_smmu_cmdq_issue_cmdlist
+================================
+
+-v0.1 2021.5.28 Sherlock init
+
+本文分析Linux kernel SMMU驱动里的arm_smmu_cmdq_issue_cmdlist这个函数。基于v5.12
+
+
+READ_ONCE
+
+cmpxchg_relaxed(*prt, old, new)
