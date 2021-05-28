@@ -6,6 +6,167 @@ smmu arm_smmu_cmdq_issue_cmdlist
 本文分析Linux kernel SMMU驱动里的arm_smmu_cmdq_issue_cmdlist这个函数。基于v5.12
 
 
-READ_ONCE
+基本数据结构和函数
+------------------
 
-cmpxchg_relaxed(*prt, old, new)
+ struct arm_smmu_cmdq的结构是：
+   - struct arm_smmu_queue q;     smmu queue的通用数据结构
+     - llq                        软件维护的cmdq的produce和comsumer位置
+     - base, prod_reg, cons_reg   cmdq的基地址，prod_reg/cons_reg寄存器的地址等
+     - ...
+   - valid_map                    每一个cmdq entry一个bit的bitmap
+   - owner_prod                   用来表示当前拥有smmu的情况？
+   - lock                         和sync回绕相关的锁
+
+
+ READ_ONCE 保证读一次，不被编译器优化。
+
+ cmpxchg_relaxed(*prt, old, new) 这个函数的语义是：当*prt等于old的时候，把new赋值
+ 给*prt，返回值是old; 当*prt不等于old的时候，不做操作，返回值是*prt。
+
+ atomic_fetch_inc_relaxed
+
+ atomic_cond_read_relaxed
+
+ atomic_fetch_andnot_relaxed
+
+ atomic_set_release
+
+ atomic_read
+
+ atomic_dec_return_release
+
+ atomic_fetch_inc_relaxed
+
+ smp_cond_load_relaxed
+
+ dma_wmb
+
+基本模型
+--------
+
+ smmu的这个提交命令的操作搞的这么复杂，主要解决的问题是，多个cpu向一个cmdq一起
+ 发送请求时遇到的性能问题。这里使用了免锁的实现。函数的对外语义是接受用户发来的
+ n个cmd，可以最后带上SYNC，提交到smmu的cmdq。基本的实现方式是，各个调用这个函数
+ 的用户首先使用无锁的方式抢到自己的cmdq entry坑位; 把命令放到坑位里; 各个用户再
+ 依次占有硬件，通过写prod寄存器的方式把命令发给硬件。这个过程里，用户可以在自己
+ 的一串命令后加上SYNC，也可以不加，如果加上SYNC需要处理相关的同步问题。
+
+ 下面具体分析代码：
+```
+	/* 1. Allocate some space in the queue */
+	local_irq_save(flags);
+	// 取出当前软件维护队列的头尾地址
+	llq.val = READ_ONCE(cmdq->q.llq.val);
+	do {
+		u64 old;
+
+		while (!queue_has_space(&llq, n + sync)) {
+			local_irq_restore(flags);
+			// 如果cmdq里已经没有足够的空间，那就在此等待
+			if (arm_smmu_cmdq_poll_until_not_full(smmu, &llq))
+				dev_err_ratelimited(smmu->dev, "CMDQ timeout\n");
+			local_irq_save(flags);
+		}
+
+		// 如果有空间，构造随后原子覆盖prod域段的零时变量, 并在最新的prod
+		// 上把owner的标记加上
+		head.cons = llq.cons;
+		head.prod = queue_inc_prod_n(&llq, n + sync) |
+					     CMDQ_PROD_OWNED_FLAG;
+
+		// llq.val的值是从cmdq->q.llq.val中取出来的，如果依然相等，说明
+		// 从取出来到尝试刷新这段时间，没有其他用户去刷新这个值，那么我们
+		// 就用我们的新prod/cons原子的更新他，如果不相等，说明有其他的用户
+		// 已经在我们前面更新了cmdq->q.llq.va，我们取出最新的值，再此重复
+		// 上述过程，直到我们可以抢到坑位。
+		//
+		// 其实，这里是一个标准的无锁抢占的实现。
+		old = cmpxchg_relaxed(&cmdq->q.llq.val, llq.val, head.val);
+		if (old == llq.val)
+			break;
+
+		llq.val = old;
+	} while (1);
+	owner = !(llq.prod & CMDQ_PROD_OWNED_FLAG);
+	head.prod &= ~CMDQ_PROD_OWNED_FLAG;
+	llq.prod &= ~CMDQ_PROD_OWNED_FLAG;
+
+	/*
+	 * 2. Write our commands into the queue
+	 * Dependency ordering from the cmpxchg() loop above.
+	 */
+	arm_smmu_cmdq_write_entries(cmdq, cmds, llq.prod, n);
+	if (sync) {
+		prod = queue_inc_prod_n(&llq, n);
+		arm_smmu_cmdq_build_sync_cmd(cmd_sync, smmu, prod);
+		queue_write(Q_ENT(&cmdq->q, prod), cmd_sync, CMDQ_ENT_DWORDS);
+
+		/*
+		 * In order to determine completion of our CMD_SYNC, we must
+		 * ensure that the queue can't wrap twice without us noticing.
+		 * We achieve that by taking the cmdq lock as shared before
+		 * marking our slot as valid.
+		 */
+		arm_smmu_cmdq_shared_lock(cmdq);
+	}
+
+	/* 3. Mark our slots as valid, ensuring commands are visible first */
+	dma_wmb();
+	arm_smmu_cmdq_set_valid_map(cmdq, llq.prod, head.prod);
+
+	/* 4. If we are the owner, take control of the SMMU hardware */
+	if (owner) {
+		/* a. Wait for previous owner to finish */
+		atomic_cond_read_relaxed(&cmdq->owner_prod, VAL == llq.prod);
+
+		/* b. Stop gathering work by clearing the owned flag */
+		prod = atomic_fetch_andnot_relaxed(CMDQ_PROD_OWNED_FLAG,
+						   &cmdq->q.llq.atomic.prod);
+		prod &= ~CMDQ_PROD_OWNED_FLAG;
+
+		/*
+		 * c. Wait for any gathered work to be written to the queue.
+		 * Note that we read our own entries so that we have the control
+		 * dependency required by (d).
+		 */
+		arm_smmu_cmdq_poll_valid_map(cmdq, llq.prod, prod);
+
+		/*
+		 * d. Advance the hardware prod pointer
+		 * Control dependency ordering from the entries becoming valid.
+		 */
+		writel_relaxed(prod, cmdq->q.prod_reg);
+
+		/*
+		 * e. Tell the next owner we're done
+		 * Make sure we've updated the hardware first, so that we don't
+		 * race to update prod and potentially move it backwards.
+		 */
+		atomic_set_release(&cmdq->owner_prod, prod);
+	}
+
+	/* 5. If we are inserting a CMD_SYNC, we must wait for it to complete */
+	if (sync) {
+		llq.prod = queue_inc_prod_n(&llq, n);
+		ret = arm_smmu_cmdq_poll_until_sync(smmu, &llq);
+		if (ret) {
+			dev_err_ratelimited(smmu->dev,
+					    "CMD_SYNC timeout at 0x%08x [hwprod 0x%08x, hwcons 0x%08x]\n",
+					    llq.prod,
+					    readl_relaxed(cmdq->q.prod_reg),
+					    readl_relaxed(cmdq->q.cons_reg));
+		}
+
+		/*
+		 * Try to unlock the cmdq lock. This will fail if we're the last
+		 * reader, in which case we can safely update cmdq->q.llq.cons
+		 */
+		if (!arm_smmu_cmdq_shared_tryunlock(cmdq)) {
+			WRITE_ONCE(cmdq->q.llq.cons, llq.cons);
+			arm_smmu_cmdq_shared_unlock(cmdq);
+		}
+	}
+
+	local_irq_restore(flags);
+```
