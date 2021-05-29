@@ -1,0 +1,10 @@
+pasid ssid位宽的逻辑关系
+------------------------
+
+-v0.1 2021.5.29 Sherlock init
+
+硬件上，ep上pasid cap里有pasid id位宽的配置，最大是20bit。SMMU spec上有ssid的
+位宽配置。软件上iommu_sva_get_pasid的入参有最大最小pasid范围的限制。
+
+软件初始化的时候会取到最小值，然后从ioasid lib里申请的时候把这个范围带进去。
+现在smmu索引CD是用pasid作为下标索引的。
