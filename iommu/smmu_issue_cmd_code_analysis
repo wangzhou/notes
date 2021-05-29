@@ -24,23 +24,25 @@ smmu arm_smmu_cmdq_issue_cmdlist
  cmpxchg_relaxed(*prt, old, new) 这个函数的语义是：当*prt等于old的时候，把new赋值
  给*prt，返回值是old; 当*prt不等于old的时候，不做操作，返回值是*prt。
 
- atomic_fetch_inc_relaxed
+ atomic_cond_read_relaxed/smp_cond_load_relaxed 前者是后者的一个atomic形式的封装，
+ 所以，先搞清后者的语义smp_cond_load_relaxed(ptr, cond_expr)；不停的把ptr地址上
+ 的数据放到VAL里，然后检测cond_expr的条件，如果为真，整体返回，如果是假，就继续
+ 读ptr的值。所以atomic_cond_read_relaxed(v, c)的语义是反复把v的值读到VAL里，然后
+ 判断c，如果c为真则返回，如果c是假就继续读。
 
- atomic_cond_read_relaxed
+ atomic_fetch_andnot_relaxed(i, *prt) 把i按位取反后的值和*prt相与，写入*prt。整个
+ 是一个原子操作。
 
- atomic_fetch_andnot_relaxed
+ atomic_set_release release语义的原子写，姑且先当做原子写。
 
- atomic_set_release
+ atomic_read 原子读。
 
- atomic_read
+ atomic_dec_return_release 姑且先看做atomic_dec_return，原子减1，并且返回修改后
+ 的原子变量的值。
 
- atomic_dec_return_release
+ atomic_fetch_inc_relaxed 姑且先看做原子加1。
 
- atomic_fetch_inc_relaxed
-
- smp_cond_load_relaxed
-
- dma_wmb
+ dma_wmb dma写barrier
 
 基本模型
 --------
@@ -69,7 +71,7 @@ smmu arm_smmu_cmdq_issue_cmdlist
 			local_irq_save(flags);
 		}
 
-		// 如果有空间，构造随后原子覆盖prod域段的零时变量, 并在最新的prod
+		// 如果有空间，构造随后原子覆盖prod域段的临时变量, 并在最新的prod
 		// 上把owner的标记加上
 		head.cons = llq.cons;
 		head.prod = queue_inc_prod_n(&llq, n + sync) |
@@ -88,6 +90,21 @@ smmu arm_smmu_cmdq_issue_cmdlist
 
 		llq.val = old;
 	} while (1);
+	// llq.prod这个位置是当前可以放入cmd的第一个位置。
+	//
+	//    llq.cons ... llq.prod                     <- 当前队列状态
+	//    head.cons ...                head.prod    <- 新写入的队列占用状态
+	//
+	// 可以看到在上面原子写q.llq.val的时候，把owner的状态带到了head.prod上,
+	// 不同的user可以并发的把cmd一段一段的放到cmdq里，但是同一个时间只有一个
+	// user可以给smmu发通知，就是写smmu cmdq的prod寄存器，所以不同的user在
+	// 写prod寄存器的时候要独占smmu硬件。
+	//
+	// 下面的这一行是检测其他user有没有放开之前一段cmd entry的占有。如果之前
+	// 一段cmd entry已经放开了，我们当前的user就可有占有硬件，随后更新prod
+	// 寄存器，如果之前没有放开，我们当前的user就只是把命令放入cmdq(什么时候写入？)
+	//
+	// llq.prod上的owner flag在如下第4部的b小步骤中清除。
 	owner = !(llq.prod & CMDQ_PROD_OWNED_FLAG);
 	head.prod &= ~CMDQ_PROD_OWNED_FLAG;
 	llq.prod &= ~CMDQ_PROD_OWNED_FLAG;
@@ -102,6 +119,7 @@ smmu arm_smmu_cmdq_issue_cmdlist
 		arm_smmu_cmdq_build_sync_cmd(cmd_sync, smmu, prod);
 		queue_write(Q_ENT(&cmdq->q, prod), cmd_sync, CMDQ_ENT_DWORDS);
 
+		// 没有搞清楚这里？
 		/*
 		 * In order to determine completion of our CMD_SYNC, we must
 		 * ensure that the queue can't wrap twice without us noticing.
@@ -112,19 +130,26 @@ smmu arm_smmu_cmdq_issue_cmdlist
 	}
 
 	/* 3. Mark our slots as valid, ensuring commands are visible first */
+	// 这个barrier没有搞清楚？
 	dma_wmb();
+	// 在valid_map上，把llq.prod - head.prod的对应bit置成valid
 	arm_smmu_cmdq_set_valid_map(cmdq, llq.prod, head.prod);
 
 	/* 4. If we are the owner, take control of the SMMU hardware */
 	if (owner) {
+		// 这里是等之前的写prod已经做了，其他的user在写了prod后，会把他
+		// 当前的prod值写入到cmdq->owner_prod，这里就是在一直检测这个值。
+		// 之前一个prod就是llq.prod。
 		/* a. Wait for previous owner to finish */
 		atomic_cond_read_relaxed(&cmdq->owner_prod, VAL == llq.prod);
 
+		// 原子的清除掉当前user prod上的owner flag
 		/* b. Stop gathering work by clearing the owned flag */
 		prod = atomic_fetch_andnot_relaxed(CMDQ_PROD_OWNED_FLAG,
 						   &cmdq->q.llq.atomic.prod);
 		prod &= ~CMDQ_PROD_OWNED_FLAG;
 
+		// 等待其他的user在上面第三部把相应的valid bit置上。
 		/*
 		 * c. Wait for any gathered work to be written to the queue.
 		 * Note that we read our own entries so that we have the control
@@ -149,6 +174,15 @@ smmu arm_smmu_cmdq_issue_cmdlist
 	/* 5. If we are inserting a CMD_SYNC, we must wait for it to complete */
 	if (sync) {
 		llq.prod = queue_inc_prod_n(&llq, n);
+		// 等SYNC命令之前的命令完成，smmu提供了两种方式，一种是MSI，一种
+		// SEV。虽然协议上说可以搞一个MSI中断，但是这里的实现是把SYNC命令
+		// 占用的cmdq entry的地址写到SYNC命令自己的MSI address域段，MSI data
+		// 域段写了0，这样当SYNC命令完成的时候，SYNC命令的第32bit会被清零。
+		// SEV的方式使用wfe指令的把CPU放到低功耗模式，SYNC命令完成时会唤醒
+		// CPU，因为wfe还有其他的唤醒方式(中断，sev指令)，所以在wfe醒来
+		// 之后执行的代码里，会去循环检测cmdq cons寄存器，SMMU的语义保证
+		// cons更新可见时，前面的命令都已经完成。
+		//
 		ret = arm_smmu_cmdq_poll_until_sync(smmu, &llq);
 		if (ret) {
 			dev_err_ratelimited(smmu->dev,
@@ -158,6 +192,7 @@ smmu arm_smmu_cmdq_issue_cmdlist
 					    readl_relaxed(cmdq->q.cons_reg));
 		}
 
+		// 同上，不清楚这里为啥要锁？
 		/*
 		 * Try to unlock the cmdq lock. This will fail if we're the last
 		 * reader, in which case we can safely update cmdq->q.llq.cons
