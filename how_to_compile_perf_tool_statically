@@ -13,4 +13,10 @@ how to compile perf tool statically
 
 4. you can find perf statically in kernel/tools/perf
 
-Note: you may need to: yum install glibc-static
+Note:
+
+1. you may need to: yum install glibc-static
+2. you need install slang to enable perf report -tui. In ubuntu20.04, you need
+   sudo apt install libslang2-dev. you can use ldd perf to see if perf already
+   links slang
+3. libelf-dev
