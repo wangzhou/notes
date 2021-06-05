@@ -25,3 +25,5 @@ qemu code analysis - smmu
    ...
      /* pci_get_address_space_space得到dev->bus_master_as */
      +-> dma_memory_rw(pci_get_address_space(dev), ...)
+     可以看到这个函数后面的调用链里会最终调用到iommu里的translate函数，然后对翻译
+     都的地址读写。
