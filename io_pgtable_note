@@ -3,11 +3,14 @@ ARM SMMUv3 IO page table
 
 -v0.1 2021.1.27 Sherlock init
 
+简介：本文介绍SMMU和页表操作相关的内容
+
 
 1. 页表以及相关配置的初始化流程
+-------------------------------
 
- arm_smmu_attach_dev的流程可以参考:
-
+ iommu_ops里的attach_dev回调用来在SMMU一侧为master设备建立各种数据结构。如下是
+ arm_smmu_attach_dev的流程:
 ```
 arm_smmu_attach_dev
   +-> arm_smmu_domain_finalise
@@ -36,11 +39,17 @@ arm_smmu_attach_dev
 
 	    /* 得到页表基地址 */
 	+-> cfg->arm_lpae_s1_cfg.ttbr = virt_to_phys(data->pgd);
+
+	/* 收尾的配置再搞下，目前是用来配置CD表 */
+    +-> finalise_stage_fn
 	/* 得到的io_pgtable_ops存放到smmu_domain中 */
     +-> smmu_domain->pgtbl_ops
+
+  +-> arm_smmu_install_ste_for_dev
 ```
 
 2. map流程分析
+--------------
 ```
  /* drivers/iommu/io-pgtbl-arm.c */
  /*
@@ -49,11 +58,14 @@ arm_smmu_attach_dev
   * 框架里已经搞定
   */
  arm_lpae_map
-   +-> __arm_lpae_map
+   +-> __arm_lpae_map(..., iova, paddr, size, prot, lvl, ptep, ...)
 
 ```
 
+todo: dma iova/page的分配逻辑
+
 3. 页表相关的细节
+-----------------
 
 ```
       level              0       1        3        3
@@ -73,28 +85,10 @@ arm_smmu_attach_dev
  存在BBML的问题么？
 
 4. iova和paddr的分配逻辑
+------------------------
 
  paddr需要是page或是block对其的么？
  paddr的分配逻辑，buddy系统？
  iova的分配逻辑，iova的范围？
  smmu存在的时候pa一定是连续的么？
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
