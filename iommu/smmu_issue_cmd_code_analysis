@@ -18,7 +18,6 @@ smmu arm_smmu_cmdq_issue_cmdlist
    - owner_prod                   用来表示当前拥有smmu的情况？
    - lock                         和sync回绕相关的锁
 
-
  READ_ONCE 保证读一次，不被编译器优化。
 
  cmpxchg_relaxed(*prt, old, new) 这个函数的语义是：当*prt等于old的时候，把new赋值
