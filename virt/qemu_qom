@@ -10,6 +10,17 @@ qemu里使用面向对象的模型来模拟相关的元素，可以想象这样�
 
 本文描述这个基于面向对象的思路构建起来的qemux模型。分析基于qemu 5.2.92版本。
 
+0. 用c语言实现面向对象的模型
+----------------------------
+
+ qemu里用c语言实现了面向对象的模型。我们先梳理用c实现面向对应的基本逻辑。面向对象
+ 的三个特征是：封装、继承和多态。封装可以用struct实现。继承可以用struct包含的方式
+ 实现，把父类的struct放到子类struct的最开始的位置，这样子类的指针可以直接强制转换
+ 成父类的指针，在子类的函数，比如子类的初始化函数里可以直接得到父类的指针，然后调用
+ 父类的初始化函数。多态可以用函数支持的方式实现。
+
+ qemu里的实现，多了TypeInfo这个概念，它是class的描述。
+
 1. 对象的定义
 -------------
 
@@ -17,7 +28,11 @@ qemu里使用面向对象的模型来模拟相关的元素，可以想象这样�
        /* 用宏定义了一个动态库的初始化函数, qemu编译出的库有？*/
    +-> module_init
     +-> register_module_init
+          /* 如下都用edu设备举例，这里的fn就是pci_edu_register_types */
       +-> e->init = fn
+ 
+ fn这个函数一般是TypeInfo的注册函数, 把TypeInfo挂到系统的链表里。class是随后解析
+ Typeinfo的内容动态生成的。
 
 2. 对象的生成
 -------------
@@ -34,7 +49,12 @@ qemu里使用面向对象的模型来模拟相关的元素，可以想象这样�
 	      */     
          +-> ModuleEntry->init
 	   ...?
-	       /* 初始化class，哪里会调用？*/
+	       /* 初始化class，哪里会调用？type_initialize是根据注册的Type创建
+	        * class的函数。但是，一时找不见哪里调用，但是可以看到，创建class
+		* 的具体实例的时候，如果class没有创建，就会创建class，被创建的class
+		* 的指针会放到注册Type的class域段。所以下面的type_initialize的调用
+		* 关系并不准确。
+		*/
 	   +-> type_initialize
 	       /* e.g. qemu/hw/misc/edu.c会调用到edu_class_init */
 	     +-> edu_class_init
@@ -52,21 +72,107 @@ qemu里使用面向对象的模型来模拟相关的元素，可以想象这样�
 	       +-> object_new
 	       ...
 
- /* 具体device对象的生成 */
+ Type里的realize的函数是怎么调用到的。
 
- 根据命令行参数和class的定义，生成具体的实例。如上main函数里在object_new里生成
- 一个具体实例。
 
-3.interface是什么
------------------
-
-4.properties是什么
+3.properties是什么
 ------------------
 
  link属性
  child属性
 
+4.interface是什么
+-----------------
+
+
 5. 一个例子
 -----------
  
  这里写一个dma engine的qemu设备。
+
+struct ObjectClass
+{
+    /*< private >*/
+    Type type;
+    GSList *interfaces;
+
+    const char *object_cast_cache[OBJECT_CLASS_CAST_CACHE];
+    const char *class_cast_cache[OBJECT_CLASS_CAST_CACHE];
+
+    ObjectUnparent *unparent;
+
+    GHashTable *properties;
+};
+
+typedef struct DeviceClass {
+    /*< private >*/
+    ObjectClass parent_class;
+    /*< public >*/
+
+    DECLARE_BITMAP(categories, DEVICE_CATEGORY_MAX);
+    const char *fw_name;
+    const char *desc;
+
+    /*
+     * The underscore at the end ensures a compile-time error if someone
+     * assigns to dc->props instead of using device_class_set_props.
+     */
+    Property *props_;
+
+    /*
+     * Can this device be instantiated with -device / device_add?
+     * All devices should support instantiation with device_add, and
+     * this flag should not exist.  But we're not there, yet.  Some
+     * devices fail to instantiate with cryptic error messages.
+     * Others instantiate, but don't work.  Exposing users to such
+     * behavior would be cruel; clearing this flag will protect them.
+     * It should never be cleared without a comment explaining why it
+     * is cleared.
+     * TODO remove once we're there
+     */
+    bool user_creatable;
+    bool hotpluggable;
+
+    /* callbacks */
+    /*
+     * Reset method here is deprecated and replaced by methods in the
+     * resettable class interface to implement a multi-phase reset.
+     * TODO: remove once every reset callback is unused
+     */
+    DeviceReset reset;
+    DeviceRealize realize;
+    DeviceUnrealize unrealize;
+
+    /* device state */
+    const VMStateDescription *vmsd;
+
+    /* Private to qdev / bus.  */
+    const char *bus_type;
+} DeviceClass;
+
+typedef struct PCIDeviceClass {
+    DeviceClass parent_class;
+
+    void (*realize)(PCIDevice *dev, Error **errp);
+    PCIUnregisterFunc *exit;
+    PCIConfigReadFunc *config_read;
+    PCIConfigWriteFunc *config_write;
+
+    uint16_t vendor_id;
+    uint16_t device_id;
+    uint8_t revision;
+    uint16_t class_id;
+    uint16_t subsystem_vendor_id;       /* only for header type = 0 */
+    uint16_t subsystem_id;              /* only for header type = 0 */
+
+    /*
+     * pci-to-pci bridge or normal device.
+     * This doesn't mean pci host switch.
+     * When card bus bridge is supported, this would be enhanced.
+     */
+    bool is_bridge;
+
+    /* rom bar */
+    const char *romfile;
+} PCIDeviceClass;
+
