@@ -74,105 +74,57 @@ qemu里使用面向对象的模型来模拟相关的元素，可以想象这样�
 
  Type里的realize的函数是怎么调用到的。
 
-
 3.properties是什么
 ------------------
 
+ 所谓属性，就是在一个对象里定义的一些功能，这些功能有名字，有对应的执行函数，还有
+ 添加和删除函数。当添加一个属性的时候，就是把这个属性已经对应的执行函数保存到对象
+ 专门用来存各种属性的一个hash table。当执行属性的操作时，就是执行对应属性附带的
+ 执行函数。
+
+ 我们还是拿edu这个设备为例。edu在实例初始化的时候挂给PCIDeviceClass的realize一个
+ 回调函数pci_edu_realize，这个函数就是PCI设备里realize属性的执行函数。我们需要明确
+ 这个realize属性在哪里添加和在哪里调用。
+
+ device class的初始化函数里增加了realized属性：
+ /* hw/core/qdev.c */
+ device_class_init
+      /*
+       * 把realized属性加到ObjectClass里。device_set_realized里会调用DeviceClass里的
+       * realize回调函数。DeviceClass里的realize回调在pci_device_class_init里挂成
+       * pci_qdev_realize。pci_qdev_realize调用PCIDeviceClass里的realize函数，这个
+       * 函数又是由具体设备的class init函数添加，比如edu的edu_class_init。
+       */
+   -> object_class_property_add_bool(ObjectClass, "realized", device_get_realized, device_set_realized)
+
+ 在如上的qdev_device_add里，在创建了设备的实例后，后调用qdev_realize把设备realize，
+ 这个函数会从Device这一层，层层的调用realize函数:
+ /* hw/core/qdev.c */
+ qdev_realize
+   -> object_property_set_bool(OBJECT(dev), "realized", true, errp)
+     [...]
+     -> object_property_set
+          /* 可以看到realized相关的add和find都是发生在Object、ObjectClass这个层次 */
+       -> ObjectProperty *prop = object_property_find(obj, name, errp)
+            /* 先用obj找到ObjectClass，再在ObjectClass找property */
+         -> object_class_property_find(klass, name, NULL)
+	    /* 在Object里找property */
+         -> g_hash_table_lookup(obj->properties, name)
+
+       -> prop->set(obj, v, name, prop->opaque, &err)
+
+ 如上，分析qemu的qom重点关注如下的文件: hw/misc/edu.c, hw/pci/pci.c, hw/core/qdev.c,
+ qom/object.c。各个层级的Type定义分别对应的文件里(这里用pci设备为例)
+
  link属性
+
  child属性
 
-4.interface是什么
------------------
+4.interface
+-----------
 
 
 5. 一个例子
 -----------
  
  这里写一个dma engine的qemu设备。
-
-struct ObjectClass
-{
-    /*< private >*/
-    Type type;
-    GSList *interfaces;
-
-    const char *object_cast_cache[OBJECT_CLASS_CAST_CACHE];
-    const char *class_cast_cache[OBJECT_CLASS_CAST_CACHE];
-
-    ObjectUnparent *unparent;
-
-    GHashTable *properties;
-};
-
-typedef struct DeviceClass {
-    /*< private >*/
-    ObjectClass parent_class;
-    /*< public >*/
-
-    DECLARE_BITMAP(categories, DEVICE_CATEGORY_MAX);
-    const char *fw_name;
-    const char *desc;
-
-    /*
-     * The underscore at the end ensures a compile-time error if someone
-     * assigns to dc->props instead of using device_class_set_props.
-     */
-    Property *props_;
-
-    /*
-     * Can this device be instantiated with -device / device_add?
-     * All devices should support instantiation with device_add, and
-     * this flag should not exist.  But we're not there, yet.  Some
-     * devices fail to instantiate with cryptic error messages.
-     * Others instantiate, but don't work.  Exposing users to such
-     * behavior would be cruel; clearing this flag will protect them.
-     * It should never be cleared without a comment explaining why it
-     * is cleared.
-     * TODO remove once we're there
-     */
-    bool user_creatable;
-    bool hotpluggable;
-
-    /* callbacks */
-    /*
-     * Reset method here is deprecated and replaced by methods in the
-     * resettable class interface to implement a multi-phase reset.
-     * TODO: remove once every reset callback is unused
-     */
-    DeviceReset reset;
-    DeviceRealize realize;
-    DeviceUnrealize unrealize;
-
-    /* device state */
-    const VMStateDescription *vmsd;
-
-    /* Private to qdev / bus.  */
-    const char *bus_type;
-} DeviceClass;
-
-typedef struct PCIDeviceClass {
-    DeviceClass parent_class;
-
-    void (*realize)(PCIDevice *dev, Error **errp);
-    PCIUnregisterFunc *exit;
-    PCIConfigReadFunc *config_read;
-    PCIConfigWriteFunc *config_write;
-
-    uint16_t vendor_id;
-    uint16_t device_id;
-    uint8_t revision;
-    uint16_t class_id;
-    uint16_t subsystem_vendor_id;       /* only for header type = 0 */
-    uint16_t subsystem_id;              /* only for header type = 0 */
-
-    /*
-     * pci-to-pci bridge or normal device.
-     * This doesn't mean pci host switch.
-     * When card bus bridge is supported, this would be enhanced.
-     */
-    bool is_bridge;
-
-    /* rom bar */
-    const char *romfile;
-} PCIDeviceClass;
-
