@@ -1,0 +1,75 @@
+uadk pick ctx
+=============
+
+-v0.1 Sherlock 2021.6.28 init
+
+我们面对的问题是：wd_do_comp_sync里要调用用户提供的一个调度函数：pick_next_ctx，
+所以，整个对用户的接口就是wd_do_comp_sync以及pick_next_ctx，pick_next_ctx的入参
+是调度要使用的参数，我们目前的定义是:
+
+pick_next_ctx(handle_t h_sched_ctx, const void *req, const struct sched_key *key)
+
+第一次参数是调用的上下文，这个是用户为了方便，根据现有资源，用户自己组织的调度
+上下文，在wd_do_comp_sync里不可见; 第二个参数是各种算法请求，这个入参的意义比较直白，
+就是叫req里的属性也可以影响调度; 第三个参数是封装的可能影响调度的参数，这个参数后面
+可能会变化，一旦有变化就会破坏接口。我们需要找到一种相对解耦的设计，调度的参数可以
+在后续灵活的加入，而且还不破坏现有的接口。
+
+我们考虑现在用户已知的概念: ctx, req, sesion, ctx已经被封装到了h_sched_ctx，req
+已经有了，如果用户可以依托session获取sched_key里的调度参数，我们就可以把接口做成:
+
+pick_next_ctx(handle_t h_sched_ctx, const void *req, handle_t h_sess)
+
+并且提供获取参数的接口:
+
+	numa_id = wd_<alg>_sess_get_numa_id(handle_t h_sess)
+	mode = wd_<alg>_sess_get_mode(handle_t h_sess)
+	type = wd_<alg>_sess_get_type(handle_t h_sess)
+
+如果将来新增了调度的参数，我们就新加一个接口：
+  
+	new_param = wd_<alg>_sess_get_new_param(handle_t h_sess)
+
+用户改pick_next_ctx里的调度算法，而接口不需要改动。
+
+这个设计附加了一个约束，就是一部分调度的参数是和sesson绑定的。我们分析这个约束是
+本来就有的，还是我们人为加上去的。session的原本语义是，为一系列的请求提供一个会话
+的上下文，比如，需要流式执行的任务就可以用一个session，有相同加解密秘钥的请求也
+共用一个session。
+
+基于这样的认识，一个session的type是相同的，比如在压缩解压缩里，就是要么是压缩，
+要么是解压缩。mode和numa_id似乎是新赋予session的语义，因为，一个session，完全可能
+由于cpu迁移，他的numa是动态变化的，赋予一个session numa的概念，就意味着要把session
+绑在特定numa上，mode代表同步还是异步，申请一个session，同步异步都可以用。所以，
+我们要决定是否给session加上numa id和mode的语义。mode好分析一些，不定义session的
+同步异步，那么就可以支持同步异步请求可以发到一个session上，这个做也不会给用户带来
+啥好处，所以我们可以给session加上mode这个语义。numa id和session绑定需要明确相关
+的语义，它可以解释成，我通过numa id参数申请一个session，这个session就一直跑在相关
+numa上，这个就需要我们实现保证，它还可以解释成，我通过numa id参数申请一个session，
+我需要给用户保证随后通过这个session下发的请求到发到对于numa上的设备上，至于执行
+下发任务在哪个NUMA上，我是无法保证的，需要用户保证，第二种语义的实现需要配合用户
+实现的调度。通过session的nuam id把用户的线程绑在特定numa上显然不太合适。我们如果
+选用第二种的方式，实际上是把numa这个锅给了用户，实际上如果我们可以做到session不
+感知numa，在调度里动态的感知numa，然后调度给特定numa的队列要更友好，但是这就要求
+我们感知numa的开销不大，不能通过系统调用，需要通过读个寄存器之类的方法得到，目前
+似乎arm64上还没有这样的正规支持。
+
+对于调度里加锁影响性能的问题，我们可以针对不同的session把请求hash到各个现有的队列
+上，这样就可以去掉锁，需要只要保证hash的均匀就可以。结合以上的设计，我们可以增加
+一个获取session id的接口：
+	
+	sess_id = wd_<alg>_sess_get_id(handle_t h_sess)
+
+我们在pick_next_ctx里先获取这个id，然后在hash到相关的ctx上:
+
+	pick_next_ctx(handle_t h_sched_ctx, const void *req, handle_t h_sess)
+	{
+		sess_id = wd_<alg>_sess_get_id(h_sess);
+
+		ctx_id = hash(sess_id);
+
+		return ctx_id;
+	}
+
+
+Note: 设计是一个不断增加约束的过程，增加的约束如果和显示不符，就会限制构架的发展。
