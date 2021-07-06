@@ -1,0 +1,80 @@
+how to compile HiSi UEFI
+========================
+
+-v0.1 2016.5.30 wangzhou init
+
+
+1. git clone https://github.com/open-estuary/uefi.git
+
+2. sherlock@T440:~/repos/uefi$ git submodule init[1]
+
+3. sherlock@T440:~/repos/uefi$ git submodule update[2]
+
+   You can see that there will have 4 submodules been cloned. So we have branches
+   in edk2 repo, branches in 4 submodules. What is the relationship among these
+   branches? These branches are defined by UEFI team(Guo Heyi), currectly the
+   relationship are:
+
+   edk2: master should use OPP(OpenPlatformPkg): hisi-wip-03
+
+   OR:
+   edk2: estuary-rp should use OPP(OpenPlatformPkg): d02-d03-upstream-04
+
+4. uefi-tools/uefi-build.sh -c LinaroPkg/platforms.config d03
+
+5. we can find the UEFI binary in uefi/Build/D03/RELEASE_GCC49/FV/D03.fd
+
+6. but we can not put D03.fd in D03 by iBMC, if you want to use iBMC, you should
+   firstly translate D03.fd to another format using a tool called BuildHpm.
+ 
+   also you could use command:
+
+   provision your_ftp_IP -u account -p passwd -f D03.fd -a 100000
+   spiwfmem 100000 000000 300000
+   
+   run reset in EBL to reboot system.
+
+[1]
+Submodule 'LinaroPkg' (https://git.linaro.org/people/heyi.guo/LinaroPkg.git) registered for path 'LinaroPkg'
+Submodule 'OpenPlatformPkg' (https://git.linaro.org/people/heyi.guo/OpenPlatformPkg.git) registered for path 'OpenPlatformPkg'
+Submodule 'arm-trusted-firmware' (https://github.com/96boards/arm-trusted-firmware.git) registered for path 'arm-trusted-firmware'
+Submodule 'l-loader' (https://github.com/96boards/l-loader.git) registered for path 'l-loader'
+Submodule 'uefi-tools' (https://git.linaro.org/uefi/uefi-tools.git) registered for path 'uefi-tools'
+
+[2]
+Cloning into 'LinaroPkg'... 
+remote: Counting objects: 57, done.
+remote: Compressing objects: 100% (55/55), done.
+remote: Total 57 (delta 17), reused 0 (delta 0)
+Unpacking objects: 100% (57/57), done.
+Checking connectivity... done.
+Submodule path 'LinaroPkg': checked out 'c7c6db73e75c89bc3eb1de24591d71147428d4f2'
+Cloning into 'OpenPlatformPkg'...
+remote: Counting objects: 5570, done.
+remote: Compressing objects: 100% (2981/2981), done.
+remote: Total 5570 (delta 3273), reused 4412 (delta 2337)
+Receiving objects: 100% (5570/5570), 3.75 MiB | 1.35 MiB/s, done.
+Resolving deltas: 100% (3273/3273), done.
+Checking connectivity... done.
+Submodule path 'OpenPlatformPkg': checked out '5674ea09c4b17197fa1a08ea5e64957775c9020b'
+Cloning into 'arm-trusted-firmware'...
+remote: Counting objects: 10078, done.
+remote: Total 10078 (delta 0), reused 0 (delta 0), pack-reused 10078
+Receiving objects: 100% (10078/10078), 4.03 MiB | 341.00 KiB/s, done.
+Resolving deltas: 100% (6429/6429), done.
+Checking connectivity... done.
+Submodule path 'arm-trusted-firmware': checked out '7fb9b0e1bf90d167ba451fa3d1485ad07ca5c1da'
+Cloning into 'l-loader'...
+remote: Counting objects: 136, done.
+remote: Total 136 (delta 0), reused 0 (delta 0), pack-reused 136
+Receiving objects: 100% (136/136), 3.65 MiB | 584.00 KiB/s, done.
+Resolving deltas: 100% (70/70), done.
+Checking connectivity... done.
+Submodule path 'l-loader': checked out '6b784ad5c4ab00e2b1c6f53cd5f74054e5d00a78'
+Cloning into 'uefi-tools'...
+remote: Counting objects: 879, done.
+remote: Compressing objects: 100% (876/876), done.
+remote: Total 879 (delta 533), reused 0 (delta 0)
+Receiving objects: 100% (879/879), 183.07 KiB | 120.00 KiB/s, done.
+Resolving deltas: 100% (533/533), done.
+Checking connectivity... done.

@@ -1,0 +1,34 @@
+fedora vnc access remote server
+-------------------------------
+
+-v0.1 2017.4.27 Sherlock init
+
+
+1. what we should install in client and server
+
+- yum install tigervnc (in client)
+
+- yum install tigervnc-server (in server)
+
+- yum groupinstall y "Server with GUI" (in server)
+
+- yum install firefox
+
+2. in server
+
+- vncpasswd
+
+  start vncserver
+- vncserver :1 -geometry 800x600 -depth 24 
+
+  kill above session
+- vncserver -kill :1
+
+  list al session
+- vncserver -list
+
+3. in client
+
+- vncviewer BMC_IP:1
+
+  then you can access remote server's desktop
