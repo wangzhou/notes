@@ -1,0 +1,66 @@
+
+where to get iommu group for a PCIe device
+------------------------------------------
+During enumeration of PCI:
+```
+pci_device_add
+        /* Using info in DT or ACPI to update iommu group */
+    --> pci_dma_configure
+            /* only consider DT below */
+        --> of_dma_configure
+            ...
+                /* just return iommu_ops */
+            --> of_iommu_configure
+                /* in arch/arm64/mm/dma-mapping.c */
+            --> arch_setup_dma_ops
+                --> __iommu_setup_dma_ops
+                        /* will update dev->archdata.dma_ops with iommu_dma_ops
+                         * in arch/arm64/mm/dma-mapping.c
+                         */
+                    --> do_iommu_attach
+```
+
+where to initial iommu group
+----------------------------
+in DT case:
+```
+arm_smmu_init
+        /* register arm-smmu-v3 hardware specific function */
+    --> platform_driver_register(&arm_smmu_driver)
+        --> probe
+        /* register iommu_ops(arm_smmu_ops) to bus_type, and init iommu:
+         * just create iommu_group for a device.
+         */
+    --> bus_set_iommu(&pci_bus_type, &arm_smmu_ops) 
+            /* add each device in this bus to an iommu_group  */
+        --> iommu_bus_init
+            --> bus_for_each_dev(bus, NULL, &cb, add_iommu_group)
+                    /* add this dev to an iommu_group, so data is the iommu ops */
+                --> add_iommu_group(struct device *dev, void *data)
+                        /* arm_smmu_add_device in arm-smmu-v3.c */
+                    --> ops->add_device(dev)
+                            /* try to find which iommu_group this dev binded to.
+                             * return the iommu_group if can be found dev->iommu_group
+                             * otherwise, call iommu ops->device_group, namely
+                             * call pci_device_group, which will at last create
+                             * an iommu_group
+                             */
+                        --> iommu_group_get_for_dev
+                            /* try to find a iommu private data in iommu_group
+                             * if not have, create one, add arm smmu v3 specific
+                             * arm_smmu_group and arm_smmu_device.
+                             */
+                        --> iommu_group_get_iommudata
+                                /* if above can not find arm smmu v3 specific
+                                 * struct, this function will be called to parse
+                                 * DT to get the arm smmu v3 platform device, then
+                                 * get arm_smmu_device.
+                                 *
+                                 * from this point, we get the arm smmu v3 specific
+                                 * struct which has been initialized in probe of
+                                 * arm smmu v3 driver.
+                                 */
+                            --> arm_smmu_get_for_pci_dev
+                        --> hardward specific configure...
+```
+

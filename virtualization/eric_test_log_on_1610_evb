@@ -1,0 +1,27 @@
+sh-4.2# QEMU: Terminated
+[  849.110203] arm-smmu-v3 a0040000.smmu: CMD_SYNC timeout
+[  849.115566] arm-smmu-v3 a0040000.smmu: CMD_SYNC timeout
+[  849.120924] arm-smmu-v3 a0040000.smmu: CMD_SYNC timeout
+[  849.126311] arm-smmu-v3 a0040000.smmu: CMD_SYNC timeout
+[  849.131681] arm-smmu-v3 a0040000.smmu: CMD_SYNC timeout
+[  849.137050] arm-smmu-v3 a0040000.smmu: CMD_SYNC timeout
+[  849.142417] arm-smmu-v3 a0040000.smmu: CMD_SYNC timeout
+[  849.147790] arm-smmu-v3 a0040000.smmu: CMD_SYNC timeout
+[  849.153161] arm-smmu-v3 a0040000.smmu: CMD_SYNC timeout
+[  849.158531] arm-smmu-v3 a0040000.smmu: CMD_SYNC timeout
+
+...
+
+[  870.393912] INFO: rcu_preempt detected stalls on CPUs/tasks:
+[  870.399608] 	1-...: (0 ticks this GP) idle=e01/140000000000000/0 softirq=6645/6645 fqs=169 
+[  870.407991] 	(detected by 4, t=5306 jiffies, g=2691, c=2690, q=70)
+
+...
+
+[  933.653912] INFO: rcu_preempt detected stalls on CPUs/tasks:
+[  933.659605] 	1-...: (0 ticks this GP) idle=e01/140000000000000/0 softirq=6645/6645 fqs=685 
+[  933.667988] 	(detected by 4, t=21121 jiffies, g=2691, c=2690, q=70)
+
+
+
+Note: host will hang up :(

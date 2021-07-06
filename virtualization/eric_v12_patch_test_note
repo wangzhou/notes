@@ -1,0 +1,326 @@
+eric_v12 patch test note
+------------------------
+
+0. Test on D03 in openlab1.0 131 board
+
+   kernel version and dts: /home/wangzhou/repo/eric_v12/linux in openlab1.0 101server
+   branch: wang_test_pcie_pass_v4.8-rc5-v12
+
+   qemu version: https://github.com/eauger/qemu.git
+   branch: v2.7.0-vITS-v6
+
+   using the uefi in 131 board in openlab1.0, in UEFI shell, should modify some
+   configurations for iATU:
+
+   mfill 0xa0090900 0x1 
+   mfill 0xa0090910 0x0
+   mfill 0xa009090c 0xb0000000
+   mfill 0xa0090914 0xb01fffff
+
+   mfill 0xa0091004 0x2
+
+   In host machine:
+1. mkdir /lib/modules/version
+
+   touch /lib/modules/version/modules.order
+   touch /lib/modules/version/modules.builtin
+
+   /* before do this, copy mdio.ko ixgbe.ko, ixgbevf.ko, vfio.ko vfio-pci.ko,
+    * vfio_virqfd.ko, vfio_iommu_type1.ko, irqbypass.ko from compile machine to
+    * host machine's /
+    */
+2. depmod /mdio.ko /ixgbe.ko /ixgbevf.ko /vfio* /irqbypass.ko
+
+3. modprobe ixgbe
+   modprobe ixgbevf
+
+xgbe: Intel(R) 10 Gigabit PCI Express Network Driver - version 4.4.0-k
+[  679.756095] ixgbe: Copyright (c) 1999-2016 Intel Corporation.
+[  679.756185] ixgbe 0000:01:00.0: enabling device (0000 -> 0002)
+[  679.931506] ixgbe 0000:01:00.0: Multiqueue Enabled: Rx Queue count = 16, Tx Queue count = 16
+[  679.931631] ixgbe 0000:01:00.0: PCI Express bandwidth of 32GT/s available
+[  679.931635] ixgbe 0000:01:00.0: (Speed:5.0GT/s, Width: x8, Encoding Loss:20%)
+[  679.931715] ixgbe 0000:01:00.0: MAC: 2, PHY: 17, SFP+: 5, PBA No: FFFFFF-0FF
+[  679.931719] ixgbe 0000:01:00.0: 68:a8:28:17:96:b5
+[  679.935707] ixgbe 0000:01:00.0 eth20: renamed from eth1
+[  679.936429] ixgbe 0000:01:00.0: Intel(R) 10 Gigabit Network Connection
+[  679.936469] ixgbe 0000:01:00.1: enabling device (0000 -> 0002)
+[  679.952490] systemd-udevd[2700]: renamed network interface eth1 to eth20
+[  681.087518] ixgbe 0000:01:00.1: Multiqueue Enabled: Rx Queue count = 16, Tx Queue count = 16
+[  681.087644] ixgbe 0000:01:00.1: PCI Express bandwidth of 32GT/s available
+[  681.087648] ixgbe 0000:01:00.1: (Speed:5.0GT/s, Width: x8, Encoding Loss:20%)
+[  681.087729] ixgbe 0000:01:00.1: MAC: 2, PHY: 1, PBA No: FFFFFF-0FF
+[  681.087732] ixgbe 0000:01:00.1: 68:a8:28:17:96:b6
+[  681.093134] ixgbe 0000:01:00.1: Intel(R) 10 Gigabit Network Connection
+[  681.096864] ixgbe 0000:01:00.1 eth19: renamed from eth1
+[  681.136469] systemd-udevd[2700]: renamed network interface eth1 to eth19
+[  717.243014] ixgbevf: Intel(R) 10 Gigabit PCI Express Virtual Function Network Driver - version 2.12.1-k
+[  717.243018] ixgbevf: Copyright (c) 2009 - 2015 Intel Corporation.
+
+4. find /sys | grep -i sriov   # use this to find related sys-fs files
+
+root@linaro-developer:~# find /sys | grep -i sriov
+/sys/devices/platform/soc/a0090000.pcie/pci0000:00/0000:00:00.0/0000:01:00.0/sriov_numvfs
+/sys/devices/platform/soc/a0090000.pcie/pci0000:00/0000:00:00.0/0000:01:00.0/sriov_totalvfs
+/sys/devices/platform/soc/a0090000.pcie/pci0000:00/0000:00:00.0/0000:01:00.1/sriov_numvfs
+/sys/devices/platform/soc/a0090000.pcie/pci0000:00/0000:00:00.0/0000:01:00.1/sriov_totalvfs
+
+5. echo 8 > /sys/devices/platform/soc/a0090000.pcie/pci0000:00/0000:00:00.0/0000:01:00.0/sriov_numvfs
+
+dmesg:
+[ 1089.216512] ixgbe 0000:01:00.0 eth20: SR-IOV enabled with 8 VFs
+[ 1089.320434] pci 0000:01:10.0: [8086:10ed] type 00 class 0x020000
+[ 1089.320624] iommu: Adding device 0000:01:10.0 to group 9
+[ 1089.320708] ixgbevf 0000:01:10.0: enabling device (0000 -> 0002)
+[ 1089.322039] ixgbevf 0000:01:10.0: PF still in reset state.  Is the PF interface up?
+[ 1089.322042] ixgbevf 0000:01:10.0: Assigning random MAC address
+[ 1089.322301] ixgbevf 0000:01:10.0: 56:91:1a:3f:35:4f
+[ 1089.322311] ixgbevf 0000:01:10.0: MAC: 1
+[ 1089.322314] ixgbevf 0000:01:10.0: Intel(R) 82599 Virtual Function
+[ 1089.322355] pci 0000:01:10.2: [8086:10ed] type 00 class 0x020000
+[ 1089.322516] iommu: Adding device 0000:01:10.2 to group 10
+[ 1089.322568] ixgbevf 0000:01:10.2: enabling device (0000 -> 0002)
+[ 1089.323813] ixgbevf 0000:01:10.2: PF still in reset state.  Is the PF interface up?
+[ 1089.323816] ixgbevf 0000:01:10.2: Assigning random MAC address
+[ 1089.324040] ixgbevf 0000:01:10.2: d2:e2:f7:37:2a:5e
+[ 1089.324044] ixgbevf 0000:01:10.2: MAC: 1
+[ 1089.324046] ixgbevf 0000:01:10.2: Intel(R) 82599 Virtual Function
+[ 1089.324085] pci 0000:01:10.4: [8086:10ed] type 00 class 0x020000
+[ 1089.324241] iommu: Adding device 0000:01:10.4 to group 11
+[ 1089.324291] ixgbevf 0000:01:10.4: enabling device (0000 -> 0002)
+[ 1089.325549] ixgbevf 0000:01:10.4: PF still in reset state.  Is the PF interface up?
+[ 1089.325552] ixgbevf 0000:01:10.4: Assigning random MAC address
+[ 1089.325775] ixgbevf 0000:01:10.4: 6a:a7:65:4e:6f:81
+[ 1089.325779] ixgbevf 0000:01:10.4: MAC: 1
+[ 1089.325781] ixgbevf 0000:01:10.4: Intel(R) 82599 Virtual Function
+[ 1089.325819] pci 0000:01:10.6: [8086:10ed] type 00 class 0x020000
+[ 1089.325976] iommu: Adding device 0000:01:10.6 to group 12
+[ 1089.326024] ixgbevf 0000:01:10.6: enabling device (0000 -> 0002)
+[ 1089.327269] ixgbevf 0000:01:10.6: PF still in reset state.  Is the PF interface up?
+[ 1089.327272] ixgbevf 0000:01:10.6: Assigning random MAC address
+[ 1089.327496] ixgbevf 0000:01:10.6: 92:df:17:5f:a4:75
+[ 1089.327500] ixgbevf 0000:01:10.6: MAC: 1
+[ 1089.327502] ixgbevf 0000:01:10.6: Intel(R) 82599 Virtual Function
+[ 1089.327539] pci 0000:01:11.0: [8086:10ed] type 00 class 0x020000
+[ 1089.327695] iommu: Adding device 0000:01:11.0 to group 13
+[ 1089.327742] ixgbevf 0000:01:11.0: enabling device (0000 -> 0002)
+[ 1089.329002] ixgbevf 0000:01:11.0: PF still in reset state.  Is the PF interface up?
+[ 1089.329005] ixgbevf 0000:01:11.0: Assigning random MAC address
+[ 1089.329221] ixgbevf 0000:01:11.0: 0e:60:f1:64:25:24
+[ 1089.329224] ixgbevf 0000:01:11.0: MAC: 1
+[ 1089.329226] ixgbevf 0000:01:11.0: Intel(R) 82599 Virtual Function
+[ 1089.329263] pci 0000:01:11.2: [8086:10ed] type 00 class 0x020000
+[ 1089.329422] iommu: Adding device 0000:01:11.2 to group 14
+[ 1089.329468] ixgbevf 0000:01:11.2: enabling device (0000 -> 0002)
+[ 1089.330708] ixgbevf 0000:01:11.2: PF still in reset state.  Is the PF interface up?
+[ 1089.330711] ixgbevf 0000:01:11.2: Assigning random MAC address
+[ 1089.330929] ixgbevf 0000:01:11.2: 96:a0:8a:da:8b:5c
+[ 1089.330932] ixgbevf 0000:01:11.2: MAC: 1
+[ 1089.330935] ixgbevf 0000:01:11.2: Intel(R) 82599 Virtual Function
+[ 1089.330971] pci 0000:01:11.4: [8086:10ed] type 00 class 0x020000
+[ 1089.331128] iommu: Adding device 0000:01:11.4 to group 15
+[ 1089.331172] ixgbevf 0000:01:11.4: enabling device (0000 -> 0002)
+[ 1089.332423] ixgbevf 0000:01:11.4: PF still in reset state.  Is the PF interface up?
+[ 1089.332430] ixgbevf 0000:01:11.4: Assigning random MAC address
+[ 1089.332652] ixgbevf 0000:01:11.4: 26:15:d2:1f:d7:a4
+[ 1089.332656] ixgbevf 0000:01:11.4: MAC: 1
+[ 1089.332659] ixgbevf 0000:01:11.4: Intel(R) 82599 Virtual Function
+[ 1089.332695] pci 0000:01:11.6: [8086:10ed] type 00 class 0x020000
+[ 1089.332853] iommu: Adding device 0000:01:11.6 to group 16
+[ 1089.332902] ixgbevf 0000:01:11.6: enabling device (0000 -> 0002)
+[ 1089.334141] ixgbevf 0000:01:11.6: PF still in reset state.  Is the PF interface up?
+[ 1089.334144] ixgbevf 0000:01:11.6: Assigning random MAC address
+[ 1089.334360] ixgbevf 0000:01:11.6: 42:c3:5b:f3:b0:1d
+[ 1089.334364] ixgbevf 0000:01:11.6: MAC: 1
+[ 1089.334366] ixgbevf 0000:01:11.6: Intel(R) 82599 Virtual Function
+[ 1089.394149] ixgbe 0000:01:00.0: Multiqueue Enabled: Rx Queue count = 4, Tx Queue count = 4
+
+root@linaro-developer:/# lspci
+0000:00:00.0 PCI bridge: Device 19e5:1610 (rev 01)
+0000:01:00.0 Ethernet controller: Intel Corporation 82599ES 10-Gigabit SFI/SFP+ Network Connection (rev 01)
+0000:01:00.1 Ethernet controller: Intel Corporation 82599ES 10-Gigabit SFI/SFP+ Network Connection (rev 01)
+0000:01:10.0 Ethernet controller: Intel Corporation 82599 Ethernet Controller Virtual Function (rev 01)
+0000:01:10.2 Ethernet controller: Intel Corporation 82599 Ethernet Controller Virtual Function (rev 01)
+0000:01:10.4 Ethernet controller: Intel Corporation 82599 Ethernet Controller Virtual Function (rev 01)
+0000:01:10.6 Ethernet controller: Intel Corporation 82599 Ethernet Controller Virtual Function (rev 01)
+0000:01:11.0 Ethernet controller: Intel Corporation 82599 Ethernet Controller Virtual Function (rev 01)
+0000:01:11.2 Ethernet controller: Intel Corporation 82599 Ethernet Controller Virtual Function (rev 01)
+0000:01:11.4 Ethernet controller: Intel Corporation 82599 Ethernet Controller Virtual Function (rev 01)
+0000:01:11.6 Ethernet controller: Intel Corporation 82599 Ethernet Controller Virtual Function (rev 01)
+0001:e0:00.0 PCI bridge: Device 19e5:1610 (rev 01)
+0001:e1:00.0 RAID bus controller: LSI Logic / Symbios Logic MegaRAID SAS-3 3108 [Invader] (rev 02)
+0002:80:00.0 PCI bridge: Device 19e5:1610 (rev 01)
+0002:81:00.0 PCI bridge: PLX Technology, Inc. Device 8725 (rev ca)
+0002:82:00.0 PCI bridge: PLX Technology, Inc. Device 8725 (rev ca)
+0002:82:01.0 PCI bridge: PLX Technology, Inc. Device 8725 (rev ca)
+0002:82:02.0 PCI bridge: PLX Technology, Inc. Device 8725 (rev ca)
+0002:82:08.0 PCI bridge: PLX Technology, Inc. Device 8725 (rev ca)
+0002:84:00.0 VGA compatible controller: Device 19e5:1711 (rev 01)
+
+6. modprobe -v vfio-pci
+
+root@linaro-developer:/# modprobe -v vfio-pci
+insmod /vfio.ko
+insmod /vfio_virqfd.ko
+insmod /irqbypass.ko
+insmod /vfio-pci.ko
+
+  modprobe -v vfio_iommu_type1
+
+dmesg:
+[ 1562.889986] VFIO - User Level meta-driver version: 0.3
+
+7. ifconfig eth20 up // eth20 indicates the PF net interface
+
+dmesg:
+[ 1817.768137] ixgbe 0000:01:00.0: registered PHC device on eth20
+[ 1817.933208] ixgbe 0000:01:00.0 eth20: detected SFP+: 5
+[ 1818.072447] ixgbe 0000:01:00.0 eth20: NIC Link is Up 10 Gbps, Flow Control: RX/TX
+
+8. echo vfio-pci > /sys/bus/pci/devices/0000\:01\:10.0/driver_override
+   echo 0000:01:10.0 > /sys/bus/pci/drivers/ixgbevf/unbind
+   echo 0000:01:10.0 > /sys/bus/pci/drivers_probe
+
+/* creat group 9 */
+root@linaro-developer:/dev/vfio# ls
+9  vfio
+
+9. run:(cntrl a + x logout vm)
+
+/* ixgbevf driver should be compiled into Image below */
+qemu-system-aarch64 \
+-machine virt,gic-version=3 \
+-cpu cortex-a57 \
+-m 1024 \
+-kernel ./Image \
+-initrd ./guestfs.cpio.gz \
+-nographic \
+-net none -device vfio-pci,host=0000:01:10.0
+
+log:
+root@linaro-developer:~# ./qemu-run.sh
+[    0.000000] Booting Linux on physical CPU 0x0
+[    0.000000] Linux version 4.7.0-rc7+ (wangzhou@HTSAT-OPENLAB-SERVER) (gcc version 4.9.2 20140904 (prerelease) (crosstool-NG linaro-1.13.1-4.9-2014.09 - Linaro GCC 4.9-2014.09) ) #13 SMP PREEMPT Fri Sep 2 14:58:11 HKT 2016
+[    0.000000] Boot CPU: AArch64 Processor [411fd071]
+[    0.000000] efi: Getting EFI parameters from FDT:
+[    0.000000] efi: UEFI not found.
+[    0.000000] cma: Reserved 16 MiB at 0x000000007f000000
+[    0.000000] psci: probing for conduit method from DT.
+[    0.000000] psci: PSCIv0.2 detected in firmware.
+[    0.000000] psci: Using standard PSCI v0.2 function IDs
+[    0.000000] psci: Trusted OS migration not required
+[    0.000000] percpu: Embedded 20 pages/cpu @ffff80003efd0000 s42880 r8192 d30848 u81920
+[    0.000000] Detected PIPT I-cache on CPU0
+[    0.000000] CPU features: enabling workaround for ARM erratum 832075
+[    0.000000] CPU features: enabling workaround for ARM erratum 834220
+[    0.000000] Built 1 zonelists in Zone order, mobility grouping on.  Total pages: 258048
+[    0.000000] Kernel command line:
+[    0.000000] PID hash table entries: 4096 (order: 3, 32768 bytes)
+[    0.000000] Dentry cache hash table entries: 131072 (order: 8, 1048576 bytes)
+[    0.000000] Inode-cache hash table entries: 65536 (order: 7, 524288 bytes)
+[    0.000000] software IO TLB [mem 0x79c00000-0x7dc00000] (64MB) mapped at [ffff800039c00000-ffff80003dbfffff]
+[    0.000000] Memory: 923836K/1048576K available (7792K kernel code, 654K rwdata, 3276K rodata, 960K init, 263K bss, 108356K reserved, 16384K cma-reserved)
+[    0.000000] Virtual kernel memory layout:
+[    0.000000]     modules : 0xffff000000000000 - 0xffff000008000000   (   128 MB)
+[    0.000000]     vmalloc : 0xffff000008000000 - 0xffff7dffbfff0000   (129022 GB)
+[    0.000000]       .text : 0xffff000008080000 - 0xffff000008810000   (  7744 KB)
+[    0.000000]     .rodata : 0xffff000008810000 - 0xffff000008b50000   (  3328 KB)
+[    0.000000]       .init : 0xffff000008b50000 - 0xffff000008c40000   (   960 KB)
+[    0.000000]       .data : 0xffff000008c40000 - 0xffff000008ce3800   (   654 KB)
+[    0.000000]        .bss : 0xffff000008ce3800 - 0xffff000008d257c0   (   264 KB)
+[    0.000000]     fixed   : 0xffff7dfffe7fd000 - 0xffff7dfffec00000   (  4108 KB)
+[    0.000000]     PCI I/O : 0xffff7dfffee00000 - 0xffff7dffffe00000   (    16 MB)
+[    0.000000]     vmemmap : 0xffff7e0000000000 - 0xffff800000000000   (  2048 GB maximum)
+[    0.000000]               0xffff7e0000000000 - 0xffff7e0001000000   (    16 MB actual)
+[    0.000000]     memory  : 0xffff800000000000 - 0xffff800040000000   (  1024 MB)
+[    0.000000] SLUB: HWalign=64, Order=0-3, MinObjects=0, CPUs=1, Nodes=1
+[    0.000000] Preemptible hierarchical RCU implementation.
+[    0.000000]  Build-time adjustment of leaf fanout to 64.
+[    0.000000]  RCU restricting CPUs from NR_CPUS=64 to nr_cpu_ids=1.
+[    0.000000] RCU: Adjusting geometry for rcu_fanout_leaf=64, nr_cpu_ids=1
+[    0.000000] NR_IRQS:64 nr_irqs:64 0
+[    0.000000] CPU features: GIC system register CPU interface present but disabled by higher exception level
+[    0.000000] GICv2m: range[mem 0x08020000-0x08020fff], SPI[80:143]
+[    0.000000] Architected cp15 timer(s) running at 66.00MHz (virt).
+[    0.000000] clocksource: arch_sys_counter: mask: 0xffffffffffffff max_cycles: 0xf38bc32cd, max_idle_ns: 440795204298 ns
+[    0.000014] sched_clock: 56 bits at 66MHz, resolution 15ns, wraps every 2199023255548ns
+[    0.000507] Console: colour dummy device 80x25
+[    0.000757] console [tty0] enabled
+[    0.000899] Calibrating delay loop (skipped), value calculated using timer frequency.. 132.00 BogoMIPS (lpj=264000)
+[    0.000911] pid_max: default: 32768 minimum: 301
+[    0.001022] Security Framework initialized
+[    0.001096] Mount-cache hash table entries: 2048 (order: 2, 16384 bytes)
+[    0.001103] Mountpoint-cache hash table entries: 2048 (order: 2, 16384 bytes)
+[    0.004137] ASID allocator initialised with 65536 entries
+[    0.028372] EFI services will not be available.
+[    0.036190] Brought up 1 CPUs
+[    0.036199] SMP: Total of 1 processors activated.
+[.
+[    0.04685nd 6 breakpoint [    0.153757] HugeTLB registered 2 MB page size, pre-allocated 0 pages
+[    0.165831] ACPI: Interpreter disabled.
+[    0.166699] vgaarb: loaded
+[    0.167260] SCSI subsystem initialized    0.170725] usupport registereDisk quotas dquo[    0.186405] Nrotocol family 2[    0.190815] U[    0.197304] R634] RPC: Regist[    0.622083] Freeing initrd memory: 11216K (ffff800008000000 - ffff800008af4000)
+[    0.623269] kvm [1]: HYP mode not available
+[    0.624834] futex hash table entries: 256 (order: 3, 32768 bytes)
+[    0.625838] audit: initializing netlink subsys (disabled)
+[    0.626536] audit: type=2000 audit(0.607:1): initialized
+[    0.631667] workingset: timestamp_bits=44 max_order=18 bucket_order=0
+[    0.639155] squashfs: version 4.0 (2009/01/31) Phillip Lougher
+[    0.640687] NFS: Registering the id_resolver key type
+[    0.641385] Key type id_resolver registered
+[    0.642141] Key type id_legacy registered
+[    0.642655] nfs4filelayout_init: NFSv4 File Layout Driver Registering...
+[    0.643517] Installing knfsd (copyright (C) 1996 okir@monad.swb.de).
+[    0.644629] fuse init (API version 7.25)
+[    0.645419] 9p: Installing v9fs 9p2000 file system support
+[    0.647416] io scheduler noop registered
+[    0.647970] io scheduler cfq registered (default)
+[    0.650119] pl061_gpio 9030000.pl061: PL061 GPIO chip @0x0000000009030000 registered
+[    0.651565] PCI host bridge /pcie@10000000 ranges:
+[    0.652174]    IO 0x3eff0000..0x3effffff -> 0x00000000
+[    0.652803]   MEM 0x10000000..0x3efeffff -> 0x10000000
+[    0.653416]   MEM 0x8000000000..0xffffffffff -> 0x8000000000
+[    0.654674] pci-host-generic 3f000000.pcie: ECAM at [mem 0x3f000000-0x3fffffff] for [bus 00-0f]
+[    0.655896] pci-host-generic 3f000000.pcie: PCI host bridge to bus 0000:00
+[    0.656721] pci_bus 0000:00: root bus resource [bus 00-0f]
+[    0.657378] pci_bus 0000:00: root bus resource [io  0x0000-0xffff]
+[    0.658252] pci_bus 0000:00: root bus resource [mem 0x10000000-0x3efeffff]
+[    0.659137] pci_bus 0000:00: root bus resource [mem 0x8000000000-0xffffffffff]
+[    0.661343] pci 0000:00:01.0: BAR:00:01.0: BAR 3:[    0.668528] S[    0.671437] S[    0.705886] loop: module loaded
+[    0.707229] tun: Universal TUN/TAP device driver, 1.6
+[    0.707841] tun: (C) 1999-2004 Max Krasnyansk    0.710715] e1tion.
+[    0.7[    0.720679] i[    0.726689] ixgbevf 0000:00:0[    0.743784] ixgbevf 0000:00:01.0: MAC address not assigned by 0.746674] ixgbepci: EHCI PCI plr
+[    0.75498[    0.758939] idia Card Interfa
+[    0.766835][    0.770736] K72805799)
+[   623] Freeing unush-4.2#
+sh-4.2# ifconfig -a
+eth0      Link encap:Ethernet  HWaddr 16:68:78:78:b8:58
+          BROADCAST MULTICAST  MTU:1500  Metric:1
+          RX packets:0 errors:0 dropped:0 overruns:0 frame:0
+          TX packets:0 errors:0 dropped:0 overruns:0 carrier:0
+          collisions:0 txqueuelen:1000
+          RX bytes:0 (0.0 B)  TX bytes:0 (0.0 B)
+
+lo        Link encap:Local Loopback
+          inet addr:127.0.0.1  Mask:255.0.0.0
+          UP LOOPBACK RUNNING  MTU:65536  Metric:1
+          RX packets:0 errors:0 dropped:0 overruns:0 frame:0
+          TX packets:0 errors:0 dropped:0 overruns:0 carrier:0
+          collisions:0 txqueuelen:1
+          RX bytes:0 (0.0 B)  TX bytes:0 (0.0 B)
+
+sh-4.2# ifconfig eth0 192.168.1.220
+
+it appeared:
+qemu-system-aarch64: vfio: failed to modify vector, -1
+qemu-system-aarch64: vfio: failed to enable vectors, -1
+
+then it hung up... for the host and guest.
+
+note:
+1. we should firstly modprobe ixgbe, then we can enable VFs.
+
+2. There is a bug in DW driver, we should apply the patch: 
+   "PCI: host: fix a bug to enable VFs under DW RC" in kernel-dev repo, branch:
+   pcie-passthrough-eric-v5. (repo: https://github.com/hisilicon/kerenel-dev)
+

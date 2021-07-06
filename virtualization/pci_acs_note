@@ -1,0 +1,13 @@
+How to use PCIe ACS capability
+------------------------------
+
+-v0.1 2017.1.3 Sherlock init
+
+pci_init_capabilities
+    --> pci_enable_acs(dev)
+        --> pci_std_enable_acs(dev)
+
+pci_acs_enabled(struct pci_dev *pdev, u16 acs_flags)
+    --> pci_acs_flags_enabled(pdev, acs_flags)
+
+

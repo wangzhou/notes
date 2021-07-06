@@ -1,0 +1,88 @@
+SR-IOV analysis
+===============
+
+v0.1 sherlock 2016.3.24 init the analysis plan
+
+0. basic knowledge about SR-IOV
+-------------------------------
+
+1) Intel training prime
+2) SR-IOV spec
+3) bring up whole system in AMD overdriver 3000
+
+1. how to use in X86
+--------------------
+
+1) this is same with point 3 above
+
+2. what the status of ARM64
+---------------------------
+
+1) try to enable qemu in D02/D03 --> done
+2) the basic architecture of SR-IOV based PCIe device passthrough
+
+   
+
+      +---------------------+            +--------------------+
+      |  guest              |            |  guest             |
+      |    +--------+       |            |                    |
+      |    |  qemu  |       |            |                    |
+      |    +        +       |            |                    |
+      |    |  vfio  |       |            |                    |
+      +----+--------+-------+            +--------------------+
+                            
+      +-------------------------------------------------------+
+      |  host                                                 |
+      |          +------------+    +----------------------+   |
+      |          | kvm        |    | vfio                 |   |
+      |          |            |    +--------+--+----------+   |
+      |          +-----+      |    | iommu  |  | eventfd  |   |
+      |          | ITS |      |    +--------+  +----------+   |
+      |          +-----+------+    | smmu-v3|  | msi/msi-x|   |
+      |                            +--------+--+----------+   |
+      +-------------------------------------------------------+
+
+      +-------------------------------------------------------+
+      |                                                       |
+      |  hardware PCIe host                                   |
+      |                                                       |
+      +--------------------------+----------------------------+
+                                 |
+      +--------------------------+----------------------------+
+      |             +------+-------+------+------+-----+      |
+      |  PCIe card  |  pf  |   vf  |  vf  | ...  | vf  |      |
+      |             +------+-------+------+------+-----+      |
+      +-------------------------------------------------------+
+
+      First we should get a PCIe card(e.g. 82599 networking card) which supports
+      SR-IOV. We can enable the vf in this kind of card, each vf has their own
+      BDF and config space and can be seen as a seperate networking port.
+
+      Our job, to enable PCIe SR-IOV, is to assign each pf or vf to each guest,
+      make sure the flows of data and interrupt between pf/vf and guests are OK.
+
+      How to do this?
+      there are many VM which we can choose, here I use QEMU as userspace VM
+      showed as guest in above figure.
+
+      And there are different ways we can build the flow: vfio and virtio.
+      I use vfio here(do not know virtio too much), vfio is a kernel driver in
+      drivers/vfio/* which help to expose iommu operations to userspace.
+
+      A interrupt from VF will firstly be routed to interrupt part(msi/msi-x) in
+      vfio driver, then sent by vfio to KVM ITS. vfio codes in QEMU will at first
+      build up the relationship between these two using eventfd.
+
+
+3. what the status of HiSilicon SoC to support SR-IOV
+-----------------------------------------------------
+
+1) after point 2 above, we may know this
+
+4. what we should do to enable SR-IOV
+-------------------------------------
+
+
+[1]. https://docs.fedoraproject.org/en-US/Fedora/13/html/Virtualization_Guide/chap-Para-virtualized_Windows_Drivers_Guide-SR_IOV.html
+[2]. http://www.linaro.org/blog/core-dump/kvm-pciemsi-passthrough-armarm64/
+[3]. "PCI-SIG SR-IOV Primer An Introduction to SR-IOV Technology" from Intel

@@ -1,0 +1,322 @@
+vfio_connect_container: is v2 = 1
+vfio_get_iommu_type1_info_cap did not find cap 1
+vfio_retrieve_msi_geometry did not find VFIO_IOMMU_TYPE1_INFO_CAP_MSI_GEOMETRY cap!!
+test: in vfio_pci_write_config
+[    0.000000] Booting Linux on physical CPU 0x0
+[    0.000000] Linux version 4.8.0-rc4-g58bd5e6-dirty (wangzhou@HTSAT-OPENLAB-SERVER) (gcc version 4.9.2 20140904 (prerelease) (crosstool-NG linaro-1.13.1-4.9-2014.09 - Linaro GCC 4.9-2014.09) ) #25 SMP PREEMPT Mon Nov 21 15:03:21 HKT 2016
+[    0.000000] Boot CPU: AArch64 Processor [411fd071]
+[    0.000000] efi: Getting EFI parameters from FDT:
+[    0.000000] efi: UEFI not found.
+[    0.000000] cma: Reserved 16 MiB at 0x000000007f000000
+[    0.000000] psci: probing for conduit method from DT.
+[    0.000000] psci: PSCIv0.2 detected in firmware.
+[    0.000000] psci: Using standard PSCI v0.2 function IDs
+[    0.000000] psci: Trusted OS migration not required
+[    0.000000] percpu: Embedded 21 pages/cpu @ffff80003efd0000 s47488 r8192 d30336 u86016
+[    0.000000] Detected PIPT I-cache on CPU0
+[    0.000000] CPU features: enabling workaround for ARM erratum 832075
+[    0.000000] CPU features: enabling workaround for ARM erratum 834220
+[    0.000000] Built 1 zonelists in Zone order, mobility grouping on.  Total pages: 258048
+[    0.000000] Kernel command line:
+[    0.000000] PID hash table entries: 4096 (order: 3, 32768 bytes)
+[    0.000000] Dentry cache hash table entries: 131072 (order: 8, 1048576 bytes)
+[    0.000000] Inode-cache hash table entries: 65536 (order: 7, 524288 bytes)
+[    0.000000] Memory: 989664K/1048576K available (7676K kernel code, 770K rwdata, 3372K rodata, 960K init, 270K bss, 42528K reserved, 16384K cma-reserved)
+[    0.000000] Virtual kernel memory layout:
+[    0.000000]     modules : 0xffff000000000000 - 0xffff000008000000   (   128 MB)
+[    0.000000]     vmalloc : 0xffff000008000000 - 0xffff7dffbfff0000   (129022 GB)
+[    0.000000]       .text : 0xffff000008080000 - 0xffff000008800000   (  7680 KB)
+[    0.000000]     .rodata : 0xffff000008800000 - 0xffff000008b50000   (  3392 KB)
+[    0.000000]       .init : 0xffff000008b50000 - 0xffff000008c40000   (   960 KB)
+[    0.000000]       .data : 0xffff000008c40000 - 0xffff000008d00a00   (   771 KB)
+[    0.000000]        .bss : 0xffff000008d00a00 - 0xffff000008d443b8   (   271 KB)
+[    0.000000]     fixed   : 0xffff7dfffe7fd000 - 0xffff7dfffec00000   (  4108 KB)
+[    0.000000]     PCI I/O : 0xffff7dfffee00000 - 0xffff7dffffe00000   (    16 MB)
+[    0.000000]     vmemmap : 0xffff7e0000000000 - 0xffff800000000000   (  2048 GB maximum)
+[    0.000000]               0xffff7e0000000000 - 0xffff7e0001000000   (    16 MB actual)
+[    0.000000]     memory  : 0xffff800000000000 - 0xffff800040000000   (  1024 MB)
+[    0.000000] SLUB: HWalign=64, Order=0-3, MinObjects=0, CPUs=1, Nodes=1
+[    0.000000] Preemptible hierarchical RCU implementation.
+[    0.000000]  Build-time adjustment of leaf fanout to 64.
+[    0.000000]  RCU restricting CPUs from NR_CPUS=64 to nr_cpu_ids=1.
+[    0.000000] RCU: Adjusting geometry for rcu_fanout_leaf=64, nr_cpu_ids=1
+[    0.000000] NR_IRQS:64 nr_irqs:64 0
+[    0.000000] ITS: /intc/its
+[    0.000000] ITS@0x0000000008080000: allocated 8192 Devices @7d820000 (indirect, esz 8, psz 64K, shr 1)
+[    0.000000] ITS@0x0000000008080000: allocated 8192 Interrupt Collections @7d830000 (flat, esz 8, psz 64K, shr 1)
+[    0.000000] GIC: using LPI property table @0x000000007d840000
+[    0.000000] ITS: Allocated 1792 chunks for LPIs
+[    0.000000] GICv3: CPU0: found redistributor 0 region 0:0x00000000080a0000
+[    0.000000] CPU0: using LPI pending table @0x000000007d850000
+[    0.000000] GIC: PPI11 is secure or misconfigured
+[    0.000000] arm_arch_timer: WARNING: Invalid trigger for IRQ3, assuming level low
+[    0.000000] arm_arch_timer: WARNING: Please fix your firmware
+[    0.000000] arm_arch_timer: Architected cp15 timer(s) running at 66.00MHz (virt).
+[    0.000000] clocksource: arch_sys_counter: mask: 0xffffffffffffff max_cycles: 0xf38bc32cd, max_idle_ns: 440795204298 ns
+[    0.000001] sched_clock: 56 bits at 66MHz, resolution 15ns, wraps every 2199023255548ns
+[    0.000046] Console: colour dummy device 80x25
+[    0.000302] console [tty0] enabled
+[    0.000314] Calibrating delay loop (skipped), value calculated using timer frequency.. 132.00 BogoMIPS (lpj=264000)
+[    0.000326] pid_max: default: 32768 minimum: 301
+[    0.000356] Security Framework initialized
+[    0.000376] Mount-cache hash table entries: 2048 (order: 2, 16384 bytes)
+[    0.000383] Mountpoint-cache hash table entries: 2048 (order: 2, 16384 bytes)
+[    0.000799] ASID allocator initialised with 65536 entries
+[    0.024164] PCI/MSI: /intc/its domain created
+[    0.024189] Platform MSI: /intc/its domain created
+[    0.024295] EFI services will not be available.
+[    0.032192] Brought up 1 CPUs
+[    0.032199] SMP: Total of 1 processors activated.
+[    0.032211] CPU features: detected feature: GIC system register CPU interface
+[    0.032219] CPU features: detected feature: 32-bit EL0 Support
+[    0.032227] CPU: All CPU(s) started at EL1
+[    0.032239] alternatives: patching kernel code
+[    0.036566] devtmpfs: initialized
+[    0.040381] DMI not present or invalid.
+[    0.040450] clocksource: jiffies: mask: 0xffffffff max_cycles: 0xffffffff, max_idle_ns: 7645041785100000 ns
+[    0.040640] pinctrl core: initialized pinctrl subsystem
+[    0.041028] NET: Registered protocol family 16
+[    0.053139] cpuidle: using governor menu
+[    0.053217] vdso: 2 pages (1 code @ ffff000008806000, 1 data @ ffff000008c44000)
+[    0.053240] hw-breakpoint: found 6 breakpoint and 4 watchpoint registers.
+[    0.058189] DMA: preallocated 256 KiB pool for atomic allocations
+[    0.058447] Serial: AMBA PL011 UART driver
+[    0.061845] 9000000.pl011: ttyAMA0 at MMIO 0x9000000 (irq = 39, base_baud = 0) is a PL011 rev1
+[    0.927513] console [ttyAMA0] enabled
+[    0.951814] irq: type mismatch, failed to map hwirq-27 for /intc!
+[    1.009519] HugeTLB registered 2 MB page size, pre-allocated 0 pages
+[    1.035648] ACPI: Interpreter disabled.
+[    1.047762] arm-v7s io-pgtable: self test ok
+[    1.071539] arm-lpae io-pgtable: selftest: pgsize_bitmap 0x40201000, IAS 32
+[    1.111560] arm-lpae io-pgtable: selftest: pgsize_bitmap 0x40201000, IAS 36
+[    1.151577] arm-lpae io-pgtable: selftest: pgsize_bitmap 0x40201000, IAS 40
+[    1.191571] arm-lpae io-pgtable: selftest: pgsize_bitmap 0x40201000, IAS 42
+[    1.231576] arm-lpae io-pgtable: selftest: pgsize_bitmap 0x40201000, IAS 44
+[    1.271580] arm-lpae io-pgtable: selftest: pgsize_bitmap 0x40201000, IAS 48
+[    1.311575] arm-lpae io-pgtable: selftest: pgsize_bitmap 0x02004000, IAS 32
+[    1.351707] arm-lpae io-pgtable: selftest: pgsize_bitmap 0x02004000, IAS 36
+[    1.391756] arm-lpae io-pgtable: selftest: pgsize_bitmap 0x02004000, IAS 40
+[    1.431776] arm-lpae io-pgtable: selftest: pgsize_bitmap 0x02004000, IAS 42
+[    1.479589] arm-lpae io-pgtable: selftest: pgsize_bitmap 0x02004000, IAS 44
+[    1.519633] arm-lpae io-pgtable: selftest: pgsize_bitmap 0x02004000, IAS 48
+[    1.559668] arm-lpae io-pgtable: selftest: pgsize_bitmap 0x20010000, IAS 32
+[    1.600236] arm-lpae io-pgtable: selftest: pgsize_bitmap 0x20010000, IAS 36
+[    1.640238] arm-lpae io-pgtable: selftest: pgsize_bitmap 0x20010000, IAS 40
+[    1.680238] arm-lpae io-pgtable: selftest: pgsize_bitmap 0x20010000, IAS 42
+[    1.720285] arm-lpae io-pgtable: selftest: pgsize_bitmap 0x20010000, IAS 44
+[    1.760226] arm-lpae io-pgtable: selftest: pgsize_bitmap 0x20010000, IAS 48
+[    1.800281] arm-lpae io-pgtable: selftest: completed with 18 PASS 0 FAIL
+[    1.839664] vgaarb: loaded
+[    1.855650] SCSI subsystem initialized
+[    1.883911] pps_core: LinuxPPS API ver. 1 registered
+[    1.903725] pps_core: Software ver. 5.3.6 - Copyright 2005-2007 Rodolfo Giometti <giometti@linux.it>
+[    1.959517] PTP clock support registered
+[    1.983633] dmi: Firmware registration failed.
+[    2.007698] Advanced Linux Sound Architecture Driver Initialized.
+[    2.039909] clocksource: Switched to clocksource arch_sys_counter
+[    2.079605] VFS: Disk quotas dquot_6.6.0
+[    2.103481] VFS: Dquot-cache hash table entries: 512 (order 0, 4096 bytes)
+[    2.143589] pnp: PnP ACPI: disabled
+[    2.163408] NET: Registered protocol family 2
+[    2.192544] TCP established hash table entries: 8192 (order: 4, 65536 bytes)
+[    2.231609] TCP bind hash table entries: 8192 (order: 5, 131072 bytes)
+[    2.263709] TCP: Hash tables configured (established 8192 bind 8192)
+[    2.303522] UDP hash table entries: 512 (order: 2, 16384 bytes)
+[    2.335556] UDP-Lite hash table entries: 512 (order: 2, 16384 bytes)
+[    2.375545] NET: Registered protocol family 1
+[    2.407674] RPC: Registered named UNIX socket transport module.
+[    2.431565] RPC: Registered udp transport module.
+[    2.463440] RPC: Registered tcp transport module.
+[    2.487517] RPC: Registered tcp NFSv4.1 backchannel transport module.
+[    2.527529] Unpacking initramfs...
+[    2.906093] Freeing initrd memory: 11216K (ffff800008000000 - ffff800008af4000)
+[    2.907198] hw perfevents: enabled with armv8_pmuv3 PMU driver, 7 counters available
+[    2.908289] kvm [1]: HYP mode not available
+[    2.909486] futex hash table entries: 256 (order: 3, 32768 bytes)
+[    2.910236] audit: initializing netlink subsys (disabled)
+[    2.910886] audit: type=2000 audit(1.227:1): initialized
+[    2.916080] workingset: timestamp_bits=46 max_order=18 bucket_order=0
+[    2.922299] squashfs: version 4.0 (2009/01/31) Phillip Lougher
+[    2.923564] NFS: Registering the id_resolver key type
+[    2.924229] Key type id_resolver registered
+[    2.924728] Key type id_legacy registered
+[    2.925210] nfs4filelayout_init: NFSv4 File Layout Driver Registering...
+[    2.947690] 9p: Installing v9fs 9p2000 file system support
+[    2.980739] io scheduler noop registered
+[    3.003611] io scheduler cfq registered (default)
+[    3.036048] libphy: mdio_driver_register: phy-bcm-ns2-pci
+[    3.068454] pl061_gpio 9030000.pl061: PL061 GPIO chip @0x0000000009030000 registered
+[    3.108176] OF: PCI: host bridge /pcie@10000000 ranges:
+[    3.139656] OF: PCI:    IO 0x3eff0000..0x3effffff -> 0x00000000
+[    3.171535] OF: PCI:   MEM 0x10000000..0x3efeffff -> 0x10000000
+[    3.211421] OF: PCI:   MEM 0x8000000000..0xffffffffff -> 0x8000000000
+[    3.243523] pci-host-generic 3f000000.pcie: ECAM at [mem 0x3f000000-0x3fffffff] for [bus 00-0f]
+[    3.299514] pci-host-generic 3f000000.pcie: PCI host bridge to bus 0000:00
+[    3.339433] pci_bus 0000:00: root bus resource [bus 00-0f]
+[    3.371419] pci_bus 0000:00: root bus resource [io  0x0000-0xffff]
+[    3.403496] pci_bus 0000:00: root bus resource [mem 0x10000000-0x3efeffff]
+[    3.443477] pci_bus 0000:00: root bus resource [mem 0x8000000000-0xffffffffff]
+te[    3.484554] pci 0000:00:01.0: BAR 0: assigned [mem 0x8000000000-0x8000003fff 64bit pref]
+te[    3.531626] pci 0000:00:01.0: BAR 3: assigned [mem 0x8000004000-0x8000007fff 64bit pref]
+te[    3.581486] xenfs: not registering filesystem on non-xen platform
+[    3.621578] Serial: 8250/16550 driver, 4 ports, IRQ sharing disabled
+[    3.661057] SuperH (H)SCI(F) driver initialized
+[    3.683973] msm_serial: driver initialized
+[    3.707729] Unable to detect cache hierarchy from DT for CPU 0
+[    3.773857] loop: module loaded
+[    3.775131] libphy: Fixed MDIO Bus: probed
+[    3.780818] tun: Universal TUN/TAP device driver, 1.6
+[    3.811694] tun: (C) 1999-2004 Max Krasnyansky <maxk@qualcomm.com>
+[    3.852175] e1000e: Intel(R) PRO/1000 Network Driver - 3.2.6-k
+[    3.883601] e1000e: Copyright(c) 1999 - 2015 Intel Corporation.
+[    3.915555] igb: Intel(R) Gigabit Ethernet Network Driver - version 5.3.0-k
+[    3.955566] igb: Copyright (c) 2007-2014 Intel Corporation.
+[    3.987586] igbvf: Intel(R) Gigabit Virtual Function Network Driver - version 2.0.2-k
+[    4.035505] igbvf: Copyright (c) 2009 - 2012 Intel Corporation.
+[    4.067542] ixgbevf: Intel(R) 10 Gigabit PCI Express Virtual Function Network Driver - version 3.2.2-k
+[    4.123520] ixgbevf: Copyright (c) 2009 - 2015 Intel Corporation.
+[    4.159676] ixgbevf 0000:00:01.0: enabling device (0000 -> 0002)
+test: in v[    4.211678] ixgbevf 0000:00:01.0: MAC address not assigned by administrator.
+[    4.243390] ixgbevf 0000:00:01.0: Assigning random MAC address
+test: in v[    4.276810] ixgbevf 0000:00:01.0: be:33:4e:82:fb:98
+[    4.307531] ixgbevf 0000:00:01.0: MAC: 1
+[    4.331452] ixgbevf 0000:00:01.0: Intel(R) 82599 Virtual Function
+[    4.363570] sky2: driver version 1.30
+[    4.388530] mousedev: PS/2 mouse device common for all mice
+[    4.424288] rtc-pl031 9010000.pl031: rtc core: registered pl031 as rtc0
+[    4.459990] i2c /dev entries driver
+[    4.476681] sdhci: Secure Digital Host Controller Interface driver
+[    4.515769] sdhci: Copyright(c) Pierre Ossman
+[    4.539554] Synopsys Designware Multimedia Card Interface Driver
+[    4.579703] sdhci-pltfm: SDHCI platform and OF driver helper
+[    4.611743] ledtrig-cpu: registered to indicate activity on CPUs
+[    4.645072] NET: Registered protocol family 17
+[    4.668066] 9pnet: Installing 9P2000 support
+[    4.691577] Key type dns_resolver registered
+[    4.723736] registered taskstats version 1
+[    4.751786] input: gpio-keys as /devices/platform/gpio-keys/input/input0
+[    4.779708] rtc-pl031 9010000.pl031: setting system clock to 2016-11-22 04:59:16 UTC (1479790756)
+[    4.835583] ALSA device list:
+[    4.851470]   No soundcards found.
+[    4.875516] uart-pl011 9000000.pl011: no DMA platform data
+[    4.907853] Freeing unused kernel memory: 960K (ffff800000b50000 - ffff800000c40000)
+
+sh-4.2# lspci
+00:00.0 Class 0600: 1b36:0008
+00:01.0 Class 0200: 8086:10ed
+sh-4.2# ifconfig -a
+eth0      Link encap:Ethernet  HWaddr be:33:4e:82:fb:98
+          BROADCAST MULTICAST  MTU:1500  Metric:1
+          RX packets:0 errors:0 dropped:0 overruns:0 frame:0
+          TX packets:0 errors:0 dropped:0 overruns:0 carrier:0
+          collisions:0 txqueuelen:1000
+          RX bytes:0 (0.0 B)  TX bytes:0 (0.0 B)
+
+lo        Link encap:Local Loopback
+          inet addr:127.0.0.1  Mask:255.0.0.0
+          UP LOOPBACK RUNNING  MTU:65536  Metric:1
+          RX packets:0 errors:0 dropped:0 overruns:0 frame:0
+          TX packets:0 errors:0 dropped:0 overruns:0 carrier:0
+          collisions:0 txqueuelen:1
+          RX bytes:0 (0.0 B)  TX bytes:0 (0.0 B)
+
+sh-4.2# ifconfig eth0 192.168.1.25
+test: in vfio_add_kvm_msi_virq
+test: in kvm_irqchip_add_msi_route: msg: addr: 134807616, data: 0
+test: in kvm_irqchip_add_msi_route: virq: 256
+test: in kvm_irqchip_add_msi_route: devid: 8
+test: in vfio_add_kvm_msi_virq: virq: 256
+[  338.552515] ixgbevf: in ixgbevf_request_msix_irqs: irq: 49
+test: in vfio_add_kvm_msi_virq
+test: in kvm_irqchip_add_msi_route: msg: addr: 134807616, data: 1
+test: in kvm_irqchip_add_msi_route: virq: 257
+test: in kvm_irqchip_add_msi_route: devid: 8
+test: in vfio_add_kvm_msi_virq: virq: 257
+test: in vfio_enable_vectors
+[  338.553526] ixgbevf: in ixgbevf_request_msix_irqs: irq_1: 50
+[  338.557300] ixgbevf 0000:00:01.0: NIC Link is Up 10 Gbps
+
+sh-4.2# cat /proc/interrupts
+           CPU0
+  3:       2550     GICv3  27 Level     arch_timer
+ 38:          0     GICv3  34 Level     rtc-pl031
+ 39:       1573     GICv3  33 Level     uart-pl011
+ 44:          0     pl061   3 Edge      GPIO Key Poweroff
+ 49:        388   ITS-MSI 16384 Edge      eth0-TxRx-0
+ 50:         11   ITS-MSI 16385 Edge      eth0
+IPI0:         0       Rescheduling interrupts
+IPI1:         0       Function call interrupts
+IPI2:         0       CPU stop interrupts
+IPI3:         0       Timer broadcast interrupts
+IPI4:         0       IRQ work interrupts
+IPI5:         0       CPU wake-up interrupts
+Err:          0
+sh-4.2# [  519.255840] random: crng init done
+^C
+sh-4.2#
+sh-4.2#
+sh-4.2#
+sh-4.2#
+sh-4.2# ping -I eth0 192.168.1.101
+PING 192.168.1.101 (192.168.1.101): 56 data bytes
+[  550.223967] ixgbevf: Detected Tx Unit Hang
+[  550.223967]   Tx Queue             <0>
+[  550.223967]   TDH, TDT             <0>, <6>
+[  550.223967]   next_to_use          <6>
+[  550.223967]   next_to_clean        <0>
+[  550.223967] tx_buffer_info[next_to_clean]
+[  550.223967]   next_to_watch        <ffff80003f040010>
+[  550.223967]   eop_desc->wb.status  <a8080>
+[  550.223967]   time_stamp           <10000eff4>
+[  550.223967]   jiffies              <10000f2b8>
+[  550.267755] ixgbevf 0000:00:01.0: NIC Link is Up 10 Gbps
+[  554.287972] ixgbevf: Detected Tx Unit Hang
+[  554.287972]   Tx Queue             <0>
+[  554.287972]   TDH, TDT             <0>, <6>
+[  554.287972]   next_to_use          <6>
+[  554.287972]   next_to_clean        <0>
+[  554.287972] tx_buffer_info[next_to_clean]
+[  554.287972]   next_to_watch        <ffff80003f040010>
+[  554.287972]   eop_desc->wb.status  <a8080>
+[  554.287972]   time_stamp           <10000f3dc>
+[  554.287972]   jiffies              <10000f6b0>
+[  554.331785] ixgbevf 0000:00:01.0: NIC Link is Up 10 Gbps
+[  558.351974] ixgbevf: Detected Tx Unit Hang
+[  558.351974]   Tx Queue             <0>
+[  558.351974]   TDH, TDT             <0>, <6>
+[  558.351974]   next_to_use          <6>
+[  558.351974]   next_to_clean        <0>
+[  558.351974] tx_buffer_info[next_to_clean]
+[  558.351974]   next_to_watch        <ffff80003f040010>
+[  558.351974]   eop_desc->wb.status  <a8080>
+[  558.351974]   time_stamp           <10000f7c4>
+[  558.351974]   jiffies              <10000faa8>
+[  558.395376] ixgbevf 0000:00:01.0: NIC Link is Up 10 Gbps
+[  562.415971] ixgbevf: Detected Tx Unit Hang
+[  562.415971]   Tx Queue             <0>
+[  562.415971]   TDH, TDT             <0>, <6>
+[  562.415971]   next_to_use          <6>
+[  562.415971]   next_to_clean        <0>
+[  562.415971] tx_buffer_info[next_to_clean]
+[  562.415971]   next_to_watch        <ffff80003f040010>
+[  562.415971]   eop_desc->wb.status  <a8080>
+[  562.415971]   time_stamp           <10000fbac>
+[  562.415971]   jiffies              <10000fea0>
+[  562.459788] ixgbevf 0000:00:01.0: NIC Link is Up 10 Gbps
+
+--- 192.168.1.101 ping statistics ---
+20 packets transmitted, 0 packets received, 100% packet loss
+
+
+test log in host:
+-----------------
+[ 5177.820059] vfio-pci 0000:01:10.0: enabling device (0000 -> 0002)
+[ 5182.784532] ixgbe 0000:01:00.0 eth13: VF Reset msg received from vf 0
+[ 5182.785029] ixgbe 0000:01:00.0: VF 0 has no MAC address assigned, you may have to assign one manually
+[ 5268.391762] Unexpected interrupt 4 on vcpu ffff8027c5f38000
+[ 5728.832655] ixgbe 0000:01:00.0 eth13: VF Reset msg received from vf 0
+[ 5732.896739] ixgbe 0000:01:00.0 eth13: VF Reset msg received from vf 0
+[ 5736.960778] ixgbe 0000:01:00.0 eth13: VF Reset msg received from vf 0
+[ 5741.024717] ixgbe 0000:01:00.0 eth13: VF Reset msg received from vf 0
+[ 5745.088833] ixgbe 0000:01:00.0 eth13: VF Reset msg received from vf 0
+
