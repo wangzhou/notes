@@ -1,0 +1,48 @@
+git使用方法备忘
+
+ -v0.1 *** 2014.4.11
+ 最近在使用git管理代码，经常用到一些命令，现在总结在下面。本文不是初级的介绍
+ 文章，并假设读者已经有一定使用git的基础
+
+ 1. 已经知道了可以下载代码的git服务器的地址，比如：git://git.linaro.org/kernel.git
+    可以使用：
+        git clone git://git.linaro.org/kernel.git
+    下在代码
+
+    要是你的本地电脑上已经有了之前clone的一个kernel的git仓库，可以使用：
+        git clone git://git.linaro.org/kernel.git --reference /path/to/kernel.git
+    提高下载的速度，新的下载的git库将会重用以前已有的git库
+        
+    下载好git库后，可以使用：
+        git branch -r 
+    显示所用的远程分支, 然后用：
+        git checkout branchname
+    提取出需要的分支，然后用；
+        git branch
+    就可以看到上面提出来的分支的名字了
+
+2. 显示远程仓库的网址和名字：
+       git remote -v
+   修改远程仓库，发现远程仓库的地址错了，导致一直下载不下来代码，需要添加正确
+   的地址：
+       git remote add hilt ssh://git.linaro.org/kernel.git
+   其中hilt是这个远程仓库的名字
+       git remote rm origin
+   其中orgin是原来错误远程仓库的名字，之后把远程仓库的名字从hilt改成origin：
+       git remote rename hilt origin
+
+3. 在开发的时候会出现很多中间版本，这些版本做的改动对别人是无意义的, 比如有
+   version_1--->version_2--->version_3, 怎么把这三个版本合并成一个版本(一次提交):
+       git rebase -i HEAD~3
+   其中3表示把最近的3次提交合并成一次提交
+   
+   如果commit的log message写的不好，也可以用：
+       git commit --amend
+   重写commit的log message
+
+4. 代码改好了，需要制作patch，可以使用：
+       git format-patch -s -1
+   其中s表示patch中会加上签名项, 1表示对最近一次提交生成patch. 如果把1变成2，那么
+   会生成两个patch, 以version_1--->version_2--->version_3为例，这两个patch是
+   version_3对version_2的patch、version_2对version_1的patch
+

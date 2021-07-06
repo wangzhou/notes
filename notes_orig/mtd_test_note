@@ -1,0 +1,26 @@
+md test node
+
+v0.1 2014.12.7 wangzhou draft
+
+当完成一个linux的NAND flash controller驱动时, 可以使用内核中提供的测试代码去测试
+你写的驱动。实际上当你写的NAND flash controller驱动想上传到linux kernel的主线
+时，maintainer也会要求你这么做。
+
+linux kernel中的NAND flash controller的测试代码在linux/drivers/mtd/tests
+
+需要配置内核选项：
+Device Drivers --->
+    Memory Technology Device (MTD) support  ----
+        MTD tests support (DANGEROUS) (NEW)
+
+编译内核模块，在linux/drivers/mtd/tests目录中会出现几个ko文件。把这个几个ko文件
+放到rootfs中，启动内核后，使用insmod ***.ko 把这几个ko插入就可以作测试
+
+reference[1]中有这几个ko的适用范围。ko的输入参数可以查看相应c文件中的module_param()宏
+比如，mtd_readtest.ko的相应的c文件是readtest.c, 其中有module_param(dev, int, S_IRUGO)
+則插入模块时的命令应该是：insmod mtd_readtest.ko dev=***, ***是nand的分区号，
+是个int型的变量。
+
+reference
+[1] http://www.linux-mtd.infradead.org/doc/general.html
+

@@ -1,0 +1,52 @@
+About using vim to draw ASCII figure
+
+-v0.1 2014.12.24 wangzhou draft
+
+常看到别人画的ASCII图，很漂亮。linux kernel中的文档也有很多包含ASCII图。
+本文介绍两个在vim下画ASCII图的工具。使用工具画图, 效率更高。
+
+1. boxe 
+   
+   可以插入一些这个软件中自带的图形，效果如下：
+   输入命令：echo "example" | boxes -d dog
+
+	      __   _,--="=--,_   __
+	     /  \."    .-.    "./  \
+	    /  ,/  _   : :   _  \/` \
+	    \  `| /o\  :_:  /o\ |\__/
+	     `-'| :="~` _ `~"=: |
+		\`     (_)     `/
+	 .-"-.   \      |      /   .-"-.
+    .---{     }--|  /,.-'-.,\  |--{     }---.
+     )  (_)_)_)  \_/`~-===-~`\_/  (_(_(_)  (
+    (  example                              )
+     )                                     (
+    '---------------------------------------'
+
+   在ubuntu下直接 sudo apt-get install boxes 安装即可。
+   可以在/etc/boxes/boxes-config中查看其支持的图形。
+
+2. vim插件drawIt
+
+   若手工去画ASCCI图，需要不断的调整。这个插件的功能简单的说，即他能使我们先把
+   字符摆好，然后运用该插件加上线条：
+
+   step 1: 输入表格中的字符
+
+       AAAA     BBBB     BBBB      CCCC
+
+       AAAA     BBBB     BBBB      CCCC
+
+       AAAA     BBBB     BBBB      CCCC
+
+   step 2: 打开drawIt功能加上表格的框框
+    +--------+--------+---------+--------+
+    |  AAAA  |  BBBB  |  BBBB   |  CCCC  |
+    +--------+--------+---------+--------+
+    |  AAAA  |  BBBB  |  BBBB   |  CCCC  |
+    +--------+--------+---------+--------+
+    |  AAAA  |  BBBB  |  BBBB   |  CCCC  |
+    +--------+--------+---------+--------+
+
+    具体的安装和使用方法见：
+    http://blog.chinaunix.net/uid-23105261-id-109508.html

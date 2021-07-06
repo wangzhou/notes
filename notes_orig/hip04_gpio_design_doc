@@ -1,0 +1,142 @@
+hip04 GPIO driver design
+
+ -v0.1 2014.3.24 wangzhou draft
+
+abstract:
+ Hisilicon Soc hip04 has a GPIO controller, this document discusses design of 
+ GPIO driver
+
+1. Hareware
+   hip04 has five banks of GPIO and each bank has 32 GPIO pins. Every pin can 
+   be configured as data pin or interrup pin. When configured as data pin, it 
+   can receive/sent data, and when configured as interrupt pin, it can receive
+   a external interrupt. The interrupts received by the pins of the same bank    
+   will be handled by the same interrupt line of GIC. Registers of GPIO 
+   controller can be configured to enable/disable/mask/acknowledge an interrupt
+   and choose interrup trigger mode.
+
+2. Devicetree
+   devicetree is used to set up GPIO devices in the driver. Every bank 
+   corresponds to a devicetree node, a example as below:
+
+	gpio0: gpio@00e4000000 {
+		compatible = "hisilicon,hip04-gpio";
+		reg = <0x4000000 0x00001000>;
+		interrupt-parent = <&gic>;
+		ngpios = <32>;
+		gpio-controller;
+		#gpio-cells = <1>;
+		interrupts = <0 389 4>;
+		interrupt-controller;
+	};
+   
+   compatible: use the string to match with devicetree node
+   reg: base address and size of address space
+   ngpios: numbers of pins in this bank
+   interrupts: relative interrupt line, default trigger mode: high level
+
+3. Driver
+   The driver is based on GPIO implementaion framework, and it can be used in 
+   kernel space or user space through sys filesystem. So there are 
+   hip04_gpio_probe(), hip04_gpio_irq_handler() and some callback functions
+   needed to be implemented.
+
+   hip04_gpio_probe():
+   1. get GPIO information from the devicetree, fill the datas in
+      hip04_gpio_chip
+
+   2. fill the callback functions in gpio_chip which is in hip04_gpio_chip.
+      The calls to the GPIO implementation framework functions will lead to 
+      call to these functions eventally. The callback functions' job is to
+      configure GPIO registers to controll the state of GPIOs
+      
+   3. use gpio_add() to register the gpio_chip above to the GPIO implementation
+      framework
+
+   4. usr irq_set_chained_handler() to register the hip04_gpio_irq_handler to
+      interrupt system. usr irq_alloc_descs() to allocate struct irq_descs for 
+      every GPIO pins in this bank. usr irq_alloc_generic_chip() to allocate a
+      irq_chip_generic structure for a bank, and callback functions about GPIO
+      interrupt can register in irq_chip structure contained in structure
+      irq_chip_generic. use irq_setup_generic_chip() to register the irq_chip
+      to relative irq_desc structure. use irq_domain_add_simple() to register??
+      Details about the design of GPIO interrupt will be showed in the GPIO
+      interrupt part as below.
+
+   5. fill the callback functions in struct irq_chip
+
+   GPIO interrupt:
+   1. An interrupt from a GPIO pin will be handled by two steps in software.
+      From the aspect of hardware, an GPIO interrupt signal will trigger a
+      interrupt request to GIC, then GIC interrupts the CPU. Because interrupts
+      from 32 GPIO pins will be routed by the GPIO control to one interrupt
+      line of the GIC, CPU will only known which bank the interrupt coming
+      from. From the aspect of software, the process flow is as below:
+
+	asm_do_IRQ(unsigned int irq, struct pt_regs *regs)
+		-->handle_IRQ(irq, regs);
+			-->generic_handle_irq(irq);
+				-->generic_handle_irq_desc(irq, desc);
+					-->desc->handle_irq(irq, desc);
+
+      The handle_irq() is the hip04_gpio_irq_handler registered by 
+      irq_set_chained_handler() as mentioned above. In the hip04_gpio_handler,
+      relative register of GPIO will be checked to find which GPIO pin the
+      interrupt really comes from. Then, generic_handle_irq() will be used
+      again with real interrupt request number.
+
+   2. The GPIO driver allocates irq_descs structure for every GPIO pin using 
+      irq_alloc_descs() and also provides hardware related callback functions
+      to configure interrupt mode/mask/enable etc. So, it appears to the user
+      of GPIO driver that every GPIO pin has an interrupt line. Users just
+      register their interrupt process funcition to use the GPIO interrupt.
+      Details of how to use this will be mentioned as below.
+
+   callback function:
+   As mentioned above, GPIO driver needs to implement callback functions in
+   both gpio_chip and irq_chip structures. we need to pay attention to:
+
+   1. hip04_gpio_request():
+      This function deals with something about pin reusing normally. In hip04
+      GPIO driver, pin resuing has not considered. 
+      When gpio_request() in GPIO implementation framework is called, it will
+      check flags in gpio_desc and if there was a driver already using the
+      gpio, gpio_request will return -EBUSY, so p650_gpio_request can be empty.
+
+   2. hip04_gpio_free(): also be empty.
+
+4. Kernel config
+   there needs to configure GPIO_HIP04 to use the GPIO driver:
+	config GPIO_HIP04
+		def_bool y
+		depends on GPIOLIB && OF && ARCH_HIP04
+		select GPIO_GENERIC
+		select GENERIC_IRQ_CHIP
+
+5. test
+   need to test: 
+   1. GPIO driver in kernel space
+      a. Use GPIO implementation framework inferface to control LEDs which is 
+         connected to GPIO.
+      b. Use switches which is connected to GPIO to produce interrupt trigger
+         to test GPIO interrupt functionality
+
+   2. GPIO driver in user space using sys filesystem
+      GPIO can be exported to the user space using sys filesystem. 
+      a. Write a shell script to test GPIO functions except GPIO interrupt.
+
+           echo "***(pin number)" > /sys/class/gpio/export 
+	   echo "in/out" > /sys/class/gpio/gpio***/dirction
+	   echo "1/0" > /sys/class/gpio/gpio***/value
+	   cat /sys/class/gpio/gpio***/value
+
+      b. Write a C code to test GPIO interrupt in user space. a poll() is used
+         to wait for one of a set of file descriptors which correspond to 
+	 relative GPIO pins. When a interrupt comes, the poll() returns. So 
+	 users in user space can catch an interrupt from a GPIO pin.
+
+6. how to use
+   ...
+
+note:
+   ...

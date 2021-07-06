@@ -1,0 +1,44 @@
+1. hardware about GPIO controller
+
+    when there is a interrupt, both irq_raw_status and irq_status set 1.
+    when the interrupt line is masked, a interrupt lead to irq_raw_status set 1.
+    acking a interrupt(writing 1 to GPIO_PORT_EOI) leads both ones be set 0.
+    acking a interrupt(writing 1 to GPIO_PORT_EOI) leads irq_raw_status to be
+    set 0 when the interrupt line is masked.(need to test)
+    irq_raw_status is set 1 and unmask the interrupt line, an interrupt will be
+    triggered.
+                      |-->level
+            |         |
+    device--|-->GPIO---->GIC---->CPU
+            | in Soc          |
+	                      |-->level
+
+2. two interrupts(different pins) from same bank at the same time
+
+   1. edge trigger in GPIO pins
+       
+       A trigger the interrupt -> read out the interrupt register of GPIO controller
+
+       if B trigger comes before "read out the interrupt..." above, B trigger 
+       will not lost. 
+       if B trigger comes after that, it will not be handled this time, but the
+       register of GPIO controller has the record of B trigger. At this time,
+       it depends on the hardware design of GPIO: if there was a record of
+       interrupt in the GPIO register, the signal between GPIO and GIC will last
+       high(enable), then B trigger will be handled after A be handled.
+       if B trigger comes after A be handled, that is OK, B will be handled.
+
+   2. level trigger in GPIO pins
+
+3. two interrupts from different banks at the same time
+
+   1. edge trigger in GPIO pins
+
+   2. level trigger in GPIO pins
+
+4. two interrupts from same GPIO pin(small time interval)
+
+   1. edge trigger in GPIO pins
+
+   2. level trigger in GPIO pins
+

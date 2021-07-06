@@ -1,0 +1,17 @@
+compile_note
+
+1. 预处理
+   得到***.i文件, -E
+2. 编译
+   生成汇编代码，***.s文件， -S
+
+1.2 cc1是预编译编译程序
+
+3. 汇编
+4. 链接
+
+*load* data from memory to register
+*store* data from register to memmory
+
+
+http://quequero.org/2014/04/introduction-to-arm-architecture/

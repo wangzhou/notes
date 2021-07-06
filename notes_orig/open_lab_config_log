@@ -1,0 +1,63 @@
+ldap config log:
+
+1. ldap_bind: Invalid credentials (49)
+
+ldapadduser test1 10002
+
+ldap key and ldapscript key need to be same
+
+2. ubuntu 14.04, memory leak
+
+http://blog.sina.com.cn/s/blog_bf3cb9510102v00l.html
+
+3. passwd: Authentication information cannot be recovered
+   (after configure ldap, cannot passwd by user itself)
+
+http://ubuntuforums.org/showthread.php?t=1640070
+
+4. can not input user name in ubuntu in PC
+
+first login using the command line, then your user name will appear
+in login picture
+
+5. install souge pingyin:(dsh)
+
+
+6. close DNS resolve in server:
+http://www.educity.cn/wenda/591262.html
+(just set GSSAPIAuthentication no)
+
+7. vlan: need to confirm how to configure vlan ?
+   after configure vlan, different vlan can not ping
+
+8. build backup server
+http://www.iteye.com/topic/604436
+a. pid file needs to be: /var/run/rsyncd.pid;
+b. need to set /etc/default/rsync: 
+   RSYNC_ENABLE=true
+c. if something is wrong, go to /var/log/rsyncd.log to check
+d. run sudo /etc/init.d/rsync start to start the server daemon
+e. rsync daemon runs at our main server, and rsync command runs
+   at backup server.
+f. http://blog.sina.com.cn/s/blog_4da051a60101h8am.html
+   (some ways to solve problem about auth failed on module xxx)
+
+steps:
+1. configure /etc/rsyncd.conf in server, need to touch a file yourself.
+2. configure /home/wangzhou/security/rsync.pass in server indicating client's
+   user name and key.
+3. configure /etc/default/rsync: RSYNC_ENABLE=true in server
+4. sudo /etc/init.d/rsync start in server
+5. run rsync -vzrtopg --progress htsat@10.1.1.101::test /home/htsat in client
+   (backup server) to backup /home/test indicating in [test] in /etc/rsyncd.conf
+   in server to /home/htsat in client, using user htsat
+
+9. after configure ldap client, you maybe can not login. at this time
+   you need run sudo /etc/init.d/nscd restart
+
+many linux machines: resource management and system management:
+
+http://www.ibm.com/developerworks/cn/linux/cluster/hpc/part5/index.html
+
+http://os.51cto.com/art/201103/249087_2.htm
+(dsh)

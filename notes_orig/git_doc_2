@@ -1,0 +1,56 @@
+some note about the book "got git" (2)
+
+ -chapter 7
+ git reset --hard HEAD^ 整个HEAD切换到他的父提交, 若现在有如下的提交:
+ A-->B-->C-->D 
+ 使用上述命令后，使用git log将只看到: A-->B-->C
+ git reset --hard 将版本库，缓存区，工作区全部切换到相应的版本(C), D版本相当于
+ 被丢掉了(没有显示出来)
+
+ git reset --soft HEAD^ 只把版本库切到了父提交，也就是回到了，上次git add ***
+ git commit *** 之前的状态，使用git status可以证明这点
+
+ git reset HEAD^ 把版本库，缓存区切到了父提交，也就是回到了上次编辑过工作区，
+ git add *** 之前的状态，使用git status可以看到这点
+
+ git reset/git reset HEAD 依照上面的分析，相当于缓冲区切到父提交，就是把git add
+ 加入缓冲区的东西去掉，是git add 的逆操作
+
+ git reset -- filename 是git add filename的逆操作
+
+ git reset --hard HEAD^ 之后的挽救措施：（想恢复原来的提交）
+ 在.git/log/logs/HEAD中记录着每次HEAD的改动，找到想要的ID用来恢复
+ 更简单的方法：
+ git reflog show 找到要恢复的版本
+ git reset --hard master@{***} 即可
+
+ 注: git reset --hard HEAD^
+     do some change... 
+     git add ...
+     git commit ... (version E)
+     实际是存储是：(其中version D是不可见的)
+     A-->B-->C-->D
+              \-->E
+
+     git reset 没有改变HEAD的内容，而是改变了.git/refs/head/... 的内容
+
+ -chapter 8
+ git checkout ID 检出ID所对应的提交. 比如；
+ A-->B-->C-->D 
+ git checkout ID(C) ID(C)表示C对应的ID
+ 这是用git branch察看所在的分支，会显示当前处于no branch的状态，实际上察看
+ .git/HEAD会发现其中的内容不是指向一个分支(如：ref:refs/heads/master), 而是一个
+ 具体提交的ID. 在这种no branch的状态可以查看代码，做验证，但是不能提交修改。
+ 其实也是可以在提交的，只是再从当前的状态切回某个分支(如：git checkout master),
+ 之前的提交不可见了:
+               /-- master
+ A-->B-->C-->D 
+      \
+       E -- git checkout ID(B), git commit E
+ 如上在no branch上提交了E，然后git checkout master切回了master这时候E不可见了.
+ 用git reflog show 查看提交的历史，然后git reset --hard HEAD@{...} 可以把HEAD
+ 指向E，这时 A-->B-->E 成了master分支，C、D不可见了
+ 
+ git checkout -b branch_name 创建新的分支，名字是branch_name
+ git checkout 改变HEAD的内容
+

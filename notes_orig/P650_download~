@@ -1,0 +1,299 @@
+kernel:
+ifconfig -s eth0 192.168.201.35 255.255.255.128 192.168.201.1
+updateOSflag
+provision 192.168.201.112 -u wangzhou -p wangroot -f .text
+provision 192.168.201.112 -u wangzhou -p wangroot -f .monitor
+provision 192.168.201.112 -u wangzhou -p wangroot -f .kernel
+provision 192.168.201.112 -u wangzhou -p wangroot -f .filesystem
+go 
+
+nandflasherase all
+
+EFI-BOOT.fd	is UEFI BIOS
+	
+ifconfig -s eth0 192.168.201.38 255.255.255.128 192.168.201.1
+provision 192.168.201.112 -u wangzhou -p wangroot -f EFI-BOOT.fd
+updateL1 EFI-BOOT.fd
+
+make ARCH=arm CROSS_COMPILE=arm-linux-gnueabi- hip04_defconfig
+make ARCH=arm CROSS_COMPILE=arm-linux-gnueabi- -j8 zImage
+make ARCH=arm CROSS_COMPILE=arm-linux-gnueabi- hip04-d01.dtb
+cat ./arch/arm/boot/zImage ./arch/arm/boot/dts/hip04-d01.dtb > ../boot-wrapper/tftpboot/.kernel
+
+scp wangzhou@192.168.201.23:/boot/wangzhou_data/p650/gpio-test/a.out ./
+scp wangzhou@192.168.201.23:/boot/wangzhou_data/p650/gpio-test/gpio-sys-irq-init.sh ./
+scp wangzhou@192.168.201.23:/boot/wangzhou_data/p650/gpio-test/gpio-test.sh ./
+scp wangzhou@192.168.201.23:/boot/wangzhou_data/p650/gpio-test/gpio-test-input.sh ./
+
+ifconfig eth0 192.168.201.24
+
+devmem 0x00e4001038 w 0xffffffff
+devmem 0x00e4020000
+
+scp wangzhou@192.168.201.36:/boot/wangzhou_data/p650/workspace/kernel/drivers/gpio/gpio-hip04.ko ./
+scp wangzhou@192.168.201.36:/boot/wangzhou_data/p650/workspace/kernel/drivers/gpio/gpio-dwapb.ko ./
+scp wangzhou@192.168.201.36:/boot/wangzhou_data/p650/workspace/kernel/drivers/gpio/gpio-generic.ko ./
+
+scp wangzhou@192.168.201.36:/boot/wangzhou_data/p650/workspace/linux-upstream/gpio-test/gpio-test.sh ./
+scp wangzhou@192.168.201.36:/boot/wangzhou_data/p650/workspace/linux-upstream/gpio-test/gpio-test-input.sh ./
+scp wangzhou@192.168.201.36:/boot/wangzhou_data/p650/workspace/linux-upstream/gpio-test/gpio-sys-irq-init.sh ./
+scp wangzhou@192.168.201.36:/boot/wangzhou_data/p650/workspace/linux-upstream/gpio-test/a.out ./
+
+scp wangzhou@192.168.201.112:/boot/wangzhou_data/p650/workspace/nand_test/a.out ./
+scp wangzhou@192.168.201.112:/boot/wangzhou_data/p650/workspace/nand_test/update_kernel ./
+scp wangzhou@192.168.201.112:/boot/wangzhou_data/p650/workspace/boot-wrapper/tftpboot/.kernel ./
+
+console=ttyS0,115200 earlyprintk rootfstype=nfsroot root=/dev/nfs rw nfsroot=192.168.201.16:/home/joyx/develop/d01/workspace/ubuntu-image/binary ip=192.168.201.17:192.168.201.16:192.168.201.1:255.255.255.0::eth0:on:192.168.201.1:8.8.8.8 user_debug=31 nfsrootdebug
+
+console=ttyS0,115200 rdinit=/linuxrc earlyprintk
+
+SetLinuxAtag
+ChangeLinuxAtag
+
+reference ways to split patches:
+https://lkml.org/lkml/2013/11/5/424
+
+	
+nand_scan_ident
+    -->nand_get_flash_type
+    {
+	NAND device: Manufacturer ID: 0x2c, Chip ID: 0xac (Micron NAND 512MiB 1,8V 8-bit)
+	NAND device: 512MiB, SLC, page size: 2048, OOB size: 64
+    }
+
+nand_scan_taile_nand:if come here!
+
+    --> BUG in NAND_ECC_HW_SYNDROME？
+    --> chip->scan_bbt()
+    scan_bbt:
+    nand_default_bbt(register in nand_set_defaults)
+        -->nand_scan_bbt()
+            --> nand_memory_bbt()
+                --> create_bbt()
+                {
+                     "Bad eraseblock"
+		     scan_block_fast()
+ 		         -->mtd_read_oob()
+                             -->mtd->_read_oob()
+                }
+
+mtd_write_oob()
+    --> nand_do_write_oob()
+        -->chip->ecc.write_oob_raw()
+	-->(or chip->ecc.write_oob)
+   
+
+nand_scan_tail()
+    --> mtd->_read_oob = nand_read_oob
+
+nand_read_oob:provision 192.168.201.36 -u wangzhou -p wangroot -f .kernel
+    --> if (!op->datbuf)
+            nand_do_read_oob 
+	        --> chip->ecc.read_oob
+        else
+            nand_do_read_ops
+
+ecc->read_oob = nand_read_oob_std
+nand_read_oob_std()
+   --> chip->cmdfunc(mtd, NAND_CMD_READOOB, 0, page);   // rewrote NAND_CMD_READOOB
+   --> chip->read_buf(mtd, chip->oob_poi, mtd->oobsize); // not read read_buf
+       nand_read_buf()
+
+mtd_device_parse_register (注册之后是cdev)
+    --> err = parse_mtd_partitions()
+    --> if (err > 0)
+            add_mtd_partitions();
+        if (err == 0)
+            add_mtd_device();
+
+mtd_part_types //?
+register_mtd_parser()
+parse_mtd_partitions()
+add_mtd_partitions() //?
+struct mtd_part
+
+struct mtd_blktrans_ops mtdblock_tr; // core struct
+struct gendisk // block device core struct
+
+register_mtd_blktrans()
+    --> register_blkdev()
+
+NAND_CMD_READ0 call chain:
+
+(mtd->_read)
+nand_read()provision 192.168.201.112 -u wangzhou -p wangroot -f .kernel
+    --> nand_do_read_ops()
+        --> cmdfunc(mtd, NAND_CMD_READ0, 0X00, page);
+        --> chip->ecc.read_page(mtd, chip, bufpoi, oob_required, page);
+        (nand_read_page_hwecc)
+	    -->chip->read_buf
+
+NAND_CMD_PAGEPROG
+mtdchar_write()-->mtd_write()-->
+mtd->_write = nand_write
+    --> nand_do_write_ops()
+        --> chip->write_page()
+        (nand_write_page())
+            --> chip-ecc.write_page()
+            (ecc->write_page = nand_write_page_hwecc)
+            --> chip->cmdfunc(mtd, NAND_CMD_PAGEPROG, -1, -1)
+            --> chip->waitfunc(mtd, chip)
+            
+NAND_CMD_ERASE1:
+NAND_CMD_ERASE2:
+mtd_erase
+    -->nand_erase
+        -->nand_erase_nand
+            --> single_erase_cmd(chip->erase_cmd)
+                --> cmdfunc(NAND_CMD_ERASE1)
+                --> cmdfunc(NAND_CMD_ERASE2)
+
+nand_write_oob
+    -->nand_do_write_oob
+
+(mtd->_block_markbad)
+nand_block_markbad /* mark block at the given offset as bad */
+  --> nand_block_isbad /* if already marked bad */
+      --> nand_block_checkbad
+          --> nand_isbad_bbt
+  --> nand_block_markbad_lowlevel /* do mark operation */
+      --> nand_default_block_markbad /* chip->block_markbad */
+          --> nand_do_write_oob /* call write_oob to do */
+             --> nand_write_oob_std
+             ...
+
+NAND_CMD_STATUS:
+
+chip->ecc.size = 2048, mtd->oobsize = 64
+.text from block 0 
+.monitor from block 20
+.kernel from block 40
+
+.text actually context: no more than one page
+ so we can test nand controller driver using second page
+.moniter: little more than two page
+
+problem:
+1. version check ?
+2. nand_chip:ecc:mode, strength, size ?
+3. nand_select_chip ?
+4. dev_id = AC
+5. mtd->writesize = 1024 << 1provision 192.168.201.112 -u wangzhou -p wangroot -f .kernel = 2048
+   mtd->oobsize = 64
+   (nand_decode_ext_id)
+6. mtd->erasesize = (64 * 1024) << 1 = 1 block
+7. slc
+8. chip->bbt_options |= NAND_BBT_SCAN2NDPAGE
+   (nand_decode_bbm_options())
+9. ecc.layout ? 
+10. ecc->steps = mtd->writesize / ecc->size
+
+11. erase all, read, not all 1 but last time data ?
+12. write/read serval time, then can not write/read data correctly ?
+
+#11. 开始可以读写，但是几次操作后无法读写，读出的是全0，block 2,3的第一个page都是这种情况
+当前测试用的是block 4的第一个page. 原因是坏块标记是block第一个page的oob区域的第一个字节
+当写page的时候oob中的第一个字节会被写成254，而任何非255的情况都会被在启动的时候(driver probe的时候)
+认为是坏块，所以系统读出的是全0(可能是这么处理的)。需要跟踪：write page时对oob区的操作，先不要拿
+block的第一个page作实验...
+
+#12. 原因是当erase操作不是整数block对齐的时候，无法擦除，所以没有把法写入，所以在“1”位全部用完的时候
+再读数据就都是全0了， 分析nand_erase_nand()
+nand_erase_nand:
+(1) pr_debug ？
+(2) 如果不是start和len都块对齐，在check_offs_len中报错，随后nand_erase_nand()返回，没有进行erase操作 
+
+分析hinfc504_dma_transfer()?
+    host->buffer = dma_alloc_coherent(dev, size, dma_buffer, GFP_KERNEL)?
+
+hard disk 2TB start problem？
+
+系统启动时nand初始化完会出现：“ftl_cs: FTL header not found.”
+
+build jffs2 filesystem on nand flash:
+flash_eraseall /dev/mtd3
+mkfs.jffs2 -n -s 2048 -e 128KiB -d ./jffs2 -o jffs2.img
+cp ./jffs2.img /dev/mtdblock3 (can be omitted!)
+mount -t jffs2 /dev/mtdblock3 /mnt/nand 
+(nandflasherase all)
+
+mount -t ubifs /dev/mtdblock3 /mnt/nand
+
+flash_erase /dev/mtd3 1048576 2 (3th) 8
+1310720
+flash_erase /dev/mtd3 0 3968
+flash_erase -j /dev/mtd3 0 3968
+ftl_format:
+
+flash_erase /dev/mtd3 0 512
+flash_erase /dev/mtd3 0 64
+dd if=./jffs2.img of=/dev/mtd3 bs=256k
+
+nandflashreadspare 8192 0 64
+nandflashreadspare 8193 0 64
+nandflashreadspare 8256 0 64
+nandflashreadspare 198976 0 64 
+nandflashreadspare 198977 0 64 
+
+nandflashread 8192 0 2048 (1023)
+nandflashread 8193 0 2048
+
+nandflashread 0 0 2048
+nandflashread 64 0 2048   (2)
+nandflashread 128 0 2048  (3)
+nandflashread 192 0 2048  (4)
+nandflashread 256 0 2048  (5)
+
+nandflashread 65472 0 2048 (1023)
+nandflashread 65536 0 2048 (1024)
+nandflashread 65600 0 2048 (1025)
+nandflashread 65664 0 2048 (1026)
+
+nandflasherase 0
+nandflasherase 1023
+nandflasherase 1024
+nandflasherase 1025
+
+==============
+nandflashread  4096 0 2048
+nandflashread  4097 0 2048 (1)
+nandflashread  4098 0 2048
+nandflashread  4099 0 2048
+...
+nandflashread  4156 0 2048 (60)
+nandflashread  4159 0 2048 (63)
+
+=============
+nandflashread  4160 0 2048 (2th block 1th page)
+
+
+5 no    655360
+6 no    786432
+7 yes   917504
+8 yes
+
+ubi:
+device_tree:
+
+ ----->NAND_CMD_ERASE:page:8512
+[  156.940487] -------> nand_write_oob
+[  156.944005] -------> nand_do_write_oob
+[  156.947783] ----->NAND_CMD_ERASE:page:8512
+[  157.001894] ----->NAND_CMD_ERASE:page:8448
+[  157.020443] -------> nand_write_oob
+[  157.023965] -------> nand_do_write_oob
+[  157.027741] ----->NAND_CMD_ERASE:page:8448
+
+root@linaro-server:/mnt/nand# [  340.701376] DMA operation(irq) timeout!
+[  340.705236] dma is already done but without irq ACK!
+
+
+NANDFLASH学习笔记之MTD下nandflash驱动（一个系列的文章）
+
+about kernel patch: view,sent,write,make...
+http://thread.gmane.org/gmane.linux.kernel/1684423/focus=70094
+
+sudo /etc/init.d/networking restart
+http://free-electrons.com/blog/creating-flashing-ubi-ubifs-images/
+
+qianyi

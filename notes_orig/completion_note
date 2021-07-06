@@ -1,0 +1,100 @@
+linux completion 笔记
+
+-v0.1 2014.12.1 wangzhou draft
+
+1. 使用场景
+
+   任务A停住，等待任务B完成后任务A再执行。
+
+   一个简单的例子是：在设备驱动中，设备发起一个DMA操作，这个操作完成是需要一定的
+   时间的。这时可以使用完成量，叫这个进程被调度出去。当DMA操作完成时，设备向CPU
+   发中断，我们在中断处理程序中唤醒等待的任务，即刚刚被调度出去的进程重新执行
+
+2. 使用方法
+
+   完成量的核心数据结构是：
+       struct completion {
+	    unsigned int done;
+	    wait_queue_head_t wait;
+
+       }
+
+   使用时先申明一个完成量：
+   静态申明：
+       DECLARE_COMPLETION(work);
+   动态申明：
+       init_completion(struct completion *)；
+
+   使用函数：wait_for_completion(struct completion *);使当前进程挂起，等待完成
+   量被唤醒。
+
+   使用函数：complete(struct completion *); 唤醒完成量。上面的中断处理程序中即
+   使用该函数唤醒调度出去的进程。
+
+3. 实现原理
+  完成量依靠完成队列实现，先看相关的数据结构：
+  struct completion 包含一个完成队列的头，这是一个链表头. 链表上挂的元素是
+  struct __wait_queue, 如下：
+
+    struct __wait_queue {
+	    unsigned int	flags;
+    #define WQ_FLAG_EXCLUSIVE	0x01
+	    void		*private;
+	    wait_queue_func_t	func;
+	    struct list_head	task_list;
+    };
+
+    wait_for_completion()的调用链如下：
+        --> wait_for_common(x, MAX_SCHEDULE_TIMEOUT, TASK_UNINTERRUPTIBLE);
+	    --> __wait_for_common(x, schedule_timeout, timeout, state);
+                --> do_wait_for_common(x, action, timeout, state);
+    最后核心函数是：do_wait_for_common()
+
+    do_wait_for_common(struct completion *x,
+		       long (*action)(long), long timeout, int state)
+    {
+	    if (!x->done) {
+		    /* 生成一个__wait_queue结构, 当前进程的struct task_struct
+		     * 结构到private上。
+		     */
+		    DECLARE_WAITQUEUE(wait, current);
+
+                    /* 将上面生成的__wait_queue挂到完成量x的完成队列头上 */
+		    __add_wait_queue_tail_exclusive(&x->wait, &wait);
+		    do {
+			    if (signal_pending_state(state, current)) {
+				    timeout = -ERESTARTSYS;
+				    break;
+			    }
+			    __set_current_state(state);
+			    spin_unlock_irq(&x->wait.lock);
+			    /* action为schedule_timeout, 运行该函数当前进程将
+			     * 将睡眠，调度器调度其他进程执行
+			     */
+			    timeout = action(timeout);
+			    spin_lock_irq(&x->wait.lock);
+		    } while (!x->done && timeout);
+		    __remove_wait_queue(&x->wait, &wait);
+		    if (!x->done)
+			    return timeout;
+	    }
+	    x->done--;
+	    return timeout ?: 1;
+    }
+
+    void complete(struct completion *x)
+    {
+	    unsigned long flags;
+
+	    spin_lock_irqsave(&x->wait.lock, flags);
+	    /* 将完成量x中的done加一，再唤醒完成队列上的进程，这时上面函数中的
+	     * action()返回，done不为0，上面的函数将跳出while(), 执行
+	     * __remove_wait_queue()将当前进程移出相应的等待队列
+	     */
+	    x->done++;
+	    __wake_up_locked(&x->wait, TASK_NORMAL, 1);
+	    spin_unlock_irqrestore(&x->wait.lock, flags);
+    }
+
+reference:
+[1] http://blog.csdn.net/dreamxu/article/details/5866593 

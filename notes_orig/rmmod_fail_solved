@@ -1,0 +1,21 @@
+Error: Module *** is in use
+
+使用rmmod module_A，出现错误：
+
+root@linaro-server:/mnt# rmmod module_A
+Error: Module module_A is in use
+root@linaro-server:/mnt# lsmod
+Module                  Size  Used by
+module_A                10564  -2 
+
+用lsmod查看，发现Used by显示-2
+
+重新编译内核，加入模块卸载选项Module unloading, 即可正常卸载模块
+[*] Enable loadable module support --->
+--- Enable loadable module support
+  [ ] Forced module loading
+  [*] Module unloading
+  [ ] Forced module unloading
+  ...
+
+

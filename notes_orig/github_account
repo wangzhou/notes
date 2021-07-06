@@ -1,0 +1,8 @@
+ssh -qTfnN -D 7070 scarecrowwang@216.194.70.6
+
+github:
+wangzhou
+wangzhou.bry@gmail.com
+key:135465wang
+
+github上的repositery叫linux_blog

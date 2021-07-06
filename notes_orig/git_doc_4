@@ -1,0 +1,86 @@
+git pull note
+
+-v0.1 2014.10.10 wangzhou draft
+ 本文是学习git pull时的一个笔记, 以一个实验的方式记录。
+
+1. git repo A:
+   branch: master, test
+
+   git repo B;
+   branch: master, test(all pull from repo A)
+
+   若在repo A上test分支加一个提交, 在repo B的master分支上用git pull, reop
+   B的test分支将不会更新，repo B切换到test分支上，再使用git pull,
+   则可以更新test分支。
+
+2. 还是上面的场景，在repo A test分支上加一个commit new。在repo B中git fetch,
+   git checkout origin/test, git log, 会发现现在repo B的远程分支origin/test
+   有了repo A test分支上的commit new
+
+   在repo B的test分支上，git merge orgin/test，即可把git fetch得到的repo B
+   origin/test分支和test合并。这也就是常说的git pull = git fetch + git merge
+
+   可以看出repo B在本地是有origin/master, origin/test的远程分支的完整拷贝，也有
+   本地分支master, test。在git fetch操作时，只是把repo A上的新提交加到repo B的
+   origin/test“分支”上。
+
+                       git clone
+   repo A: A-->B-->C   ========>   repo B: A-->B-->C 
+                   \				    \
+		   master			    master(也是origin/master)
+
+			new commit
+                       /  
+   repo A: A-->B-->C-->D           repo B: A-->B-->C 
+                       \		            \
+     	               master			     master(也是origin/master)
+
+			new commit        git fetch    origin/master
+                       /                               / 
+   repo A: A-->B-->C-->D           repo B: A-->B-->C-->D
+                       \		            \
+     	               master			     master
+
+			new commit       git merge     origin/master
+                       /                               / 
+   repo A: A-->B-->C-->D           repo B: A-->B-->C-->D
+                       \		                \
+     	               master			        master
+
+   如果在第三步中在repo B的master分支上又作了几次提交,比如:
+			new commit                     origin/master
+                       /                               / 
+   repo A: A-->B-->C-->D           repo B: A-->B-->C-->D
+                       \		            \
+     	               master			     -->E-->F  master
+		      
+   那么在git merge会如下, master分支中会加入E, F两个提交
+			new commit        git merge    origin/master
+                       /                               / 
+   repo A: A-->B-->C-->D           repo B: A-->B-->C-->D-------
+                       \		            \          \
+     	               master			     -->E-->F-->G  master
+
+3. git branch显示本地分支，git branch -r显示远程分支，
+   git checkout orgin/test -b local_branch 建立一个本地分支local_branch跟踪
+   远程分支
+
+4. 在repo B .git中的config文件中有这样的配置条目:
+    [remote "origin"]
+	    url = /home/example/git_test_client/../git_test
+	    fetch = +refs/heads/*:refs/remotes/origin/*
+    [branch "master"]
+	    remote = origin
+	    merge = refs/heads/master
+    [branch "test_client"]
+	    remote = origin
+	    merge = refs/heads/test
+    其中第一条[remote "origin"], url表示远程仓库的url, fetch表示做git fetch
+    的时候远程仓库中的各个分支，对应本地仓库中的refs/remotes/orgin/下的各个“分支”。
+    本地仓库的origin/master等严格的讲并不是一个分支，使用git checkout origin/master
+    会显示处于头指针分离状态。
+    后面的[branch "master"]条目表示，当时候git pull时，会把git fetch得到的orgin/master
+    merge到本地的master分支中。
+
+referance:
+1. Git 权威指南 第19章 远程版本库

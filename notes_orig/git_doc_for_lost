@@ -1,0 +1,5 @@
+git note for lost
+
+1. git branch --edite-description
+   可以添加当前git分支的说明，说明文字被添加到.git/config
+   所以可以用git config -l 查看当前分支的说明，如果有说明的话

@@ -1,0 +1,18 @@
+oprofile在arm64体系结构下
+
+oprofile是一种linux下的系统性能测试工具。在arm64体系构架下如何支持oprofile? 从
+下面的patch中可以看出来, 像以前那样在arch/arm64/下加个oprofile目录，在其中添加
+oprofile的驱动已经不行了(准确的讲oprofile的驱动是由arch/***/oprofile和
+drivers/oprofile一起编译而来的)
+
+https://lkml.org/lkml/2014/4/26/18
+
+oprofile和perf(另一种linux性能调试工具，现在perf更加流行)功能重复度很高，现在
+提倡的做法是用perf提供的内核API去实现oprofile。相应的, oprofile的用户态工具也有
+不使用oprofile内核驱动的operf。operf直接使用perf提供的内核API实现，基本上是perf
+的一个子集
+
+结论是：oprofile在arm64下，不会在内核添加代码支持。在oprofile用户态代码中添加
+arm64的支持后，可以使用oprofile的子命令operf。所以学习perf的性价比应该更高，直
+接开始用perf做linux下的性能调优吧 :)
+
