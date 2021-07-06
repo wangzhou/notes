@@ -1,0 +1,18 @@
+wireshark and tcpdump
+---------------------
+
+-v0.1 2017.2.25 Sherlock init
+
+tcpdump可以捕获某个网络端口的所有的网络报文。可以用：
+```
+tcpdump -i eth0 -w dump_file
+```
+捕获从eth0经过的网络报文，然后把他们的具体信息存在dump_file指定的文件中。
+
+用wireshark可以打开dump_file文件解析其中的报文。wireshark是一个图形化的网络报文
+分析工具。在windows和linux下都有wireshark的版本。
+
+一般的，看报文的统计结果的时候，比如看有多少重传的TCP报文，可以在wireshark中
+打开Analyze -> Export Info -> Notes 查看
+
+...

@@ -1,0 +1,178 @@
+MSI in PCIe system
+==================
+
+-v0.1 2016.2.15 sherlock init
+-v0.2 2016.2.16 sherlock add msi-map/msi-map-mask part
+
+This document analysizes a problem what we met in HiSilicon PCIe driver(DT version).
+And share how to solve this problem.
+
+Problem:
+--------
+
+Now in mainline DT(we plan to do):
+
+...
+	gic: interrupt-controller@8d000000 {
+		compatible = "arm,gic-v3";
+                #interrupt-cells = <3>;
+                #address-cells = <2>;
+                #size-cells = <2>;
+                ranges;
+                interrupt-controller;
+                #redistributor-regions = <1>;
+                redistributor-stride = <0x0 0x30000>;
+		reg = <0x0 0x8d000000 0 0x10000>,	/* GICD */
+		      <0x0 0x8d100000 0 0x300000>,	/* GICR */
+		      <0x0 0xfe000000 0 0x10000>,	/* GICC */
+		      <0x0 0xfe010000 0 0x10000>,       /* GICH */
+		      <0x0 0xfe020000 0 0x10000>;       /* GICV */
+		interrupts = <GIC_PPI 9 IRQ_TYPE_LEVEL_HIGH>;
+
+...
+		its_pcie: interrupt-controller@b7000000 {
+			compatible = "arm,gic-v3-its";
+			msi-controller;
+			#msi-cells = <1>;
+			reg = <0x0 0xb7000000 0x0 0x40000>;
+		};
+	};
+...
+	mbigen_pcie: mbigen_pcie_intc {
+		compatible = "hisilicon,mbigen-v1";
+		msi-parent = <&its_pcie MBIGEN_V1_DEVID>;
+		interrupt-controller;
+		#interrupt-cells = <2>;
+		reg = <0x0 0xb7030000 0x0 0x10000>;
+		num-msis = <640>;
+	};
+
+	pcie1: pcie@0xb0080000 {
+		compatible = "hisilicon,hip05-pcie", "snps,dw-pcie";
+		reg = <0 0xb0080000 0 0x10000>, <0 0xb00d0000 0 0x10000>,
+		      <0x220 0 0 0x2000>, <0 0xb2000000 0 0x40000>;
+		reg-names = "rc_dbi", "pcs", "config", "serdes";
+		bus-range = <0  127>;
+		msi-parent = <&its_pcie>;
+		#address-cells = <3>;
+		#size-cells = <2>;
+		device_type = "pci";
+		dma-coherent;
+		ranges = <0x02000000 0 0xb0000000 0x220 0x00200000 0 0xffe0000
+			  0x01000000 0 0 0x220 0x00010000 0 0x10000>;
+		num-lanes = <8>;
+		port-id = <1>;
+		status = "disabled";
+	};
+
+	pcie2: pcie@0xb0090000 {
+		compatible = "hisilicon,hip05-pcie", "snps,dw-pcie";
+		reg = <0 0xb0090000 0 0x10000>, <0 0xb00e0000 0 0x10000>,
+		      <0x240 0 0 0x2000>, <0 0xb2100000 0 0x40000>;
+		reg-names = "rc_dbi", "pcs", "config", "serdes";
+		bus-range = <128 255>;
+		msi-parent = <&its_pcie>;
+		#address-cells = <3>;
+		#size-cells = <2>;
+		device_type = "pci";
+		dma-coherent;
+		ranges = <0x02000000 0 0xb0000000 0x240 0x00200000 0 0xffe0000
+			  0x01000000 0 0 0x240 0x00010000 0 0x10000>;
+		num-lanes = <8>;
+		port-id = <2>;
+		status = "disabled";
+	}
+
+As in GIC ITS node, there is #msi-cells = <1> which indicates there should be
+its parent phandle and device ID in this ITS's child nodes[1]. In our system,
+MBIGEN and PCIe host can be able to be seen as ITS's child as they both send
+MSI/MSI-X interrupts to ITS.
+
+In MBIGEN DT node, we have msi-parent = <&its_pcie MBIGEN_V1_DEVID>, but in
+PCIe host node, we have msi-parent = <&its_pcie>. This was what we did before,
+which brings conflict and system goes wrong.
+
+We get irq domain defined by msi-parent = <&its_pcie> by:
+
+pci_create_root_bus
+    --> pci_set_bus_msi_domain
+        --> pci_host_bridge_msi_domain
+	    --> pci_host_bridge_of_msi_domain
+	        --> of_msi_get_domain
+
+We can see the process in of_msi_get_domain:
+for DOMAIN_BUS_PCI_MSI(of cause, PCIe host uses this flag), only there is no
+#msi-cells item in ITS node, can we use  __of_get_msi_domain to get ITS irq
+domain(ITS PCI MSI domain here).
+
+The conflict here is that we want its_pcie to server both mbigen_pcie and
+pcie1/pcie2. For mbigen_pcie, we must have #msi-cells item in ITS node(will
+explain later), but for pcie1/pcie2, if we have #msi-cells item in ITS node, we
+will not be able to parse irq domain.
+
+Let's see why we need #msi-cells item for MBIGEN node.
+<to do ...>
+
+
+A way to solve
+--------------
+
+Here we can use msi-map and msi-map-mask to replace msi-parent in PCIe host
+to solve this problem[2].
+
+We can write pcie nodes as:(delete msi-parent and add msi-map and msi-map-mask)
+
+	pcie1: pcie@0xb0080000 {
+		compatible = "hisilicon,hip05-pcie", "snps,dw-pcie";
+		reg = <0 0xb0080000 0 0x10000>, <0 0xb00d0000 0 0x10000>,
+		      <0x220 0 0 0x2000>, <0 0xb2000000 0 0x40000>;
+		reg-names = "rc_dbi", "pcs", "config", "serdes";
+		bus-range = <0  127>;
+		msi-map = <0x0 &its_pcie 0x0 0x8000>;
+		msi-map-mask = <0xffff>;
+		#address-cells = <3>;
+		#size-cells = <2>;
+		device_type = "pci";
+		dma-coherent;
+		ranges = <0x02000000 0 0xb0000000 0x220 0x00200000 0 0xffe0000
+			  0x01000000 0 0 0x220 0x00010000 0 0x10000>;
+		num-lanes = <8>;
+		port-id = <1>;
+		status = "disabled";
+	};
+
+	pcie2: pcie@0xb0090000 {
+		compatible = "hisilicon,hip05-pcie", "snps,dw-pcie";
+		reg = <0 0xb0090000 0 0x10000>, <0 0xb00e0000 0 0x10000>,
+		      <0x240 0 0 0x2000>, <0 0xb2100000 0 0x40000>;
+		reg-names = "rc_dbi", "pcs", "config", "serdes";
+		bus-range = <128 255>;
+		msi-map = <0x8000 &its_pcie 0x0 0x8000>;
+		msi-map-mask = <0xffff>;
+		#address-cells = <3>;
+		#size-cells = <2>;
+		device_type = "pci";
+		dma-coherent;
+		ranges = <0x02000000 0 0xb0000000 0x240 0x00200000 0 0xffe0000
+			  0x01000000 0 0 0x240 0x00010000 0 0x10000>;
+		num-lanes = <8>;
+		port-id = <2>;
+		status = "disabled";
+	}
+
+Here we get irq domain by:
+
+pci_device_add
+    --> pci_set_msi_domain(dev)
+        --> pci_dev_msi_domain
+	    --> pci_msi_get_device_domain
+	        --> of_msi_map_get_device_domain
+
+of_msi_map_get_device_domain will get the info in msi-map/msi-map-mask and irq
+domain. irq domain will be assign to msi_domain in struct device by
+dev_set_msi_domain.
+
+we will get this irq domain by pci_msi_get_domain in drivers/pci/msi.c
+
+[1] Documentation/devicetree/bindings/interrupt-controller/arm,gic-v3.txt
+[2] Documentation/devicetree/bindings/pci/pci-msi.txt

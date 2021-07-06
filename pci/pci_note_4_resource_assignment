@@ -1,0 +1,220 @@
+pci note 4
+==========
+
+-v0.1 2015.6.20 Sherlock draft: about pci resource assignment, just analysis
+                                ARM specific PCIe
+-v0.2 2015.6.22 Sherlock add introduction, some details analysis
+
+有些机器没有中文输入法，就成了现在中英杂揉了 :(
+linux kernel中pci分配资源的代码比较复杂，下面先总体介绍大体的流程，有了一个整体
+概念后再去理解细节就比较容易一些了。
+
+整个资源分配的过程就是从系统的总资源里给每个pci设备的bar分配资源，给每个pci桥
+的base, limit的寄存器分配资源。借用这个系列笔记一中的图，资源分配所要做的就是填写
+pci ep设备和pci桥中配置空间的寄存器，从总的资源(这里假设soc系统给这个pci host
+bridge分配的资源是 0xb200_0000 ~ 0xb400_0000)给pci桥上的base/limit寄存器分资源，
+给pci ep设备上的Bar分资源。
+
+现在已知的是：
+1. resource: 0xb200_0000 ~ 0xb400_0000. 这个是系统早就分好的。pcie dts节点中的range项是其的一个子集。
+2. pci ep设备有多少个bar和各个bar的信息, 这些信息已经存在了对应的pci_dev->resource[]中了。
+
+
+		    +----------------+ ----> PCIe host bridge
+		    | pcie root port |
+		    +----------------+ ----> in Soc
+			    |           (resource: 0xb200_0000 ~ 0xb400_0000)
+    +-------------------------------------------------+ ----> switch
+    |		    +----------------+                |
+    |		    |   pci bridge   |                |
+    |		    +----------------+                |
+    |			    |                         |
+    |         -------------------------------         |
+    |         |                             |         |
+    | +----------------+	   +----------------+ |  io base/limit
+    | |   pci bridge   |	   |   pci bridge   | |  32bits mem base/limit
+    | +----------------+	   +----------------+ |  64bits mem base/limit
+    +-------------------------------------------------+  pref 64bits mem base/limit
+              |                             |
+      +----------------+           +----------------+
+      |  PCIe net card |           | PCIe net card  |
+      +----------------+           +----------------+
+      |     BAR 0      |           |     BAR 0      |
+      +----------------+           +----------------+
+      |     ...        |           |     ...        |
+      +----------------+           +----------------+
+      |     BAR 5      |           |     BAR 5      |
+      +----------------+           +----------------+
+
+大体流程是：
+所有分配可以用pci_assign_unassigned_bus_resources完成。
+__pci_bus_size_bridges用深度优先递归确定各级pci桥上base/limit的大小。会记录在
+pci_dev->resource[PCI_BRIDGE_RESOURCES] ...中，这时并没有在寄存器中写入数值。
+__pci_bus_assign_resources()首先对当前总线下的设备请求的资源排序，这个资源中包括
+总线下的设备上的bar; 总线下游请求的资源,即base/limit下的资源。对于该总线下设备
+上的bar资源，在下面__assign_resources_sorted的调用链中立即分配, pci桥上的base/limit
+则先不分配。__pci_bus_assign_resources()中再次用深度优先递归的办法，依次分配各个
+pci ep设备上的bar资源，在每个递归向上返回的过程中调用__pci_bus_size_bridges()
+设置pci桥上的base/limit寄存器。
+
+下面用具体例子再详细解释一下分配过程, 是用的例子是直接在pci host bridge上插
+一个pcie ep设备：
+
+		|   root bus: 0   ---->  struct pci_bus
+		|
+	+----------------+        ---->  struct pci_host_bridge
+	| pcie root port |        ---->  struct pci_dev
+	+----------------+        
+		|   bus: 1        ---->  struct pci_bus
+		|
+	+----------------+
+	| pcie net cards |        ---->  struct pci_dev
+	+----------------+
+
+void pci_assign_unassigned_bus_resources(struct pci_bus *bus)
+{
+	struct pci_dev *dev;
+	LIST_HEAD(add_list); /* list of resources that
+					want additional resources */
+
+	down_read(&pci_bus_sem);
+	/* bus is root pci bus, so bus->devices is pci host bridge's pci_dev */
+	list_for_each_entry(dev, &bus->devices, bus_list)
+		if (pci_is_bridge(dev) && pci_has_subordinate(dev))
+				/* dev->subordinate is pci_bus: 1, pcie device
+				 * is connected to pci bus 1(assuming root bus
+				 * is 0)
+				 */
+				__pci_bus_size_bridges(dev->subordinate,
+							 &add_list);
+	up_read(&pci_bus_sem);
+	/* bus 0 */
+	__pci_bus_assign_resources(bus, &add_list, NULL);
+	    --> pbus_assign_resources_sorted(bus, realloc_head, fail_head);
+		/* will parse the size of resource(each bar), and add
+		 * them to list head using struct pci_dev_resource.
+		 * 
+		 * bus is root bus, so dev is pci host bridge,
+		 * but comments in __dev_sort_resources said that
+		 * we do not parse the resources in host bridge
+		 * 
+		 * in pcie-designware, it does not use PCI_CLASS_BRIDGE_HOST
+		 * to indicate PCIe host bridge, but use PCI_CLASS_BRIDGE_PCI.
+		 * so here will parse "Bar" resources in host bridge, and
+		 * resaults will be stored in pci_dev->resource[PCI_BRIDGE_RESOURCES]...
+		 * so pci_assign_resource will assign Bar 7 and Bar 8 according
+		 * to pci_dev->resource[PCI_BRIDGE_RESOURCES]..., in fact, this
+		 * info should be a base/limit info. And in pci_assign_resource
+		 * it will not allow above base/limit data to be wrotten to bar
+		 * 
+		 * So we need to find a way to fix above problem
+		 */
+		--> list_for_each_entry(dev, &bus->devices, bus_list)
+			__dev_sort_resources(dev, &head);
+
+		--> __assign_resources_sorted(&head, realloc_head, fail_head);
+			--> ...
+			--> assign_requested_resources_sorted(head, fail_head);
+				--> list_for_each_entry(dev_res, head, list)
+					--> pci_assign_resource(dev_res->dev, idx)
+	--> list_for_each_entry(dev, &bus->devices, bus_list)
+	    /* 这里会递归进入下一级总线，对已有的bar资源排序，然后分配。
+	     * pci_assign_resource会对bar写入相应的资源及地址
+	     */
+	    --> __pci_bus_assign_resources(b, realloc_head, fail_head);
+	    ...
+	    /* 从__pci_bus_assign_resources返回进入pci_setup_bridge分配pci
+	     * bridge的base/limit资源
+	     */
+	    --> case PCI_CLASS_BRIDGE_PCI:
+		--> pci_setup_bridge(b);
+
+	BUG_ON(!list_empty(&add_list));
+}
+
+/* I am afraid that below function added pci_dev->resource[PCI_BRIDGE_RESOURCES]
+ *
+ * dev->subordinate: pci_bus 1
+ */
+--> __pci_bus_size_bridges(dev->subordinate, &add_list);
+	/* bus: pci_bus 1, here we find pci_bus 1 and go out this list_for_each_entry */
+	--> list_for_each_entry(dev, &bus->devices, bus_list)
+		--> struct pci_bus *b = dev->subordinate;
+		if (!b)
+			continue;
+		...
+		--> case PCI_CLASS_BRIDGE_PCI:
+		    default:
+		    	__pci_bus_size_bridges(b, realloc_head);
+
+	--> switch (bus->self->class >> 8)
+	    ...
+	    /* check if this bridge support io and prefetch mem ranges */
+	    /*
+	     *  log if an intel 82575 plugged in above pci host bridge:
+	     *
+	     *  begin: pci_bridge_check_ranges
+	     *  in pci_bridge_check_ranges: mem size: 1
+	     *  in pci_bridge_check_ranges: first read io: 0
+	     *  in pci_bridge_check_ranges: second read io: e0f0
+	     *  in pci_bridge_check_ranges: io size: 1
+	     *  in pci_bridge_check_ranges: first read pref mem: 10001
+	     *  in pci_bridge_check_ranges: first read 64 pref mem: 0
+	     *  in pci_bridge_check_ranges: second read 64 pref mem: ffffffff
+	     */
+	    --> case PCI_CLASS_BRIDGE_PCI
+			pci_bridge_check_ranges(bus);
+				/* why writing 0xe0f0, so here just write a
+				 * random number to test if this register can
+				 * be wrotten something?
+				 */
+				--> pci_write_config_word(bridge, PCI_IO_BASE, 0xe0f0);
+	    --> default:
+		/* to caculate size of io and mem ranges of this pci bridge */
+		--> pbus_size_io()
+
+		/* pci_dev->resource[0] is 32 mem ? */
+		--> b_res = &bus->self->resource[PCI_BRIDGE_RESOURCES];
+		    mask = IORESOURCE_MEM;
+		    prefmask = IORESOURCE_MEM | IORESOURCE_PREFETCH;
+
+		/* pci_dev->resource[2] is 64 mem ? */
+		--> if (b_res[2].flags & IORESOURCE_MEM_64)
+		...
+
+		pbus_size_mem()
+
+--> pbus_size_io(struct pci_bus *bus, resource_size_t min_size,
+	resource_size_t add_size, struct list_head *realloc_head)
+	/* below function will return pci_bus->resource[], here will be io
+	 * resource item
+	 */
+    --> find_free_bus_resource()
+	/* from comments in kernel code: I/O windows are 4K-aligned, but some
+	 * bridges have an extension to support 1K alignment. 
+	 *
+	 * min_align is 4k here.
+	 */
+    --> min_align = window_alignment(bus, IORESOURCE_IO);
+    --> list_for_each_entry(dev, &bus->devices, bus_list)
+	/* find required io resource in pci_dev->resource */
+	--> for (i = 0; i < PCI_NUM_RESOURCES; i++)
+
+    ...
+
+	/* add io resource to pci_bus->resource */
+    --> b_res->start = min_align;
+        b_res->end = b_res->start + size0 - 1;
+	b_res->flags |= IORESOURCE_STARTALIGN;
+
+--> assign_requested_resources_sorted(head, fail_head);
+	/* For resources in host bridge, head here has bar0, bar7 and bar8.
+	 * I do not know when bar7 and bar8 resources had been added to head
+	 *
+	 * I added some prints, it seems that before resource assignment
+	 * (__pci_bus_assign_resources) bar7 and bar8 already added to
+	 * pci_dev->resource[PCI_BRIDGE_RESOURCES] and [PCI_BRIDGE_RESOURCES + 1]
+	 */
+	--> list_for_each_entry(dev_res, head, list)
+		--> pci_assign_resource(dev_res->dev, idx)
+

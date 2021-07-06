@@ -1,0 +1,10 @@
+UEFI无法编译IORT表
+------------------
+
+-v0.1 2017.2.22 Sherlock init
+
+在编译
+
+https://www.acpica.org/downloads
+
+2017

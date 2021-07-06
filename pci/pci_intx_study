@@ -1,0 +1,36 @@
+PCIe INTx study
+----------------
+
+-v0.1 2015.3.28 Sherlock draft
+
+PCIe总线驱动一般也要支持INTx中断。一般的INTx驱动是在dts中配置好(这里分析的是
+ARM架构下的PCI INTx)，然后在PCI的子系统中又相关的代码解析得到的。
+
+调用链大致是：
+```
+pci_device_add()
+    -->pcibios_add_device(dev)
+        -->dev->irq = of_irq_parse_and_map_pci(dev, 0, 0)
+	    -->of_irq_parse_and_map_pci()
+	           /* check if pci_dev has a device_node */
+	        -->pci_device_to_OF_node(pdev); ?
+		   /* what is pin for? */
+		-->pci_read_config_byte(pdev, PCI_INTERRUPT_PIN, &pin)
+		-->of_irq_parse_raw
+		      /* just parse interrupt-cell, interrupt-map,
+		       * interrupt-map-mask
+		       */
+		   --> of_get_property(...,"interrupt-cell",...")
+
+	    -->irq_create_of_mapping()
+```
+可见，PCI的核心代码pci_device_add()会扫面dts中的信息，然后给对应的中断分配
+中断号资源。分配好中断号(virq)会写到pci_dev->irq中，供pci设备驱动注册中断handler
+的时候使用。各个pci设备中注册的中断handler有时会共享一个INTx中短线(e.g. INTa)。
+这时一旦一个INTx中断被触发，不同设备上的中断handler都会被调用到。可见注册的时候，
+这些中断handler都应该时shareable的。
+
+note:
+	pci_scan_device will set of_node in pci_dev using pci_set_of_node().
+	if pci_dev's bus has of_node, will set of_node in pci_dev using
+	of_pci_find_child_device(dev->bus->dev.of_node, dev->devfn)

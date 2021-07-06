@@ -1,0 +1,32 @@
+there are:
+
+I/O bar
+32bit mem bar
+64bit mem bar
+prefchable 64bit mem bar
+
+so we should assign related windows for every kind of bar. 
+if we have 256MB memory for one PCIe host bridge, how to divide it to I/O window,
+32bit mem window, 64bit mem window and 64bit mem window.
+
+let's firstly take a look at the principle we should follow when assigning
+above resource windows.
+
+/* Fix me: it is better to find some code in PCI subsystem to support below principles */
+1. assign I/O bar from I/O window ?
+
+2. 32bit mem bar can only be assigned under 32bit mem window ?
+
+3. 64bit mem bar can only be assigned under 64bit mem window ?
+
+4. ...
+
+5. pci address for our PCIe host bridge is 0~0xffff_ffff_ffff_ffff
+
+/* it is strange to assign 256MB to PCIe host, but 0x20_0000_0000 */
+6. cpu address for our PCIe host bridge is 0x220_0000_0000~0x220_1000_0000 for PCIe1
+   cpu address for our PCIe host bridge is 0x240_0000_0000~0x240_1000_0000 for PCIe2
+
+/* should find related PCIe standard to support below */
+7. if size of Bar is  0x1000, pci address is A in ranges item in dts, it should
+   not be (A && 0xfff) < 0x1000. if so, will appear resouce conflict log.

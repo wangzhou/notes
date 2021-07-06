@@ -1,0 +1,38 @@
+acpi pci
+
+1. MCFG not hotplug
+   _CBA hotplug
+
+2. ECAM space can be distributed across multiple host bridge in the whole system
+
+3. MCFG directly refers to PCI Segment Group defined by _SEG for applicable host bridge
+
+4. size of a ECAM region is defined by start and end bus number, which should be
+   in 0 ~ 255
+
+5. PNP: plug and play ID
+   PNP0A03 is for a PCI host bridge in ACPI namespace
+   PNP0A08 is for a PCIe host bridge
+
+  CID: compatible ID, can set _CID = PNP0A03 for old OS.
+
+6. _BBN: boot bus number.
+
+7. _SEG: PCI Segment group
+
+8. _PRT: ?. to configure INTx in ACPI table.
+
+9. _OSC: ?
+
+10. _DSM: ?
+
+
+
+
+
+
+
+
+question:
+
+1. host bridge vs root port

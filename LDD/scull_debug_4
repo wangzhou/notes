@@ -1,0 +1,12 @@
+klogd and syslogd
+-----------------
+http://blog.csdn.net/dickjtk/article/details/8544660
+
+klogd can modify printk level
+/proc/sys/kernel/printk also can modify prink level
+
+redirect log to another console: need to learn tty driver.
+
+
+
+

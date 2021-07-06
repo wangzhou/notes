@@ -1,0 +1,22 @@
+How to update D05 firmware by BMC
+---------------------------------
+
+-v0.1 2017.3.28 sherlock init
+
+
+- Download firmware from:
+  https://github.com/hisilicon/distro/tree/master/d05-bios-20170325-b25
+
+- Access your D05 BMC in your browser.
+  (default: https://192.168.2.100)
+
+  User Name: root
+  Passwork: Huawei12#$
+
+- Go into System -> Firmware Upgrade
+ 
+- Choose the image you want to update in "Browse" and then click "Start Update"
+
+  Here we should update "biosimage-b25.hpm","bmcimage-b25.hpm","cpldimage-b25.hpm"
+  one by one
+ 

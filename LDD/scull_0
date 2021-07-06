@@ -1,0 +1,53 @@
+LDD3 study note 0
+=================
+
+This document shares a development environment to debug kernel using qemu.
+
+0. How to learn Linux kernel
+----------------------------
+You maybe have many ways to learn Linux kernel, but I think the only way to learn
+Linux kernel is keeping thinking and keeping writing codes. There are so many
+modules in kernel, maybe at first we do not know how to start, what to write.
+I think at first what to write is not important, the important thing is to
+understand basic kernel knowledge, as now everyday we will see so many open
+source codes, the only unchangeable or more stable thing is basic knowledge of
+kernel related. Let's start up from the basic things
+
+Here I suggest to use LDD3 to learn these basic knowledge. We will try to rewrite
+the modules in this book to get a new understanding about Linux kernel.
+
+
+1. Environment setting
+----------------------
+Normally it is very hard to debug kernel, so here I suggest you to learn and
+debug kernel using virtual machine, qemu is a good tool to help us to do this
+work.
+
+In my previous blogs, this was one which tell us how to using qemu to debug
+kernel in my way.
+
+        http://blog.csdn.net/scarecrow_byr/article/details/40707323
+
+However, the file system in that blog is not a very good one
+as there are some useful tools it did not have,
+
+Now I got a new root file system, which includes the basic user space tools to
+debug kernel. You can download it here:
+
+        https://github.com/wangzhou/kernel_debug_using_qemu.git
+
+Above repo also includes a script to run qemu in command line. I just use the
+root file system as a memory file system. So if you write something when the
+system is booting up, what you wrote will be lost when you shutdown your qemu.
+
+There is another script called put_file_in_mini.sh. When you wrote a kernel
+module and compiled it to a ko, you can use the script to put the ko to the root
+file system. The work flow of this script is very simple, it just extracts the
+compressed file system, put the file(e.g. your ko) to file system, and at last
+compress the file system back.
+
+In fact, there is other ways to get a root file system for your debug environment,
+for example, you can use a nfs as a root file system. In nfs way: 1. you need
+configure your networking for host and guest to let qemu be able to access one
+directory in you host, which includes the file system; 2. you need configure qemu
+to use nfs to get root file system. If having time, we can try this way later.

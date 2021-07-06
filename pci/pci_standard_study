@@ -1,0 +1,9 @@
+pcie standard study
+
+-v0.1 2015.4.5 Sherlock some note in pcie3.0 standard study
+
+pcie设备如果支持prefetchable mem, 必须支持64bits bar.
+
+non-prefetchable mem在系统中比较少，最好用pref ?
+
+

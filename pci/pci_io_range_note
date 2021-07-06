@@ -1,0 +1,115 @@
+PCI IO range note
+-----------------
+
+-v0.1 2016.1.27 Sherlock init
+
+ This note is about PCIe IO range in ARM64 world. Still not find a card which
+ can help me to learn how PCIe IO port work in ARM64.
+
+In pcie-designware.c, parse IO information in DTS.
+
+/*
+ *
+ */
+dw_pcie_host_init
+    --> of_pci_get_host_bridge_resources(..., &pp->io_base)
+        --> of_pci_range_to_resource
+		/* Add io info to io list: io_range_list */
+	    --> pci_register_io_range
+	        /*
+	         * Reture io base from 0 for first io resource, and second io
+		 * resource base from 0 + size of first io resource.
+		 *
+		 * So above pp->io->start will be 0 for first pcie io base,
+		 * and 0x10000 for second pcie io start.
+		 *
+		 * pp->io_base is IO range CPU base address.
+		 */
+	    --> pci_address_to_pio
+
+	/*
+         * First io range will be mapped to PCI_IOBASE which is a virtual
+	 * address. Second will be mapped to PCI_IOBASE + 0x10000(first size).
+	 */
+    --> pci_remap_iospace(pp->io, pp->io_base)
+        --> vaddr = (unsigned long)PCI_IOBASE + res->start;
+        --> ioremap_page_range(vaddr, vaddr + resource_size(res), phys_addr,
+			       pgprot_device(PAGE_KERNEL));
+
+  PCI_IOBASE-\(virtual address)
+|------------|----- PCI IO -------|-------------------...--------------------|
+             |
+              First PCI IO CPU address(configured in DTS) + Second...
+
+Debug log:
+
+[    3.046197] PCI host bridge /soc/pcie@0xb0080000 ranges:
+[    3.051492]   MEM 0x22000200000..0x220101dffff -> 0xb0000000
+[    3.057129]    IO 0x22000010000..0x2200001ffff -> 0x00000000
+[    3.062762] -----> in pci_remap_iospace: phys_addr: 22000010000
+[    3.068654] -----> in pci_remap_iospace: PCI_IOBASE: ffffffbffae00000
+[    3.075061] -----> in pci_remap_iospace: res->start: 0
+[    3.080196] hisi-pcie-hip05 b0080000.pcie: already Link up
+[    3.086567] -----> in pci_host_bridge_of_msi_domain: d: f6f1b480
+[    3.092593] hisi-pcie-hip05 b0080000.pcie: PCI host bridge to bus 0000:00
+[    3.099350] pci_bus 0000:00: root bus resource [bus 00-7f]
+[    3.104812] pci_bus 0000:00: root bus resource [mem 0x22000200000-0x220101dffff] (bus address [0xb0000000-0xbffdffff])
+[    3.115455] pci_bus 0000:00: root bus resource [io  0x0000-0xffff]
+[    3.121619] pci 0000:00:00.0: [19e5:0660] type 01 class 0x060400
+[    3.121674] pci 0000:00:00.0: supports D1 D2
+[    3.121678] pci 0000:00:00.0: PME# supported from D0 D1 D3hot
+[    3.121699] pci 0000:00:00.0: of_irq_parse_pci() failed with rc=-22
+[    3.128138] pci 0000:01:00.0: [8086:0953] type 00 class 0x010802
+[    3.128269] pci 0000:01:00.0: reg 0x10: [mem 0x00000000-0x00003fff 64bit]
+[    3.128399] pci 0000:01:00.0: reg 0x30: [mem 0x00000000-0x0000ffff pref]
+[    3.128751] pci 0000:00:00.0: of_irq_parse_pci() failed with rc=-22
+[    3.143037] pci 0000:00:00.0: BAR 14: assigned [mem 0x22000200000-0x220002fffff]
+[    3.150402] pci 0000:01:00.0: BAR 6: assigned [mem 0x22000200000-0x2200020ffff pref]
+[    3.158110] pci 0000:01:00.0: BAR 0: assigned [mem 0x22000210000-0x22000213fff 64bit]
+[    3.165940] pci 0000:00:00.0: PCI bridge to [bus 01]
+[    3.170882] pci 0000:00:00.0:   bridge window [mem 0x22000200000-0x220002fffff]
+[    3.178163] hisi-pcie-hip05 b0080000.pcie: only 32-bit config accesses supported; smaller writes may corrupt adjacent RW1C fields
+[    3.189796] PCI host bridge /soc/pcie@0xb0090000 ranges:
+[    3.195090]   MEM 0x24000200000..0x240101dffff -> 0xb0000000
+[    3.200724]    IO 0x24000010000..0x2400001ffff -> 0x00000000
+[    3.206357] -----> in pci_remap_iospace: phys_addr: 24000010000
+[    3.212247] -----> in pci_remap_iospace: PCI_IOBASE: ffffffbffae00000
+[    3.218654] -----> in pci_remap_iospace: res->start: 10000
+[    3.224128] hisi-pcie-hip05 b0090000.pcie: already Link up
+[    3.230537] hisi-pcie-hip05 b0090000.pcie: PCI host bridge to bus 0001:80
+[    3.237294] pci_bus 0001:80: root bus resource [bus 80-ff]
+[    3.242755] pci_bus 0001:80: root bus resource [mem 0x24000200000-0x240101dffff] (bus address [0xb0000000-0xbffdffff])
+[    3.253398] pci_bus 0001:80: root bus resource [io  0x10000-0x1ffff] (bus address [0x0000-0xffff])
+[    3.262342] pci 0001:80:00.0: [19e5:0660] type 01 class 0x060400
+[    3.262393] pci 0001:80:00.0: supports D1 D2
+[    3.262397] pci 0001:80:00.0: PME# supported from D0 D1 D3hot
+[    3.262416] pci 0001:80:00.0: of_irq_parse_pci() failed with rc=-22
+[    3.268739] pci 0001:80:00.0: Primary bus is hard wired to 0
+[    3.274373] pci 0001:80:00.0: bridge configuration invalid ([bus 01-01]), reconfiguring
+[    3.282473] pci 0001:81:00.0: [8086:10a7] type 00 class 0x020000
+[    3.282626] pci 0001:81:00.0: reg 0x10: [mem 0x00000000-0x0001ffff]
+[    3.282662] pci 0001:81:00.0: reg 0x14: [mem 0x00000000-0x001fffff]
+[    3.282698] pci 0001:81:00.0: reg 0x18: [io  0x10000-0x1001f]
+[    3.282734] pci 0001:81:00.0: reg 0x1c: [mem 0x00000000-0x00003fff]
+[    3.283161] pci 0001:80:00.0: of_irq_parse_pci() failed with rc=-22
+[    3.289537] pci 0001:81:00.1: [8086:10a7] type 00 class 0x020000
+[    3.289691] pci 0001:81:00.1: reg 0x10: [mem 0x00000000-0x0001ffff]
+[    3.289727] pci 0001:81:00.1: reg 0x14: [mem 0x00000000-0x001fffff]
+[    3.289763] pci 0001:81:00.1: reg 0x18: [io  0x10000-0x1001f]
+[    3.289798] pci 0001:81:00.1: reg 0x1c: [mem 0x00000000-0x00003fff]
+[    3.290210] pci 0001:80:00.0: of_irq_parse_pci() failed with rc=-22
+[    3.304492] pci_bus 0001:81: busn_res: [bus 81-ff] end is updated to 81
+[    3.304507] pci 0001:80:00.0: BAR 14: assigned [mem 0x24000200000-0x240006fffff]
+[    3.311870] pci 0001:80:00.0: BAR 13: assigned [io  0x10000-0x10fff]
+[    3.318199] pci 0001:81:00.0: BAR 1: assigned [mem 0x24000200000-0x240003fffff]
+[    3.325488] pci 0001:81:00.1: BAR 1: assigned [mem 0x24000400000-0x240005fffff]
+[    3.332775] pci 0001:81:00.0: BAR 0: assigned [mem 0x24000600000-0x2400061ffff]
+[    3.340064] pci 0001:81:00.1: BAR 0: assigned [mem 0x24000620000-0x2400063ffff]
+[    3.347351] pci 0001:81:00.0: BAR 3: assigned [mem 0x24000640000-0x24000643fff]
+[    3.354640] pci 0001:81:00.1: BAR 3: assigned [mem 0x24000644000-0x24000647fff]
+[    3.361927] pci 0001:81:00.0: BAR 2: assigned [io  0x10000-0x1001f]
+[    3.368176] pci 0001:81:00.1: BAR 2: assigned [io  0x10020-0x1003f]
+[    3.374426] pci 0001:80:00.0: PCI bridge to [bus 81]
+[    3.379366] pci 0001:80:00.0:   bridge window [io  0x10000-0x10fff]
+[    3.385603] pci 0001:80:00.0:   bridge window [mem 0x24000200000-0x240006fffff]
+[    3.392881] hisi-pcie-hip05 b0090000.pcie: only 32-bit config accesses supported; smaller writes may corrupt adjacent RW1C fields
