@@ -1,0 +1,30 @@
+dracut in redhat server system
+------------------------------
+
+-v0.1 2017.5.23 Sherlock init
+
+
+When installing Redhat ISO into D05, the installed ISO system can not boot.
+The reason is that there is some problem in dracut.
+
+This doc tried to tell what dracut is and how it works.
+
+
+When a Linux system booting, it firstly mounts initramfs and loads the necessary
+modules in it. If there is a basic module which we need but not in the initramfs,
+boot will be failed.
+
+Above initramfs has been created automatically using a userspace tool called
+dracut in Redhat or Suse system during the process of ISO installation. dracut
+will analyze the hardware module in the machine and pick up related Linux ko in
+the ISO.
+
+When install a kernel rpm package to system, it also uses dracut to create the
+initramfs.
+
+
+NOTE:
+
+- lsinitrd can be used to list the files in initramfs
+- to extract initramfs, first rename it to initramfs.gz, use gunzip to extract,
+  then use cpio -ivmd < initramfs.img to extract

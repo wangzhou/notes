@@ -1,0 +1,13 @@
+ARM SBSA watchdog
+-----------------
+
+-v0.1 2017.5.23 Sherlock init
+
+ This doc share the basic concept of watchdog in a server system, e.g. ARM server
+
+
+- UEFI will enable watchdog and offer configure in GTDT ACPI table.
+
+- there is a watchdog driver in kernel, export this watchdog by /dev/watchdog
+
+- there is a userspace software to set watchdog and feed this watchdog

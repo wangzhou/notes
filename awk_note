@@ -1,0 +1,1 @@
+awk 'FS=: {printf%-20s %-20sn, , }' /etc/passwd

@@ -1,0 +1,51 @@
+ci_note
+=======
+
+goal of kernel CI
+-----------------
+
+1. monitor git repo under ARM64, ARM, X86
+   
+   Intel offical CI: https://01.org
+
+2. time based compiling trigger according to if there is new commit
+
+3. once autotest per week according to the Image in FTP
+
+
+Arch of Joy CI
+--------------
+
+you should know this: git, shell, python, http, ftp, Jenkins, ansible.
+
+
+       +-------------+         +---------------+
+       |  kernel CI  |         |  lava server  |
+       +-------------+         +---------------+
+              |                        |  |                           
+              |                        |  |         +------------+       +--------+
+              |                        |  +-------->|  lava work |------>| board  |
+              +---------+    +---------+            +------------+       +--------+
+                        |    |                             ^
+                        V    V                             |
+                     +--+----+--+     +-------+            |
+           	     | Jenkins  |-----|  ftp  | -----------+
+                     +----------+     +-------+
+                          |               ^
+                          |               |
+                          V               |
+                     +----+-----+    +----------------+
+                     | git repo |--->| compile server |
+                     +----------+    +----------------+
+
+the result of compiling and lava test will be displayed in kernel CI by Jenkins.
+
+
+Add test case
+-------------
+
+
+
+
+
+
