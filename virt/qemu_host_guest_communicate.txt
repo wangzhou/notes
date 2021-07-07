@@ -48,8 +48,8 @@ the gdb server in qemu.
 ```
 aarch64-linux-gnu-gdb
 (gdb) file ~/repos/kernel-dev/vmlinux
-(gdb) target remote :1234
+(gdb) target remote:1234
 ```
-Here we use a arm64 based gdb as an example. After "target remote :1234", we
+Here we use a arm64 based gdb as an example. After "target remote:1234", we
 can use gdb to debug kernel in qemu. You can just set break points, print value
 of variables...
