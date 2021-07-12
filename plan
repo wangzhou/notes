@@ -73,7 +73,7 @@ openssl cmd		  xx
 openssl 异步机制分析
 
 how to use ebpf   xx
-io-pgtable        --> to post
+io-pgtable        xx
 linux thp分析             xx
 linux ksm分析
 linux swap分析
@@ -102,8 +102,8 @@ qemu vfio
 kernel kvm
 qemu的smmuv3的基础逻辑/pasid支持  #
 sva process kill logic
-page table block
+page table block   #
 glib g_hash_table  #
 rv s39页表结构  #
-BBML的逻辑梳理
+BBML的逻辑梳理  #
 smmu无锁cmdq
