@@ -1,0 +1,163 @@
+服务器配置过程
+==============
+
+v1.0 2014.1.8 *** 根据服务器的配置过程整理成该文档
+
+1. 目的：本服务器用于平时工作开发
+
+2. 基本配置：
+
+服务器相关参数：HUAWEI RH2285 server, 300G x 12, memory:4G x 12,
+LSI SAS 1068E, ip: ***, gateway: ***, netmask: ***,
+DNS1: ***, DNS2: ***
+
+配置一个开发用的服务器需要考虑的有：
+
+1) 硬盘怎么分区, 2) RAID怎么设置，3) 网络怎么配置，4) 装什么软件, 5) 每个用
+户的磁盘容量限制. 下面逐个说明
+
+3. 配置步骤：
+
+(1) 磁盘分区：
+
+服务器原有12块硬盘，每个300G。一般安装系统的分区要做RAID1，故用硬盘0，1
+做一个RAID1, 容量300G, 作系统分区等；硬盘2-11做一个RAID1E, 容量1.5T,
+挂载在/home上。在安装操作系统的时候看到的是sda和sdb两个硬盘，这里把300G
+的划分成和系统相关的分区，把1.5T独立作为一个分区挂载在/home上。具体分区如下：
+
+|--->/home 1.5T
+|
+|--->/usr 40G
+|
+|--->/var 40G
+|
+|--->/ 10G
+|
+|--->/tmp 5G
+|
+|--->/boot 1G
+|
+|--->none 200G
+
+分区的思路为：/boot存放系统启动的内容，包括内核压缩文件和grub; /usr为系统
+以后安装软件的目录，所以可分的大些； /var为系统存放日志文件
+的目录且重启之后不会删除，所以也要大点；/tmp为系统存放临时
+文件的地方并且要是挂载tmpfs文件系统后，/tmp的内容会存放在
+内存中，所以不需要太大；根文件系统的其他部分以后不会有大的
+变动，所以都放在/下
+
+(2) RAID设置
+
+本服务器支持了硬RAID，采用的是LSI的RAID卡1068E, 配置过程如下:
+
+1) 开机, 一直等到initial界面，按contrl+c进入硬RAID配置界面。
+华为RH2285服务器采用的是LSI 1068ＥRAID卡，可以配置1-2个RAID0，1-2个
+RAID1，1-2个RAID1E
+
+2) RAID设置是：硬盘0，1做一个RAID1，容量300G，用于除了home的分区；
+硬盘2-11做一个RAID1E，容量1.5T，只用于home分区。
+
+3) 做RAID之前首先要删除之前的RAID:
+C1068E--->RAID Properties--->Manage Array--->Delete Array
+
+4) 做RAID1：
+C1068E--->RAID Properties--->Create IM Volume--->选择硬盘0、1，按c创
+建RAID1
+
+5) 做RAID1E：
+C1068E--->RAID Properties--->Create IME Volume--->选择硬盘2-11，按c创
+建RAID1E。系统的12块硬盘做成的一个RAID1和一个RAID1E，安装操作系统时将
+只会看到sda和sdb两个硬盘
+
+(3) 网络配置
+
+服务器的ip要配置成静态ip, 需要了解配置的有：ip, DNS, 网关, 一般在文件
+/etc/network/interfaces, /etc/resolv.conf中配置
+
+(4) 软件安装
+
+配置好网络后，使用sudo apt-get install安装(这里安装的系统是ubuntu)需要的
+软件。这里安装gcc, qemu, make, git, vim, gdb, ctags, cscope, openjdk, ftp,
+tftp, scp, perf用户态程序等开发工具
+
+windows和linux通信需要samba服务器, 其配置过程如下:
+
+samba服务器要配置成为：
+a. 用户名和大服务器用户名相同
+b. 各用户分别共享自己的home目录，用户之间互不可见
+c. /home/share向每个团队成员共享，对非团队成员不可见
+
+1) samba服务器的配置文件在/etc/samba/下，有smb.conf, smbpasswd等。
+samba服务器可以设定不同的安全等级，如share级别无需密码就可以访问，这
+里采用user级别，访问时需要用户名和密码。samba服务器的可用三种方式鉴
+权：smbpasswd, tdbsam, ldapsam, 这里采用smbpasswd
+
+2) sudo vi /etc/samba/smb.conf
+设定安全级别：security = user
+设定鉴权方式：passdb backend = smbpasswd
+设定存放密码的文件：
+smb passwd file = /etc/samba/smbpasswd
+若是没有smbpasswd, 手动建一个, 以后创建的samba用户的密码会保存在其中
+添加用户并设定初始密码：sudo smbpasswd -a username
+
+3) 建立共享的share目录：mkdir /home/share
+在smb.conf中增加配置：
+[share]
+path = /home/share
+writable = yes
+broweable = yes
+available = yes
+valid users = @user
+这里之前把需要有共享权限的用户加入了新建的用户组user, 也可以把用户名
+用逗号隔开加入。加入组中的用户在windows--->“运行”中输入//server-ip/
+然后输入用户名和密码即可登陆共享目录
+
+4) 建立自己共享的目录：
+在smb.conf的[global]段中加入：config file = /etc/samba/smb.conf.%U
+这表示到对应的子配置文件去找配置项。
+拷贝一份配置文件：cp smb.conf smb.conf.username1, 在其中加入：
+[username1]
+path = /home/username1
+writable = yes
+broweable = no
+valid users = username1
+其他用用户都这样配置。username1用户在windows--->“运行”中输入//server-
+ip/username1, 然后输入用户名和密码即可登陆/home/username1
+
+5) 重启samba服务器:
+sudo service smbd restart
+sudo service nmbd restart
+
+注：连接samba服务器，第一次输入密码后，再次连接不需要输入密码。这是因为
+关闭窗口后连接并没有真正断开，可以在dos命令行下用net use查看相应的
+连接，再用net usr *** /del 关闭该连接
+
+参考：
+http://blog.chinaunix.net/uid-20537084-id-2977850.html
+http://bbs.chinaunix.net/thread-922029-1-1.html
+
+(5) quota配置
+
+quota可以限制每个用户磁盘的使用量。这里总磁盘可用容量为1.3T，设计使用人
+数为20，每个用户的home目录的限额为: 60G(soft), 65G(hard), 宽限时间为14天。
+具体注意见:
+
+配置参照http://linux.vbird.org/linux_basic/0420quota.php 即可。需注意：
+
+1) 查看内核是否支持quota:
+CONFIG_QUOTA = y
+CONFIG_XFS_QUOTA = y
+
+2) umount /home的时候可能出现device busy的情况。解决办法是:
+以root进入系统，使用lsof | grep /home 找到相应的进程，杀死相应的进程
+再执行 umoung /home
+
+3) 可能系统中没有quotacheck命令，sudo apt-get install quota 安装即可
+
+(6) 安装系统中需注意：
+
+1) 安装系统前查一下服务器的系统兼容性，ubuntu-server-12.04在RH2285上会
+安装出错，上面安装的是untuntu-server-10.04
+
+2) 安装grub的时候应该选择RAID1(300G)中对应的分区，这里选择/dev/sdb1，挂
+载的目录是/boot

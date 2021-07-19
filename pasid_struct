@@ -1,0 +1,52 @@
+1. qemu中支持pasid的思路：
+
+   之前qemu推演的全部模型都不变，只是新创建一个数据结构，这个数据结构做
+   各个memory region(包括kernel dma的memory region和各个pasid)的私有数据结构,
+   这个数据结构会传给的devmmu_tranlate函数，所以在这个数据结构中存放pasid和
+   DevMMUHandle，这样devmmu就知道需要翻译的是哪个设备的那个数据流。
+
+   所有和翻译相关东西都放在devmmu驱动中搞定，这一部分和库上现在的代码的基本
+   逻辑是一致的，无非是tlb里key里加上pasid这个索引。
+
+   为了加pasid这个特性，我们还要做的一些qemu的调整如下：
+
+   1. pasid是一个PCIe扩展空间的cap，出现在PCIe配置空间的0x100开始，目前的ghms
+      的配置空间最大只到0xff，这个是因为qemu模拟设备的逻辑认为PCI和PCIe是分开的，
+      如果要模拟PCIe设备必须通过一个PCIe RP把设备接入，所以，我们要在qemu的启动
+      命令里加上pcie_port(fix me: ...)
+
+   2. 通过如上的配置，ghms的bus number会是1。现在的代码这里会遇到两个问题：
+      
+      1. PCIIOMMUHandle的hash key里没有BUS的bug，这个好解，加上就好。
+
+      2. devmmu的dts里的max_bus这个配置不起作用，还没有查，现在是在devmmu的内核
+         驱动里直接把这个max_bus的值改大绕过这个问题的。
+
+   3. 如上配置后，还会出现RP和ghms帮到一个iommu_group的问题，根因是内核的pci_acs_enable
+      这个全局变量没有enable，这个是和devmmu以及iommu内核驱动相关的问题，目前
+      直接强行打开了。
+
+2. 内核devmmu的改动：
+
+   顺着uacce里iommu_sva_*, iommu_dev_*的接口把devmmu里的回调实现了。和smmu驱动
+   的逻辑基本上一样。
+
+   这里的基本的数据结构如下：
+
+   1. devmmu_master 描述devmmu服务的一个ep设备。
+
+   2. devmmu_bond 描述一个设备和一个进程的绑定关系，如果一个设备上的多个queue
+      和一个进程绑定，那么都复用这个bond。一个设备的所有bond放在devmmu_master
+      的一个链表里。一个bond对应一个pasid。
+
+      (fix me)
+   3. devmmu_memory_notifier cpu侧做tlb变动的时候，需要通知到devmmu, 所以需要给
+      mm注册一个memory notifer, devmmu_memory_notifier是这个mn的封装结构。这个
+      数据结构和mm一一对应，因此会出现一个devmmu_memory_notifier对应多个设备的
+      情况，这中情况下，多个设备实际上是共用该进程地址空间，所以tlbi用的asid是
+      一个。
+
+3. 内核ghms的改动：
+
+   把ghms注册到了uacce上。写了一个用户态程序做基于ghms的内存copy。
+

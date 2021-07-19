@@ -45,4 +45,3 @@ git使用方法备忘
    其中s表示patch中会加上签名项, 1表示对最近一次提交生成patch. 如果把1变成2，那么
    会生成两个patch, 以version_1--->version_2--->version_3为例，这两个patch是
    version_3对version_2的patch、version_2对version_1的patch
-
