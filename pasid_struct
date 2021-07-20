@@ -13,7 +13,10 @@
    1. pasid是一个PCIe扩展空间的cap，出现在PCIe配置空间的0x100开始，目前的ghms
       的配置空间最大只到0xff，这个是因为qemu模拟设备的逻辑认为PCI和PCIe是分开的，
       如果要模拟PCIe设备必须通过一个PCIe RP把设备接入，所以，我们要在qemu的启动
-      命令里加上pcie_port(fix me: ...)
+      命令里加上pcie_port:
+
+	-device pcie-root-port,id=root_port,bus=pcie.0 \
+	-device ghms_pci,bus=root_port
 
    2. 通过如上的配置，ghms的bus number会是1。现在的代码这里会遇到两个问题：
       
@@ -29,9 +32,9 @@
 2. 内核devmmu的改动：
 
    顺着uacce里iommu_sva_*, iommu_dev_*的接口把devmmu里的回调实现了。和smmu驱动
-   的逻辑基本上一样。
+   的数据结构和逻辑处理基本上一样。
 
-   这里的基本的数据结构如下：
+   这里增加的基本的数据结构如下：
 
    1. devmmu_master 描述devmmu服务的一个ep设备。
 
@@ -39,14 +42,23 @@
       和一个进程绑定，那么都复用这个bond。一个设备的所有bond放在devmmu_master
       的一个链表里。一个bond对应一个pasid。
 
-      (fix me)
-   3. devmmu_memory_notifier cpu侧做tlb变动的时候，需要通知到devmmu, 所以需要给
-      mm注册一个memory notifer, devmmu_memory_notifier是这个mn的封装结构。这个
-      数据结构和mm一一对应，因此会出现一个devmmu_memory_notifier对应多个设备的
-      情况，这中情况下，多个设备实际上是共用该进程地址空间，所以tlbi用的asid是
+   3. devmmu_mmu_notifier cpu侧做tlb变动的时候，需要通知到devmmu, 所以需要给
+      mm注册一个memory notifier, devmmu_mmu_notifier是这个mn的封装结构。这个
+      数据结构和mm一一对应，因此会出现一个devmmu_mmu_notifier对应多个devmmu_bond
+      的情况，这种情况下，多个设备实际上是共用该进程地址空间，所以tlbi用的asid是
       一个。
 
 3. 内核ghms的改动：
 
    把ghms注册到了uacce上。写了一个用户态程序做基于ghms的内存copy。
 
+
+遗留的问题：
+
+ 1. 以上所有hack临时绕过的地方。
+
+ 2. 目前device tab在处理asid使能的时候有问题，不能在asid使能的时候同时用kernel
+    DMA，目前直接break掉了kernel DMA测试的pasid。
+
+ 3. 第一次带pasid的dma可以，但是在此测试，会在mmap mmio的时候挂在do_fault的
+    锁上，目前没有定位思路了，按说mmio是直接调驱动里的map函数的，不会有fault。
