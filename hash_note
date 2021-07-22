@@ -1,0 +1,339 @@
+uthash和glib hash
+==================
+
+-v0.1 2021.7.22 Sherlock init
+
+简介：本文是一个uthash和glib hash的学习笔记。
+
+hash
+-----
+
+ 哈希表是一种这样的数据结构，它以key-value的形式把value存储到哈希表里。用户可以
+ 通过一组接口做增删改查的操作。
+
+uthash
+------
+
+ uthash的介绍在这里: https://troydhanson.github.io/uthash/
+ 它是一个用宏写的哈希表，使用的时候只要include uthash.h就好，所有信息都在这个文件
+ 里了。uthash的代码里附带了一个example.c的使用示例，我们简单看下这个文件，主要是
+ 注意它使用时候的一些坑。目前还没有发现在哪里有使用uthash。
+```
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <assert.h>
+#include "./uthash.h"
+
+struct my_struct {
+    int id;                    /* 这个id后面我们用来做my_struct的索引 */
+    char name[10];
+    UT_hash_handle hh;         /* 要hash的数据结构里必须放一个这个句柄，必须写成hh */
+};
+
+/* 定义hash表的表头，需要初始化成NULL */
+struct my_struct *users = NULL;
+
+/* 所有的uthash操作都是HASH_xx的定义，我们这里封装一层函数 */
+void add_user(int user_id, char *name)
+{
+    struct my_struct *s;
+
+    /*
+     * 查看user_id为key的数据是否存在，返回数据的指针，s为NULL，数据不存在。
+     * 注意，user_id就是key的值，这个接口实现的比较特别，单通过这个接口内部的
+     * 实现根本不知道内部的那个数据是key。
+     *
+     * 这个接口要配合下面的HASH_ADD_INT来用。这个接口的语义是：
+     * 用s里的id为key插入s到users，这里这个id表示的是struct my_struct里的id这个
+     * 参数名字，所以一定要写的和struct my_struct里的id一样，本质上是一个字符。
+     *
+     * HASH_FIND_INT也是根据HASH_ADD_INT里的id知道key是s里的那个元素。
+     */
+    HASH_FIND_INT(users, &user_id, s);
+    if (s == NULL) {
+        s = (struct my_struct*)malloc(sizeof(struct my_struct));
+        s->id = user_id;
+        HASH_ADD_INT(users, id, s);  /* 用s里的id为key插入s到users */
+    }
+    strcpy(s->name, name);
+}
+
+struct my_struct *find_user(int user_id)
+{
+    struct my_struct *s;
+
+    HASH_FIND_INT(users, &user_id, s);
+    return s;
+}
+
+void delete_user(struct my_struct *user)
+{
+    HASH_DEL(users, user);  /* 直接指向数据的指针, 用这个作为删除的标记 */
+    free(user);
+}
+
+void delete_all()
+{
+    struct my_struct *current_user, *tmp;
+
+    /* 遍历哈希表中的每个元素 */
+    HASH_ITER(hh, users, current_user, tmp) {
+        HASH_DEL(users, current_user);
+        free(current_user);  /* 删除操作并不影响数据内存，需要用户显示释放数据内存 */
+    }
+}
+
+void print_users()
+{
+    struct my_struct *s;
+
+    /* 也可以用这种直白的方式遍历哈希表，但是这个相当于知道了hh的内部数据，最好不要这样 */
+    for(s=users; s != NULL; s=(struct my_struct*)(s->hh.next)) {
+        printf("user id %d: name %s\n", s->id, s->name);
+    }
+}
+
+int name_sort(struct my_struct *a, struct my_struct *b)
+{
+    return strcmp(a->name, b->name);
+}
+
+int id_sort(struct my_struct *a, struct my_struct *b)
+{
+    return (a->id - b->id);
+}
+
+void sort_by_name()
+{
+    /* 还支持对哈希表里数据排序 */
+    HASH_SORT(users, name_sort);
+}
+
+void sort_by_id()
+{
+    HASH_SORT(users, id_sort);
+}
+
+int main()
+{
+	struct my_struct *tmp;
+	int num;
+
+	add_user(5, "wang");
+	add_user(1, "zheng");
+	add_user(4, "xu");
+	add_user(3, "fang");
+	add_user(2, "huang");
+
+	print_users();
+
+	printf("\n");
+	sort_by_id();
+	print_users();
+	/*
+	 * sort_by_id()打印出来的结果是这样的：
+	 *
+	 * user id 1: name zheng
+	 * user id 2: name huang
+	 * user id 3: name fang
+	 * user id 4: name xu
+	 * user id 5: name wang
+	 */
+
+	printf("\n");
+	sort_by_name();
+	print_users();
+	/*
+	 * sort_by_name()打印出来的结果是这样的：
+	 *
+	 * user id 3: name fang
+	 * user id 2: name huang
+	 * user id 5: name wang
+	 * user id 4: name xu
+	 * user id 1: name zheng
+	 */
+
+	printf("\n");
+	tmp = find_user(4);
+	/*
+	 * 非常别扭的删除接口，尽然不能用key作为索引直接调删除接口，还要先用key找见元素
+	 * 的指针，然后再删除。
+	 */
+	delete_user(tmp);
+	print_users();
+
+	printf("\n");
+	/* 统计哈希表里有多少个元素 */
+	num = HASH_COUNT(users);
+	printf("there is %d elements\n", num);
+
+	printf("\n");
+
+	/* 释放哈希表 */
+	HASH_CLEAR(hh, users);
+	assert(!users);
+
+	return 0;
+}
+```
+
+glib hash
+----------
+
+  glib是GNOME lib, 这个库提供了各种基本的数据结构，使用比较广泛。我们这里主要看
+  glib中提供的哈希表相关接口的使用。QEMU的代码使用了glib，我们这里的介绍也截取
+  了部分QEMU里和哈希表有关的东西。
+
+  下面的测试在ubuntu20.04(aarch64)上，安装glib库和编译测试代码的命令如下：
+```
+sudo apt-get install libglib2.0-dev
+gcc test.c `pkg-config --cflags --libs glib-2.0`
+```
+  下面把介绍直接写到代码的注释说明里：
+```
+#include <glib.h>
+#include <stdio.h>
+#include <stdint.h>
+#include <unistd.h>
+#include <malloc.h>
+
+/* copy from qemu code */
+#define PRIME32_1   2654435761U
+#define PRIME32_2   2246822519U
+#define PRIME32_3   3266489917U
+#define PRIME32_4    668265263U
+#define PRIME32_5    374761393U
+#define QEMU_XXHASH_SEED 1
+
+static inline uint32_t rol32(uint32_t word, unsigned int shift)
+{
+    return (word << shift) | (word >> ((32 - shift) & 31));
+}
+
+static inline uint32_t
+qemu_xxhash7(uint64_t ab, uint64_t cd, uint32_t e, uint32_t f, uint32_t g)
+{
+    uint32_t v1 = QEMU_XXHASH_SEED + PRIME32_1 + PRIME32_2;
+    uint32_t v2 = QEMU_XXHASH_SEED + PRIME32_2;
+    uint32_t v3 = QEMU_XXHASH_SEED + 0;
+    uint32_t v4 = QEMU_XXHASH_SEED - PRIME32_1;
+    uint32_t a = ab;
+    uint32_t b = ab >> 32;
+    uint32_t c = cd;
+    uint32_t d = cd >> 32;
+    uint32_t h32;
+
+    v1 += a * PRIME32_2;
+    v1 = rol32(v1, 13);
+    v1 *= PRIME32_1;
+
+    v2 += b * PRIME32_2;
+    v2 = rol32(v2, 13);
+    v2 *= PRIME32_1;
+
+    v3 += c * PRIME32_2;
+    v3 = rol32(v3, 13);
+    v3 *= PRIME32_1;
+
+    v4 += d * PRIME32_2;
+    v4 = rol32(v4, 13);
+    v4 *= PRIME32_1;
+
+    h32 = rol32(v1, 1) + rol32(v2, 7) + rol32(v3, 12) + rol32(v4, 18);
+    h32 += 28;
+
+    h32 += e * PRIME32_3;
+    h32  = rol32(h32, 17) * PRIME32_4;
+
+    h32 += f * PRIME32_3;
+    h32  = rol32(h32, 17) * PRIME32_4;
+
+    h32 += g * PRIME32_3;
+    h32  = rol32(h32, 17) * PRIME32_4;
+
+    h32 ^= h32 >> 15;
+    h32 *= PRIME32_2;
+    h32 ^= h32 >> 13;
+    h32 *= PRIME32_3;
+    h32 ^= h32 >> 16;
+
+    return h32;
+}
+
+typedef struct key {
+    int bus;
+    int devfn;
+} key;
+
+typedef struct value {
+    int base;
+    int bar;
+} value;
+
+static guint key_hash(gconstpointer v)
+{
+    key *k = (key *)v;
+
+    return qemu_xxhash7((uint64_t)k->bus, k->devfn, 0, 0, 0);
+}
+
+static gboolean key_equal(gconstpointer v1, gconstpointer v2)
+{
+    key *k1 = (key *)v1;
+    key *k2 = (key *)v2;
+
+    return (k1->bus == k2->bus) && (k1->devfn == k2->devfn);
+}
+
+int main()
+{
+	/* 表示一个哈希表的具柄 */
+    	GHashTable *hash_table;
+	/* 哈希表的key是可以自定义的, 可以把用到的参数封装到一个struct里，把这个struct作为key */
+	value v, *p_v;
+	key k, *p_k;
+
+	/*
+	 * 初始化哈希表具柄, 函数的定义在gnome的官网都可以查询：
+	 * https://developer.gnome.org/glib/stable/glib-Hash-Tables.html
+	 *
+	 * ghash是要建立一个key struct到一个value struct的映射，所以下面的key_hash,
+	 * key_equal这两个函数就比较容易理解。
+	 *
+	 * key_hash的输入是用户自定义的key struct，输出是一个hash值，ghash真正用
+	 * 计算得到的这个hash值作为key。可以看到这个计算是一个数学问题，QEMU里直接
+	 * 把Jenkins hash, xxhash的代码放到了QEMU的代码里，我们这里也照搬过来，
+	 * 上面直接copy的是xxhash的部分代码，他完成的功能比较直白，就是输入一组
+	 * 数，然后按照一定的算法输出一个哈希值。这里的key_hash就是直接调用xxhash
+	 * 的函数。
+	 *
+	 * key_equal是判断两个key相等的函数，一般就是key里面的每一个元素都相等就
+	 * 认为两个key相等。
+	 *
+	 * 后面的两个函数是key和value的销毁函数，一般是g_free。
+	 */
+    	hash_table = g_hash_table_new_full(key_hash, key_equal, g_free, g_free);
+
+	p_v = malloc(sizeof(v)); p_v->base = 1; p_v->bar = 3;
+	p_k = malloc(sizeof(k)); p_k->bus = 0x10; p_k->devfn = 0x75;
+
+	/* 把一个key-value的map插入到哈希表里，如上，key, value都需要动态分配的结构 */
+	g_hash_table_insert(hash_table, p_k, p_v);
+
+	k.bus = 0x10; k.devfn = 0x75;
+	/* 找一个key对应的value, 这时key可以是静态的结构 */
+	p_v = g_hash_table_lookup(hash_table, &k);
+	if (p_v)
+		printf("found!\n");
+	else
+		printf("not found!\n");
+
+	/* 销毁哈希表 */
+	g_hash_table_remove_all(hash_table);
+	
+	return 0;
+}
+```
+  简单起见也可以用glib提供的key_hash和key_equal函数。比如，如果用一个int值作为key,
+  就可以用g_direct_hash/g_direct_equal。

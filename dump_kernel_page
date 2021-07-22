@@ -250,3 +250,38 @@ sudo ./page-types --pid 91228
 0x000000000000586c	         1        0  __RU_lA____Ma_b_____________________________	referenced,uptodate,lru,active,mmap,anonymous,swapbacked
              total	      1228        4
 ```
+   使用 ./page-types --pid <pid> --list-each 可以看到具体va到pa的映射：
+```
+voffset	offset	flags
+aaaab6b57	6e938	__RU_lA____M________________________________
+aaaab6b58	aa3cb	__RU_lA____M________________________________
+aaaab6b59	55172	__RU_lA____M________________________________
+[...]
+ffffc744c	a17e7	___U_lA____Ma_b_____________________________
+ffffc744d	117a3a	___U_lA____Ma_b_____________________________
+ffffc744e	109913	___U_lA____Ma_b_____________________________
+ffffc744f	136574	__RU_lA____Ma_b_____________________________
+
+
+             flags	page-count       MB  symbolic-flags			long-symbolic-flags
+0x0000000000000800	         1        0  ___________M________________________________	mmap
+0x0000000000000804	         1        0  __R________M________________________________	referenced,mmap
+0x000000000004082c	       429        1  __RU_l_____M______u_________________________	referenced,uptodate,lru,mmap,unevictable
+0x0000000000000868	         3        0  ___U_lA____M________________________________	uptodate,lru,active,mmap
+0x000000000000086c	      2009        7  __RU_lA____M________________________________	referenced,uptodate,lru,active,mmap
+0x0000000000005868	      1073        4  ___U_lA____Ma_b_____________________________	uptodate,lru,active,mmap,anonymous,swapbacked
+0x000000000000586c	         1        0  __RU_lA____Ma_b_____________________________	referenced,uptodate,lru,active,mmap,anonymous,swapbacked
+             total	      3517       13
+```
+  这里显示的是页之间的映射，所以还要乘上页大小，如果是4K页的话，上面的va到pa的
+  映射就是：(左边是va, 右边是pa)
+```
+aaaab6b57000	6e938000
+aaaab6b58000	aa3cb000
+aaaab6b59000	55172000
+[...]
+ffffc744c000	a17e7000
+ffffc744d000	117a3a000
+ffffc744e000	109913000
+ffffc744f000	136574000
+```
