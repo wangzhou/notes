@@ -48,7 +48,7 @@ void add_user(int user_id, char *name)
      * 用s里的id为key插入s到users，这里这个id表示的是struct my_struct里的id这个
      * 参数名字，所以一定要写的和struct my_struct里的id一样，本质上是一个字符。
      *
-     * HASH_FIND_INT也是根据HASH_ADD_INT里的id知道key是s里的那个元素。
+     * HASH_FIND_INT也是根据HASH_ADD_INT里的id知道key是s里的哪个元素。
      */
     HASH_FIND_INT(users, &user_id, s);
     if (s == NULL) {
@@ -311,14 +311,15 @@ int main()
 	 * key_equal是判断两个key相等的函数，一般就是key里面的每一个元素都相等就
 	 * 认为两个key相等。
 	 *
-	 * 后面的两个函数是key和value的销毁函数，一般是g_free。
+	 * 后面的两个函数是key和value的销毁函数，一般是g_free。注意，如果不是动态
+	 * 创建的结构就不需要配置这里的销毁函数。
 	 */
     	hash_table = g_hash_table_new_full(key_hash, key_equal, g_free, g_free);
 
 	p_v = malloc(sizeof(v)); p_v->base = 1; p_v->bar = 3;
 	p_k = malloc(sizeof(k)); p_k->bus = 0x10; p_k->devfn = 0x75;
 
-	/* 把一个key-value的map插入到哈希表里，如上，key, value都需要动态分配的结构 */
+	/* 把一个key-value的map插入到哈希表里，如上，key, value这里是需要动态分配的结构 */
 	g_hash_table_insert(hash_table, p_k, p_v);
 
 	k.bus = 0x10; k.devfn = 0x75;
@@ -342,3 +343,6 @@ int main()
 	g_hash_table_lookup(h, GINT_TO_POINTER(int_key));
 	g_hash_table_insert(h, GINT_TO_POINTER(int_key), value);
 ```
+  如上direct的方式是直接用key为形参做索引的。g_direct_hash的实现是把输入强转成int
+  作为key。但是使用g_int_hash/g_int_equal时，q_int_hash把输入转成int指针然后取其中
+  的内容，可见这个时候lookup/insert的输入应该是int型key的地址。
