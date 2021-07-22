@@ -342,4 +342,3 @@ int main()
 	g_hash_table_lookup(h, GINT_TO_POINTER(int_key));
 	g_hash_table_insert(h, GINT_TO_POINTER(int_key), value);
 ```
-  注意，如果用g_int_hash/g_int_equal还是需要动态申请key?
