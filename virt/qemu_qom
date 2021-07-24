@@ -100,6 +100,8 @@ static void pci_edu_register_types(void)
 	       * 中的内容copy到了当前类最开始的空间。初始化class的interface和
 	       * property，并在最后调用了class的init函数，把class的数据和操作函数
 	       * 都添加上。
+	       *
+	       * 创建的interface class会挂到对应device class的链表上。
        	       */
 	  +-> type_initialize(type)
         /* 注意，这里返回的是DeviceClass */
@@ -167,11 +169,17 @@ properties是什么
 
  link属性
 
+
  child属性
 
 interface
 ---------
 
+ 目前只看了PCI/PCIe设备里使用了interface这个东西，PCIe设备用INTERFACE_PCIE_DEVICE
+ PCI设备用INTERFACE_CONVENTIONAL_PCI_DEVICE。pci设备的realize函数里根据interface
+ 的情况决定是否要使能PCI_CAP_EXPRESS，这个只在PCIe的时候使能。
+
+ 注意，PCI设备只有0x0~0xff的配置空间。
 
 一个例子
 --------
