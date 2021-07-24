@@ -94,8 +94,6 @@ Linux CAP_SYS权限
 qemu里完成模拟一个设备
 shell wait
 write a qemu dma engine device
-qemu qom
-qemu mem
 qemu irq
 qemu cpu
 qemu vfio
@@ -108,3 +106,14 @@ rv s39页表结构  #
 BBML的逻辑梳理  #
 smmu无锁cmdq
 qemu add pci cap
+qemu qom
+qemu add trace
+qemu mem
+memory buddy
+memory slab
+memory fault
+memory reclaim(swap, direct)
+memory vma
+memory pagecache
+fs vfs
+rv asid logic

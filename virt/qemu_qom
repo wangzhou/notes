@@ -10,34 +10,41 @@ qemu里使用面向对象的模型来模拟相关的元素，可以想象这样�
 
 本文描述这个基于面向对象的思路构建起来的qemux模型。分析基于qemu 5.2.92版本。
 
-0. 用c语言实现面向对象的模型
-----------------------------
+用c语言实现面向对象的模型
+--------------------------
 
  qemu里用c语言实现了面向对象的模型。我们先梳理用c实现面向对应的基本逻辑。面向对象
- 的三个特征是：封装、继承和多态。封装可以用struct实现。继承可以用struct包含的方式
- 实现，把父类的struct放到子类struct的最开始的位置，这样子类的指针可以直接强制转换
- 成父类的指针，在子类的函数，比如子类的初始化函数里可以直接得到父类的指针，然后调用
- 父类的初始化函数。多态可以用函数指针的方式实现。
+ 的三个特征是：封装、继承和多态。
+
+ 封装可以用struct实现。
+
+ 继承可以用struct包含的方式实现，把父类的struct放到子类struct的最开始的位置，这样
+ 子类的指针可以直接强制转换成父类的指针，在子类的函数，比如子类的初始化函数里可以
+ 直接得到父类的指针，然后调用父类的初始化函数。但是继承层级大于两级的时候似乎是有
+ 问题的(fixme)
+
+ 多态可以用函数指针的方式实现。
 
  qemu里的实现，多了TypeInfo这个概念，它是class的描述。
 
-1. 对象的定义
--------------
-
+类的定义
+---------
+```
  type_init(fn)
        /* 用宏定义了一个动态库的初始化函数, qemu编译出的库有？*/
    +-> module_init
     +-> register_module_init
-          /* 如下都用edu设备举例，这里的fn就是pci_edu_register_types */
+          /* 如下都用edu设备举例(hw/misc/edu.c)，这里的fn就是pci_edu_register_types */
       +-> e->init = fn
- 
+```
  fn这个函数一般是TypeInfo的注册函数, 把TypeInfo挂到系统的链表里。class是随后解析
  Typeinfo的内容动态生成的。
 
-2. 对象的生成
--------------
+对象的生成
+-----------
 
- /* class的生成：qemu/softmmu/main.c */
+ 顺着qemu的main函数，看看class和对象是怎么生成的：qemu/softmmu/main.c
+```
  main
    +-> qemu_init
      +-> qemu_init_subsystems
@@ -45,37 +52,76 @@ qemu里使用面向对象的模型来模拟相关的元素，可以想象这样�
        +-> module_call_init(MODULE_INIT_QOM)
              /*
 	      * init即为如上的fn, 这里的init只是把TypeInfo向qemu注册，类的
-	      * 初始化还在后面
+	      * 初始化还在后面。具体拿edu里的pci_edu_register_types函数看下。
 	      */     
          +-> ModuleEntry->init
-	   ...?
-	       /* 初始化class，哪里会调用？type_initialize是根据注册的Type创建
-	        * class的函数。但是，一时找不见哪里调用，但是可以看到，创建class
-		* 的具体实例的时候，如果class没有创建，就会创建class，被创建的class
-		* 的指针会放到注册Type的class域段。所以下面的type_initialize的调用
-		* 关系并不准确。
-		*/
-	   +-> type_initialize
-	       /* e.g. qemu/hw/misc/edu.c会调用到edu_class_init */
-	     +-> edu_class_init
-	           /* 得到PCIDeviceClass的指针是pci edu这个类的么？*/
-	       +-> PCI_DEVICE_CLASS
-     ...
+```
+  可以看见这个函数拿自己的初始化函数定义了TypeInfo数据结构，然后把他注册到系统
+  TypeInfo的链表。
+```
+static void pci_edu_register_types(void)
+{
+    static InterfaceInfo interfaces[] = {
+        { INTERFACE_CONVENTIONAL_PCI_DEVICE },
+        { },
+    };
+    static const TypeInfo edu_info = {
+        .name          = TYPE_PCI_EDU_DEVICE,
+        .parent        = TYPE_PCI_DEVICE,
+        .instance_size = sizeof(EduState),
+        .instance_init = edu_instance_init,
+        .class_init    = edu_class_init,
+        .interfaces = interfaces,
+    };
 
-     +-> qemu_opts_parse_noisily(qemu_find_opts("device"), ...)
-     +-> qmp_x_exit_preconfig
-       +-> qemu_create_cli_devices
-             /* 遍历初始化之前扫描到的-device里的信息？*/
-         +-> device_init_func
-	   +-> qdev_device_add
-	     +->qdev_new
-	       +-> object_new
-	       ...
+    type_register_static(&edu_info);
+}
+```
+  顺着qemu_init函数继续往下看，找下class以及具体的设备是在哪里创建的。还是以edu
+  这个设备为例。这个设备使用-device edu的qemu命令行参数启动，所有它创建的位置应该
+  在：
+```   
+    qemu_opts_foreach(qemu_find_opts("device"),
+                      device_init_func, NULL, &error_fatal);
+```   
+   下面具体分析其中的qdev_device_add:
+```
+  qdev_device_add
+        /* driver就是模块里的device name, edu的driver就是edu */
+    +-> driver = qemu_opt_get(opts, "driver")
+      +-> module_object_class_by_name(*driver)
+        +-> oc = object_class_by_name(typename)
+              /*
+	       * type_initialize是根据注册的Type创建class的函数。创建class的具体
+	       * 实例的时候，如果class没有创建，就会创建class，被创建的class的指针
+	       * 会放到注册Type的class域段。
+	       *
+	       * 可以看到这个函数为class分配了空间，递归初始化了父类，把父类空间
+	       * 中的内容copy到了当前类最开始的空间。初始化class的interface和
+	       * property，并在最后调用了class的init函数，把class的数据和操作函数
+	       * 都添加上。
+       	       */
+	  +-> type_initialize(type)
+        /* 注意，这里返回的是DeviceClass */
+    +-> dc = qdev_get_device_class(&driver, errp)
+        /* 找见设备对应的bus */
+    +-> bus = qbus_find(path, errp)
+        /* 创建设备, 可以看到如果没有class的话，在如下函数里会先创建class */
+    +-> dev = qdev_new(driver)
+      +-> object_new(typename)
+            /*
+	     * 为设备对象分配了内存空间, 把设备里的class指针指向class，为设备
+	     * 初始化class里定义的各个property。调用instance_init初始化设备。
+	     * 注意这个时候设备还不是在可用的状态。
+	     */
+        +-> object_new_with_type(ti)
+    +-> qdev_realize(DEVICE(dev))
+          /* 调用到class里的realize函数激活设备, 具体的分析在下面一节 */
+      +-> object_property_set_bool(OBJECT(dev), "realized", true, errp)
+```
 
- Type里的realize的函数是怎么调用到的。
-
-3.properties是什么
-------------------
+properties是什么
+----------------
 
  所谓属性，就是在一个对象里定义的一些功能，这些功能有名字，有对应的执行函数，还有
  添加和删除函数。当添加一个属性的时候，就是把这个属性已经对应的执行函数保存到对象
@@ -87,6 +133,7 @@ qemu里使用面向对象的模型来模拟相关的元素，可以想象这样�
  这个realize属性在哪里添加和在哪里调用。
 
  device class的初始化函数里增加了realized属性：
+```
  /* hw/core/qdev.c */
  device_class_init
       /*
@@ -96,9 +143,11 @@ qemu里使用面向对象的模型来模拟相关的元素，可以想象这样�
        * 函数又是由具体设备的class init函数添加，比如edu的edu_class_init。
        */
    -> object_class_property_add_bool(ObjectClass, "realized", device_get_realized, device_set_realized)
+```
 
  在如上的qdev_device_add里，在创建了设备的实例后，后调用qdev_realize把设备realize，
  这个函数会从Device这一层，层层的调用realize函数:
+```
  /* hw/core/qdev.c */
  qdev_realize
    -> object_property_set_bool(OBJECT(dev), "realized", true, errp)
@@ -112,7 +161,7 @@ qemu里使用面向对象的模型来模拟相关的元素，可以想象这样�
          -> g_hash_table_lookup(obj->properties, name)
 
        -> prop->set(obj, v, name, prop->opaque, &err)
-
+```
  如上，分析qemu的qom重点关注如下的文件: hw/misc/edu.c, hw/pci/pci.c, hw/core/qdev.c,
  qom/object.c。各个层级的Type定义分别对应的文件里(这里用pci设备为例)
 
@@ -120,11 +169,11 @@ qemu里使用面向对象的模型来模拟相关的元素，可以想象这样�
 
  child属性
 
-4.interface
------------
+interface
+---------
 
 
-5. 一个例子
------------
+一个例子
+--------
  
  这里写一个dma engine的qemu设备。
