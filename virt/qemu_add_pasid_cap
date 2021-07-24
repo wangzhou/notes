@@ -7,3 +7,8 @@ qemu pcie设备增加pasid capability
 
 首先pasid cap是一个PCIe extended的cap，它的位置应该在PCIe配置空间0x100开始(包括)
 往后的空间上。
+
+在qemu的启动命令里直接加一个PCI设备，qemu把它看作的是一个PCI设备，用lspci看到的
+配置空间只有0x0~0xff。
+```
+```
