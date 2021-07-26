@@ -51,9 +51,9 @@ qemu里使用面向对象的模型来模拟相关的元素，可以想象这样�
            /* 根据TypeInfo创建class */
        +-> module_call_init(MODULE_INIT_QOM)
              /*
-	      * init即为如上的fn, 这里的init只是把TypeInfo向qemu注册，类的
-	      * 初始化还在后面。具体拿edu里的pci_edu_register_types函数看下。
-	      */     
+              * init即为如上的fn, 这里的init只是把TypeInfo向qemu注册，类的
+              * 初始化还在后面。具体拿edu里的pci_edu_register_types函数看下。
+              */     
          +-> ModuleEntry->init
 ```
   可以看见这个函数拿自己的初始化函数定义了TypeInfo数据结构，然后把他注册到系统
@@ -83,7 +83,7 @@ static void pci_edu_register_types(void)
 ```   
     qemu_opts_foreach(qemu_find_opts("device"),
                       device_init_func, NULL, &error_fatal);
-```   
+```
    下面具体分析其中的qdev_device_add:
 ```
   qdev_device_add
@@ -92,18 +92,18 @@ static void pci_edu_register_types(void)
       +-> module_object_class_by_name(*driver)
         +-> oc = object_class_by_name(typename)
               /*
-	       * type_initialize是根据注册的Type创建class的函数。创建class的具体
-	       * 实例的时候，如果class没有创建，就会创建class，被创建的class的指针
-	       * 会放到注册Type的class域段。
-	       *
-	       * 可以看到这个函数为class分配了空间，递归初始化了父类，把父类空间
-	       * 中的内容copy到了当前类最开始的空间。初始化class的interface和
-	       * property，并在最后调用了class的init函数，把class的数据和操作函数
-	       * 都添加上。
-	       *
-	       * 创建的interface class会挂到对应device class的链表上。
-       	       */
-	  +-> type_initialize(type)
+               * type_initialize是根据注册的Type创建class的函数。创建class的具体
+               * 实例的时候，如果class没有创建，就会创建class，被创建的class的指针
+               * 会放到注册Type的class域段。
+               *
+               * 可以看到这个函数为class分配了空间，递归初始化了父类，把父类空间
+               * 中的内容copy到了当前类最开始的空间。初始化class的interface和
+               * property，并在最后调用了class的init函数，把class的数据和操作函数
+               * 都添加上。
+               *
+               * 创建的interface class会挂到对应device class的链表上。
+               */
+          +-> type_initialize(type)
         /* 注意，这里返回的是DeviceClass */
     +-> dc = qdev_get_device_class(&driver, errp)
         /* 找见设备对应的bus */
@@ -112,10 +112,10 @@ static void pci_edu_register_types(void)
     +-> dev = qdev_new(driver)
       +-> object_new(typename)
             /*
-	     * 为设备对象分配了内存空间, 把设备里的class指针指向class，为设备
-	     * 初始化class里定义的各个property。调用instance_init初始化设备。
-	     * 注意这个时候设备还不是在可用的状态。
-	     */
+             * 为设备对象分配了内存空间, 把设备里的class指针指向class，为设备
+             * 初始化class里定义的各个property。调用instance_init初始化设备。
+             * 注意这个时候设备还不是在可用的状态。
+             */
         +-> object_new_with_type(ti)
     +-> qdev_realize(DEVICE(dev))
           /* 调用到class里的realize函数激活设备, 具体的分析在下面一节 */
@@ -159,7 +159,7 @@ properties是什么
        -> ObjectProperty *prop = object_property_find(obj, name, errp)
             /* 先用obj找到ObjectClass，再在ObjectClass找property */
          -> object_class_property_find(klass, name, NULL)
-	    /* 在Object里找property */
+            /* 在Object里找property */
          -> g_hash_table_lookup(obj->properties, name)
 
        -> prop->set(obj, v, name, prop->opaque, &err)
