@@ -21,3 +21,70 @@ Build your own rootfs by buildroot
 
 7. wait and you will find built minirootfs in buildroot/output/images/
    you can use rootfs.cpio.gz as rootfs here.
+
+编译glib(BR2_PACKAGE_LIBGLIB2)：
+
+ 依赖BR2_TOOLCHAIN_BUILDROOT_WCHAR, BR2_USE_WCHAR
+ 
+Subject: [PATCH] Add: devmmu-user as an outside repo
+
+Signed-off-by: Zhou Wang <wangzhou89@126.com>
+---
+ local.mk                 |  1 +
+ package/Config.in        |  2 ++
+ package/devmmu/Config.in |  4 ++++
+ package/devmmu/devmmu.mk | 12 ++++++++++++
+ 4 files changed, 19 insertions(+)
+ create mode 100644 local.mk
+ create mode 100644 package/devmmu/Config.in
+ create mode 100644 package/devmmu/devmmu.mk
+
+diff --git a/local.mk b/local.mk
+new file mode 100644
+index 0000000000..2775c16f6b
+--- /dev/null
++++ b/local.mk
+@@ -0,0 +1 @@
++DEVMMU_OVERRIDE_SRCDIR = /home/wangzhou/devmmu-user/
+diff --git a/package/Config.in b/package/Config.in
+index 82b28d2835..bcb1649da7 100644
+--- a/package/Config.in
++++ b/package/Config.in
+@@ -2524,4 +2524,6 @@ menu "Text editors and viewers"
+ 	source "package/vim/Config.in"
+ endmenu
+ 
++source "package/devmmu/Config.in"
++
+ endmenu
+diff --git a/package/devmmu/Config.in b/package/devmmu/Config.in
+new file mode 100644
+index 0000000000..4c7f9edcc4
+--- /dev/null
++++ b/package/devmmu/Config.in
+@@ -0,0 +1,4 @@
++config BR2_PACKAGE_DEVMMU
++	bool "devmmu"
++	help
++		DevMMU testsuit
+diff --git a/package/devmmu/devmmu.mk b/package/devmmu/devmmu.mk
+new file mode 100644
+index 0000000000..c02eedf5c3
+--- /dev/null
++++ b/package/devmmu/devmmu.mk
+@@ -0,0 +1,12 @@
++################################################################################
++#
++# devmmu
++#
++################################################################################
++
++DEVMMU_VERSION = 0.1
++DEVMMU_SOURCE=
++DEVMMU_INSTALL_STAGING=NO
++DEVMMU_DEPENDENCIES=
++
++$(eval $(autotools-package))
+-- 
+2.25.1
+

@@ -106,7 +106,7 @@ BBML的逻辑梳理  #
 smmu无锁cmdq
 qemu add pci cap  #
 qemu qom          #
-qemu add trace    #
+qemu add trace    #    need update
 qemu的smmuv3的基础逻辑/pasid支持  #
 qemu mem
 memory buddy
