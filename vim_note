@@ -9,8 +9,9 @@ vim使用技巧
 
 2. term
 
-3. ctrl + w ctrl + n
+3. ctrl + w + N
    打开的terminal进入vim的normal模式，可以使用vim的复制命令复制信息到原来的窗口里。
+   注意这里是大写的N。
 
 4. 在插入模式的时候，当前的一个单词输入错了，可以用ctrl + w删去当前的单词，
    ctrl + u删除到首行。注意这个在shell里也是可以使用的。

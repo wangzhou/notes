@@ -53,3 +53,10 @@ aarch64-linux-gnu-gdb
 Here we use a arm64 based gdb as an example. After "target remote:1234", we
 can use gdb to debug kernel in qemu. You can just set break points, print value
 of variables...
+
+Or you can -s -S in qemu command line, then in another window, run gdb;
+target remote:1234 to connect gdb server in qemu. Then you can set breakpoint,
+run and so on.
+
+For debug qemu itself, you can run qemu and get the pid of qemu, then run gdb;
+attach <qemu_pid>

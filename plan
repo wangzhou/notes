@@ -117,3 +117,4 @@ memory vma
 memory pagecache
 fs vfs
 rv asid logic
+vim_note update
