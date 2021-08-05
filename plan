@@ -118,3 +118,7 @@ memory pagecache
 fs vfs
 rv asid logic
 vim_note update
+glib opt
+qemu dynamic attribute
+vim internal search vim /xx/ **/*.[ch] vim以文件为基础，vim直接保存到文件，从文件中load，vim ab代码缩写，makefile出错反向cfile到原文件，cn
+     
