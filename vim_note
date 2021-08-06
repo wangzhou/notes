@@ -159,3 +159,12 @@ vim使用技巧
 28. jump between two files or two functions
     向前跳到前几次光标的位置：ctrl + i
     向后跳到后几次光标的位置：ctrl + o 这样可以在函数定义和调用处来回跳动
+
+29. 尽量在vim内完成所有操作，包括:make, vimgrep(缩写成vim)
+    vimgrep的格式是：vim /search_patten/ **/*.[ch] **是当前目录以及以下目录的通配符，
+    *是当前目录的通配符。
+
+30. tj命名，tags jump 符号，可以搜索一个符号的位置，并且跳过去。stj split一个新
+    的窗口显示。有很多t开头的命令，最常用的要数ts了，tags select。
+
+31. ab命令，用一个缩写来代替一组字符。
