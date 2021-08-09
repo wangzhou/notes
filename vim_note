@@ -162,7 +162,9 @@ vim使用技巧
 
 29. 尽量在vim内完成所有操作，包括:make, vimgrep(缩写成vim)
     vimgrep的格式是：vim /search_patten/ **/*.[ch] **是当前目录以及以下目录的通配符，
-    *是当前目录的通配符。
+    *是当前目录的通配符。vimgrep搜索得到的各个条目会保存到一个叫quickfix的表里，
+    这个是vim的一个基本的功能，copen可以开一个窗口，然后在新开窗口中打开quickfix表，
+    cclose关闭打开的quickfix表。
 
 30. tj命名，tags jump 符号，可以搜索一个符号的位置，并且跳过去。stj split一个新
     的窗口显示。有很多t开头的命令，最常用的要数ts了，tags select。
