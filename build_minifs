@@ -38,7 +38,7 @@ override功能。它的基本逻辑是，现在buildroot的编译配置体系里
 全部配置好后，在buildroot make menuconfig的时候把devmmu选上，make编译的时候就会
 去指定的目录里找devmmu的代码，并编译安装到生成的小文件系统里。如果后面改了devmmu
 的源码，使用make devmmu-rebuild all可以只便宜安装devmmu。
-``` 
+```
 diff --git a/local.mk b/local.mk
 new file mode 100644
 index 0000000000..2775c16f6b

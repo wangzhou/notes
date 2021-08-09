@@ -1,0 +1,71 @@
+glib option简易使用
+===================
+
+-v0.1 2021.8.9 Sherlock init
+
+简介：Linux下命令行运行一个app时，可以通过中划线开头的参数给app传参数。app可以
+      使用getopt或者是getopt_long的方式解析输入参数，glib库同样提供一组参数配置、
+      解析的函数。使用glib库提供的解析方式写起代码来更简单一点，本文介绍一个基本
+      的使用方式。
+
+直接在代码里加注释说明基本的使用方式：
+```
+static gboolean opt_hugepage = FALSE;
+static gint opt_size = 128;
+
+/*
+ * GOptionEntry定义一个输入参数项。每项的定义依次是：长参数名字，短参数名字，flag，
+ * 参数类型，参数存放地址，参数项描述，参数描述。
+ *
+ * 简单使用时，flag用G_OPTION_FLAG_NONE就好，最后一个参数描述会在长参数后输出，
+ * 可以参看最下面的--help输出。
+ */
+static GOptionEntry entries[] = {
+	{ "size", 's', G_OPTION_FLAG_NONE, G_OPTION_ARG_INT, &opt_size,
+	  "size of dma copy in normal page case", "size" },
+	{ "hugepage", 'h', G_OPTION_FLAG_NONE, G_OPTION_ARG_NONE, &opt_hugepage,
+	  "use hugepage(one 2M page for src, one for dts)", NULL },
+	{ NULL }
+};
+
+static void handle_options(int argc, char *argv[])
+{
+	GError *err = NULL;
+	/* 参数项描述的上下文 */
+	GOptionContext *context;
+
+	/* 创建参数项描述的上下文 */
+	context = g_option_context_new("- test devmmu pasid");
+
+	/* 把如上定义的各个参数项放到context中 */
+	g_option_context_add_main_entries(context, entries, NULL);
+
+	/* 调用这个函数解析输入值 */
+	g_option_context_parse(context, &argc, &argv, &err);
+
+	/* 释放context */
+	g_option_context_free(context);
+}
+
+int main(int argc, char *argv[])
+{
+	handle_options(argc, argv);
+
+	/* ... */
+}
+```
+如上的配置，--help的输出:
+```
+# ghms_test --help
+Usage:
+  ghms_test [OPTION*] - test devmmu pasid
+
+Help Options:
+  -?, --help          Show help options
+
+Application Options:
+  -s, --size=size     size of dma copy in normal page case
+  -h, --hugepage      use hugepage(one 2M page for src, one for dts)
+```
+
+使用如上的函数可以简单的把glib option使用起来，更多使用方法需要去查glib的使用手册。
