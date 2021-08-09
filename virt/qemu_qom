@@ -3,6 +3,7 @@ qemu code analysis - qom
 
 -v0.1 2021.4.29 Sherlock init
 -v0.2 2021.5.03 Sherlock draft finish 2,3
+-v0.3 2021.8.09 Sherlock add property in qemu cmdline
 
 qemu里使用面向对象的模型来模拟相关的元素，可以想象这样的模拟是很合理的，比如，
 用device描述一个设备的基类，pci_device可以继承device，然后vfio的pci设备又可以
@@ -117,6 +118,8 @@ static void pci_edu_register_types(void)
              * 注意这个时候设备还不是在可用的状态。
              */
         +-> object_new_with_type(ti)
+	/* 解析输入的设备属性并且保存到设备的属性hash表里 */
+    +-> qemu_opt_foreach(opts, set_property, dev, errp)
     +-> qdev_realize(DEVICE(dev))
           /* 调用到class里的realize函数激活设备, 具体的分析在下面一节 */
       +-> object_property_set_bool(OBJECT(dev), "realized", true, errp)
@@ -167,8 +170,21 @@ properties是什么
  如上，分析qemu的qom重点关注如下的文件: hw/misc/edu.c, hw/pci/pci.c, hw/core/qdev.c,
  qom/object.c。各个层级的Type定义分别对应的文件里(这里用pci设备为例)
 
+ 一个典型的使用属性的地方是在qemu启动的时候通过命令行参数给一个设备传递一个属性值。
+ 我们分析这里的代码流程，还是以edu为例，edu_instance_init里的object_property_add_uint64_ptr
+ 为edu设备加了dma_mask这样一个设备属性。在qemu的启动命令行里可以如下配置使用：
+```
+	--device edu,dma_mask=0xffffff
+```
+ 可以看到qemu_opt_foreach(opts, set_property, dev, errp)解析设备属性在instance_init
+ 之后，在realize函数调用之前。所以，edu驱动里在instance_init里把设备属性的定义加
+ 到设备对应的属性hash表里，如上的解析函数才能把命令行输入的属性和设备属性匹配。
+ edu需要在realize函数或者realize之后才能使用传入的设备属性。
+
  link属性
 
+ 有了上面的分析，link属性的使用也可以想到，他同样可以使用qemu的启动命令行确定qemu
+ 部件之间的逻辑关系。
 
  child属性
 
