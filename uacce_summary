@@ -1,0 +1,53 @@
+UACCE summary
+
+-v1.0 2021.8.12 WangZhou init
+
+简介：本文总结下到目前为止Plinth加速器开发团队和Linaro Landing team一起构建的基于
+      uacce的加速器整体方案的基本情况。
+
+
+ * 整个方案包括:
+
+  1. 内核态驱动/qemu改动，包括uacce驱动，各个加速器驱动，SVA/vSVA基础补丁，qemu改动。
+
+  2. UADK库，包括libwd基础库，libwd_comp/libwd_crypto算法库，各个加速器驱动库。
+
+  3. UADK-openssl engine库。
+  
+
+ * 下面分配总结下当前的进展：
+
+  1. 内核态驱动：
+
+     uacce驱动，各个加速器驱动(包括1630的特性)，SVA基础补丁已经全部上传主线(v5.14-rc5)。
+     我们的PCIe设备使用SMMU的stall模式，需要上传主线一个pci quirk补丁，这个是做
+     到主线可用唯一没有上传的补丁，已经持续发了5个版本，PCI maintainer不拒绝不接受不回复。
+     (patch里还有他的suggested-by)，目前情况不明，计划持续resend。
+
+     vSVA以及qemu改动这块社区进展很慢，绝大多数还在上传中。和Rehat的Eric聊过，
+     是否由华为继续相关补丁的上传。Eric表示他还在继续搞，目前社区block在iommu用户态
+     接口的讨论上([RFC v2] /dev/iommu uAPI proposal)。
+
+  2. UADK库:
+
+     https://github.com/Linaro/uadk
+
+     主要的改动有：1. 兼容了no-sva的所有接口。2. 基本补全了1620/1630的所有算法。
+                   3. 落地了宋宝华老师提议的优化(内存池，环境变量，库内部polling线程)
+
+     支持的全部特性可以参考: https://github.com/Linaro/uadk/blob/master/Changelog
+
+  3. UADK-openssl engine库:
+
+     https://github.com/Linaro/openssl-uadk
+
+     主要改动有：1. 兼容了KAE基于no-sva的特性。2. 基本补全了1620/1630的所有算法。
+
+ * 总结和补充
+
+  1. 目前开发主要是围绕uadk/uacce在补齐业务算法。
+
+  2. 和产品交流了解到，由于今年主要在搞存量市场，产品主要关注1630上的新特性。
+
+  3. Plinth开发团队目前在和Estuary搞基于加速器的Ceph的优化, Plinth开发团队计划
+     在DPDK中使用加速器。目前可以想到的拓展思路也是横向结合具体业务做优化。
