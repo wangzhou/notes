@@ -31,7 +31,7 @@ Note: 编译glib(BR2_PACKAGE_LIBGLIB2), 依赖BR2_TOOLCHAIN_BUILDROOT_WCHAR, BR2
 只要在buildroot配置的时候打开依赖库的配置就好。
 
 自己的app如何集成在buildroot编译生成的小系统里。一个好用的方法是使用buildroot的
-override功能。它的基本逻辑是，现在buildroot的编译配置体系里加如你想便宜的包的配置，
+override功能。它的基本逻辑是，现在buildroot的编译配置体系里加如你想编译的包的配置，
 如下的patch中，我们加了一个叫devmmu的包的配置，这个包的配置基本是空的，然后我们
 在buildroot的根目录下发放一个local.mk的文件，并在里指明devmmu这个包的源码目录，
 相关的写法一定要按照<package_name>_OVERRIDE_SRCDIR = <package_path>的写法。
