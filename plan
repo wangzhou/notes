@@ -124,3 +124,4 @@ vim internal search vim /xx/ **/*.[ch] vim以文件为基础，vim直接保存�
 minifs outside repo build logic   #!
 makefile重新学习
 qemu smmu(add pasid logic)
+pci pri
