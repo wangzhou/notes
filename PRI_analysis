@@ -1,40 +1,91 @@
-PCIe/SMMU PRI analysis note
----------------------------
+PCIe/SMMU PRI analysis
+----------------------
 
--v0.1 2017.7.3 Sherlock init
+-v0.1 2017.7.3  Sherlock init
+-v0.2 2021.8.17 Sherlock finish
 
-PRI is independent to ATS.
-RRI offers the ability in device to page fault.
+简介：本文分析和PCIe PRI特性相关的软硬件接口逻辑，以及相关的软件实现。
 
+协议逻辑
+--------
 
-Page Request Message(PRM)(is a kind of PCIe message) sent from device to RC
-(page address and Page Request Group(PRG))
+ PRI依赖ATS，带有PRI功能的设备，可以给IOMMU发page request，IOMMU为设备申请物理页，
+ 并建立页表后，给设备发PRG response的消息。
 
+ PCIe协议里定义了PCIe设备和IOMMU之间的request/repsponse消息格式，并且定义了
+ PRI capability的格式，后者是软件可以读写的软硬件接口。
 
-RPG Response Message to device
+ 先看PRI capability的详细定义，这个cap只在PF里有：
 
+ - cap head
 
-device sending ATS request before sending data
+   常规cap头。
 
-```
-arm_smmu_device_probe
-    --> arm_smmu_device_reset
-        --> arm_smmu_setup_irqs(smmu)
-                /* thread callback is arm_smmu_priq_thread */
-            --> devm_request_threaded_irq
-            (arm_smmu_priq_thread)
-                --> arm_smmu_handle_ppr
-                        /* register a work queue */
-                    --> INIT_WORK(&fault->work, arm_smmu_handle_fault)
-                    (arm_smmu_handle_fault)
-                            /* where to fill the page table of SMMU ?? */
-                        --> _arm_smmu_handle_fault(fault)
-                            /* CMDQ_OP_PRI_RESP: issue a RPI response */
-                        --> arm_smmu_fault_reply(fault, resp)
+ - status register
 
-```
+   response failure bit: 读到1表示收到一个failure的response。RW1C寄存器，写1清0。
 
+   unexpected page request group index bit: 读到1表示收到一个非法PRI group index。
+					    RW1C寄存器，写1清。
 
+   stopped bit: 只在enable clear的时候有效。这个是一个只读的指示位，为0时或者设备
+   		根本没有停，或者设备停了，但是链路上还有PRI request，当为1时，表示
+		之前发出去的request都完成了(对应的response都回来了?)
 
-        
+   PRG response PASID required bit: 只读的指示位，PRG response带不带PASID，使能
+   			            PASID的时候这个都应该是1？
 
+ - control register
+
+   enable bit: 控制是否可以发PRI request。从non-enable到enable的操作，清空status
+               flags。enable和stopped同时处于clear，可能设备和IOMMU的连接通路上
+	       还有PRI request。
+
+   reset bit:  只有在enable clear的时候有用，这个时候对reset写1，会clear page
+   	       request credit counter和pending request state。
+
+	       估计上面这两个是硬件内部为了维护PRI request和response的具体实现,
+	       reset把这些东西清掉，使得设备回到复位状态，结合上面enable clear
+	       时只是disable PRI request的主动行为，并不保证清理链路上和设备里
+	       已经发出去的请求，这里的逻辑应该是这样。
+
+ - outstanding page request cap
+
+   定义page request的最大outstanding。page request的个数是资源，PRG index的个数
+   也是资源，这里限定的是前者。
+
+ - outstanding page request allocation
+
+   定义实时可以最大申请到的page request的个数？暴露这两个信息给软件的用意是？
+
+ 协议中定义的各种PRI相关的消息，这一部分软件无法直接感知。相关的硬件消息包括：
+
+ - Page Request Message(PRM)
+
+   设备发出的消息，一组消息可以组成一个group，group中的最后一个message有last标记
+   去标记。
+
+ - Stop Marker Message
+
+   由设备发给IOMMU，告诉IOMMU，设备不再使用相关PASID了。
+
+ - Page Request Group Response Message(PRGRM)
+
+   IOMMU处理完一组PRM，对设备返回一个PRGRM，使用ID路由，携带pasid，group index，
+   请求完成状态信息。注意这里是不带请求到的PA的。以group为单位返回状态信息，group
+   里一个request failure，整个group就failure了。
+
+   所以，PRI对IOMMU的诉求就是IOMMU要给软件提供下发PRGRM的接口，这个接口至少要有bdf，
+   pasid，group index，PRM group处理返回值。
+
+ 基于cap各个域段的分析，整体流程已经比较清楚了。唯一要注意的是PRGRM只返回处理
+ 结果，需要接着再发ATS请求拿到PA，然后再发地址翻译过的请求。因为PRI翻译建立的页表
+ 是可能变动的，如果收到PRGRM后直接用va访问可能会异常，所以接着发ATS拿到PA，依赖
+ ATS的同步机制保证发出的访问请求成功。
+
+Linux驱动分析
+-------------
+
+ 目前Linux内核主线(Linux-5.14-rc4)已经支持了PCIe PRI的基本使能函数。相关函数在
+ drivers/pci/ats.c中，这些只是一些PCIe cap的操作函数。在业务中使用PRI功能的情况
+ 还没有。
