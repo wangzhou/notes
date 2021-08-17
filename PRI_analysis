@@ -56,7 +56,11 @@ PCIe/SMMU PRI analysis
 
  - outstanding page request allocation
 
-   定义实时可以最大申请到的page request的个数？暴露这两个信息给软件的用意是？
+   用来配置实际使用的最大page request outstanding数。提供这个接口给软件的目的是
+   要和IOMMU的处理能力做匹配，如果IOMMU的缺页处理能力比设备小，会造成PRI request
+   失败。所以，这里对IOMMU就有了限制，可以直接想到的有: IOMMU处理PRI的队列最好独立，
+   这样方便和设备的PRI outstanding能力做匹配; IOMMU需要考虑处理PRI请求队列溢出时，
+   如何恢复; IOMMU的驱动需要考虑合理的匹配逻辑。
 
  协议中定义的各种PRI相关的消息，这一部分软件无法直接感知。相关的硬件消息包括：
 
