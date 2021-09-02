@@ -105,7 +105,7 @@ rv s39页表结构  #
 BBML的逻辑梳理  #
 smmu无锁cmdq
 qemu add pci cap  #
-qemu qom          #!
+qemu qom          #
 qemu add trace    #    need update
 qemu的smmuv3的基础逻辑/pasid支持  #
 qemu mem
@@ -116,13 +116,15 @@ memory reclaim(swap, direct)
 memory vma
 memory pagecache
 fs vfs
-vim_note #!
+vim_note #
 glib opt #
 qemu dynamic attribute #
 vim internal search vim /xx/ **/*.[ch] vim以文件为基础，vim直接保存到文件，从文件中load，vim ab代码缩写，makefile出错反向cfile到原文件，cn
-minifs outside repo build logic   #!
+minifs outside repo build logic   #
 makefile重新学习
 qemu smmu(add pasid logic) #
 pci pri  #
-dma need post
+dma need post #
 rv asid logic
+atc detail analysis
+qemu build system
