@@ -7,8 +7,8 @@ Linux内核DMA子系统分析
 本文分析Linux内核DMA子系统的构架，需要写DMA engine驱动的同学可以作为参考。
 
 
-1. DMA engine使用
------------------
+DMA engine使用
+--------------
 
  DMA子系统下有一个帮助测试的测试驱动(drivers/dma/dmatest.c), 从这个测试驱动入手
  我们了解到内核里的其他部分怎么使用DMA engine。配置内核，选则CONFIG_DMATEST可以
@@ -39,8 +39,8 @@ Linux内核DMA子系统分析
 
   - 做完dma操作之后使用dma_release_channel释放申请的dma channel。
 
-2. DMA子系统分析
-----------------
+DMA子系统分析
+-------------
 
  分析一个现有的dmaengine驱动可以看到，dmaengine驱动需要使用dmaenginem_async_device_register
  向dma子系统注册驱动自己的struct dma_device结构。在注册之前，设备驱动要先填充
@@ -55,8 +55,8 @@ Linux内核DMA子系统分析
 
  DMA子系统还对外提供一套第一节中所描述的API。
 
-3. DMA engine驱动分析
----------------------
+DMA engine驱动分析
+------------------
 
  可以看到，DMA系统在dma engine注册的时候需要设备驱动提供的一套回调函数来支持
  第一小节里的各个API，这些回调函数操作具体硬件，完成相关硬件的配置。我们这里可以

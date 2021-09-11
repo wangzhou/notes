@@ -6,7 +6,64 @@ qemu in qemu
       虚拟化环境，方便调试虚拟化相关的东西。本文说明整个搭建的逻辑，并搭建一个arm64
       的qemu in qemu的环境。
 
+第一层qemu
+----------
 
 第一层qemu正常编译即可。
 
-第一层qemu启动的时候要打开vcpu的
+第一层qemu启动的时候要打开vcpu的hypvisor extention特性，这样这一层qemu启动的系统
+里就会带/dev/kvm，第二层qemu使用kvm加速，第二层qemu的运行速度会比较快，否则第二层
+qemu慢的一塌糊涂。
+
+arm构架下，打开vcpu hypvisor extention特性的配置是：
+```
+	-M virt,virtualization=true
+```
+
+第二层qemu
+----------
+
+第二层qemu在编译的时候要打开kvm的支持：
+```
+
+```
+理论上同样编译一个arm版本的qemu就好，本地编译一个arm版本的qemu目前已经比较方便，
+在一台ubuntu 20.04 arm物理机器上直接编译就好，过程中缺什么库，直接安装就好。
+
+但是，如果你的环境是在一台x86机器上，就需要交叉编译qemu，qemu的所有依赖库都要先
+交叉编译下。如果是这种情况，一种比较好的解决办法是编译buildroot，同时指定自己的
+qemu代码仓库给buildroot，指定自己的qemu代码仓库是为了随后比较方便修改qemu代码，
+重复编译。直接用buildroot自己的qemu仓库的配置，会把qemu代码下载到buildroot/output/build/qemu
+下面，去这里修改qemu的代码也是可以的，但是make clean会把output/build下的东西都删掉，
+还是指定自己的qemu仓库方便一些。
+
+使用这里介绍的方式，local.mk的配置是：
+```
+```
+buildbood qemu的配置buildroot/package/qemu/qem.mk需要修改：
+```
+```
+buildroot配置的时候，最好使用buildroot toolchain和musl c库，使用uclibc会报找不见
+fenv.h的错误。
+
+启动第二层qemu的时候加上-enable-kvm的启动参数:
+```
+```
+
+```
+    +---------------+
+    |               | <--- arm构架qemu
+    |  第二层qemu   |
+    |               |
+    +---------------+ <--- kvm加速
+    +---------------+
+    |               | <--- arm构架qemu
+    |  第一层qemu   |
+    |               |
+    +---------------+
+    +----------------------------------------------+
+    |                                              |
+    |  物理机器(可能是arm构架，也可能是x86机器)    |
+    |                                              |
+    +----------------------------------------------+
+```

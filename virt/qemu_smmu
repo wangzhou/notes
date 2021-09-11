@@ -1,9 +1,9 @@
-qemu code analysis - smmu
-=========================
+qemu iommu模拟思路分析
+======================
 
 -v0.1 2021.4.29 Sherlock init
 
-简介：本文介绍qemu对iommu模拟的思路。
+简介：本文介绍qemu对iommu模拟的思路，我们以qemu里smmuv3设备驱动为例。
 
 smmuv3的父设备的代码里有：
 ```
