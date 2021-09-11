@@ -17,15 +17,22 @@ qemu慢的一塌糊涂。
 
 arm构架下，打开vcpu hypvisor extention特性的配置是：
 ```
-	-M virt,virtualization=true
+	qemu-system-aarch64 -cpu cortex-a57 \
+	-smp 1 -m 1024M \
+	-nographic \
+	-M virt,virtualization=true \
+	-kernel ~/Image \
+	-append "console=ttyAMA0 earlycon root=/dev/ram rdinit=/init" \
+	-initrd ~/rootfs.cpio.gz
 ```
+其中 -M virt,virtualization=true 打开vcpu hypvisor extention。
 
 第二层qemu
 ----------
 
 第二层qemu在编译的时候要打开kvm的支持：
 ```
-
+configure --target-list=aarch64-softmmu --enable-kvm
 ```
 理论上同样编译一个arm版本的qemu就好，本地编译一个arm版本的qemu目前已经比较方便，
 在一台ubuntu 20.04 arm物理机器上直接编译就好，过程中缺什么库，直接安装就好。
@@ -42,14 +49,26 @@ qemu代码仓库给buildroot，指定自己的qemu代码仓库是为了随后比
 ```
 buildbood qemu的配置buildroot/package/qemu/qem.mk需要修改：
 ```
+QEMU_OVERRIDE_SRCDIR = <your_local_qemu_path>/qemu/
+QEMU_OVERRIDE_SRCDIR_RSYNC_EXCLUSIONS = --include .git
 ```
 buildroot配置的时候，最好使用buildroot toolchain和musl c库，使用uclibc会报找不见
-fenv.h的错误。
+fenv.h的错误。编译qemu的时候只编译package qemu就好。
 
 启动第二层qemu的时候加上-enable-kvm的启动参数:
 ```
+	qemu-system-aarch64 \
+	-cpu host \
+	-m 256M \
+	-enable-kvm \
+	-nographic \
+	-machine virt \
+	-kernel ~/Image \
+	-append "console=ttyAMA0 earlycon root=/dev/ram rdinit=/init" \
+	-initrd ~/rootfs.cpio.gz
 ```
 
+如上整个环境的逻辑如下图所示：
 ```
     +---------------+
     |               | <--- arm构架qemu

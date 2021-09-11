@@ -130,3 +130,5 @@ atc detail analysis
 qemu build system
 priority q
 qemu in qemu(include outtree qemu build)
+build rootfs modify 1. format, 2, devmmu的依赖的配置方式
+viommu构架分析
