@@ -46,14 +46,27 @@ qemu代码仓库给buildroot，指定自己的qemu代码仓库是为了随后比
 
 使用这里介绍的方式，local.mk的配置是：
 ```
-```
-buildbood qemu的配置buildroot/package/qemu/qem.mk需要修改：
-```
 QEMU_OVERRIDE_SRCDIR = <your_local_qemu_path>/qemu/
 QEMU_OVERRIDE_SRCDIR_RSYNC_EXCLUSIONS = --include .git
 ```
+buildbood qemu的配置buildroot/package/qemu/qem.mk需要修改：
+```
+diff --git a/package/qemu/qemu.mk b/package/qemu/qemu.mk
+index 88516678d1..a480673a68 100644
+--- a/package/qemu/qemu.mk
++++ b/package/qemu/qemu.mk
+@@ -221,7 +221,6 @@ define QEMU_CONFIGURE_CMDS
+ 			--disable-opengl \
+ 			--disable-vhost-user-blk-server \
+ 			--disable-virtiofsd \
+-			--disable-tests \
+ 			$(QEMU_OPTS)
+ endef
+```
+
 buildroot配置的时候，最好使用buildroot toolchain和musl c库，使用uclibc会报找不见
-fenv.h的错误。编译qemu的时候只编译package qemu就好。
+fenv.h的错误。编译qemu的时候只编译package qemu就好，BR2_PACKAGE_QEMU，
+BR2_PACKAGE_QEMU_CUSTOM_TARGETS=aarch64-softmmu，BR2_PACKAGE_QEMU_FDT要配置下。
 
 启动第二层qemu的时候加上-enable-kvm的启动参数:
 ```
