@@ -121,7 +121,6 @@ glib opt #
 qemu dynamic attribute #
 vim internal search vim /xx/ **/*.[ch] vim以文件为基础，vim直接保存到文件，从文件中load，vim ab代码缩写，makefile出错反向cfile到原文件，cn
 minifs outside repo build logic   #
-makefile重新学习
 qemu smmu(add pasid logic) #
 pci pri  #
 dma need post #
@@ -132,3 +131,4 @@ priority q
 qemu in qemu(include outtree qemu build)
 build rootfs modify 1. format, 2, devmmu的依赖的配置方式
 viommu构架分析
+makefile重新学习 拿一个例子分析下，用户态的pciutils库的Makefile
