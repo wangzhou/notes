@@ -98,7 +98,32 @@ config DMA_ENGINE
 
   使用lspci可以看到我们模拟的是这样一个PCIe设备：
 ```
-	todo
+# ./lspci -s 00:04.0 -vvv
+00:04.0 Class 00ff: Device 1234:3456 (rev 10)
+        Subsystem: Device 1af4:1100
+        Control: I/O- Mem+ BusMaster+ SpecCycle- MemWINV- VGASnoop- ParErr- Stepping- SERR- FastB2B- DisINTx+
+        Status: Cap+ 66MHz- UDF- FastB2B- ParErr- DEVSEL=fast >TAbort- <TAbort- <MAbort- >SERR- <PERR- INTx-
+        Latency: 0
+        Interrupt: pin A routed to IRQ 55
+        IOMMU group: 0
+        Region 0: Memory at 10260000 (32-bit, non-prefetchable) [size=16K]
+        Capabilities: [e0] Express (v2) Root Complex Integrated Endpoint, MSI 00
+                DevCap: MaxPayload 128 bytes, PhantFunc 0
+                        ExtTag- RBE+ FLReset-
+                DevCtl: CorrErr- NonFatalErr- FatalErr- UnsupReq-
+                        RlxdOrd- ExtTag- PhantFunc- AuxPwr- NoSnoop-
+                        MaxPayload 128 bytes, MaxReadReq 128 bytes
+                DevSta: CorrErr- NonFatalErr- FatalErr- UnsupReq- AuxPwr- TransPend-
+                DevCap2: Completion Timeout: Not Supported, TimeoutDis- NROPrPrP- LTR-
+                         10BitTagComp- 10BitTagReq- OBFF Not Supported, ExtFmt+ EETLPPrefix+, MaxEETLPPrefixes 4
+                         EmergencyPowerReduction Not Supported, EmergencyPowerReductionInit-
+                         FRS-
+                         AtomicOpsCap: 32bit- 64bit- 128bitCAS-
+                DevCtl2: Completion Timeout: 50us to 50ms, TimeoutDis- LTR- 10BitTagReq- OBFF Disabled,
+                         AtomicOpsCtl: ReqEn-
+        Capabilities: [40] MSI: Enable+ Count=1/1 Maskable- 64bit+
+                Address: 00000000fffff040  Data: 0050
+        Kernel driver in use: dma_engine
 ```
 
 - MMIO
@@ -110,9 +135,19 @@ config DMA_ENGINE
 
 - DMA
 
-  
+  软件写0x1018 bit0为1触发一个DMA数据拷贝，相关实现代码在dma_engine_do_dma_copy里。
+  这个函数直接调用pci_dma_read/pci_dma_write做设备buffer和内存之间的数据搬移，这里
+  在使能smmuv3的时候，以上两个函数的内部实现会先调用smmuv3的translation函数做地址
+  翻译，然后再做数据搬移，在不使能smmuv3的时候，直接是内存地址做数据搬移。
+
+  如果只是模拟一个PCIe EP设备，可以不用管和iommu相关的内部实现。如果要做iommu的模拟，
+  可以参考这里的逻辑。
 
 - 中断
+
+  realize函数中使用pci_config_set_interrupt_pin给设备加一个INTx中断。使用msi_init
+  给设备加MSI中断。可以使用pci_irq_assert触发一个电平中断，通过msi_notify触发一个
+  MSI中断，通过qemu_irq_pulse触发一个边沿中断。
 
 Linux内核驱动的实现
 -------------------
@@ -123,6 +158,37 @@ Linux内核驱动的实现
 
 编译运行
 --------
+
+ qemu的编译运行在上面。使用的Linux内核的基础版本是5.15-rc1，编译的时候打开
+ ARM_SMMU_V3和DMA_ENGINE_DEMO的配置即可。
+
+ 我们可以在启动qemu的时候带上--trace "smmuv3_*"，这样可以打开qemu smmuv3的trace，
+ 观察到smmuv3这个模拟设备内部的详细运行情况。我们也可以给DMA engine这个设备用类似
+ 的方法加上trace。
+```
+# echo 128 > copy_size 
+[  161.037614] dma_engine 0000:00:04.0: input size: 80
+smmuv3_config_cache_miss Config cache MISS for sid=0x20 (hits=0, misses=1, hit rate=0)
+smmuv3_find_ste sid=0x20 features:0x1, sid_split:0x8
+smmuv3_find_ste_2lvl strtab_base:0x4000000042c79000 l1ptr:0x42c79000 l1_off:0x0, l2ptr:0x7cc60000 l2_off:0x20 max_l2_ste:511
+smmuv3_get_ste STE addr: 0x7cc60800
+smmuv3_get_cd CD addr: 0x43bb4000
+smmuv3_decode_cd oas=44
+smmuv3_decode_cd_tt TT[0]:tsz:16 ttb:0x43dd5000 granule_sz:12 had:0
+smmuv3_translate_success smmuv3-iommu-memory-region-32-4 sid=0x20 iova=0xffffe900 translated=0x427ff900 perm=0x1
+smmuv3_config_cache_hit Config cache HIT for sid=0x20 (hits=1, misses=1, hit rate=50)
+smmuv3_translate_success smmuv3-iommu-memory-region-32-4 sid=0x20 iova=0xffffe980 translated=0x427ff980 perm=0x2
+smmuv3_cmdq_consume prod=42 cons=40 prod.wrap=0 cons.wrap=0
+smmuv3_cmdq_opcode <--- SMMU_CMD_TLBI_NH_VA
+smmuv3_s1_range_inval vmid=0 asid=1 addr=0xffffe000 tg=1 num_pages=0x1 ttl=3 leaf=1
+smmuv3_cmdq_consume prod=42 cons=41 prod.wrap=0 cons.wrap=0
+smmuv3_cmdq_opcode <--- SMMU_CMD_SYNC
+smmuv3_cmdq_consume_out prod:42, cons:42, prod_wrap:0, cons_wrap:0 
+smmuv3_write_mmio addr: 0x98 val:0x2a size: 0x4(0)
+smmuv3_read_mmio addr: 0x9c val:0x2a size: 0x4(0)
+[  161.043200] dma_engine 0000:00:04.0: dma engine test sucessed!
+```
+ 如上的日志，smmuv3前缀的是qemu的trace，时间戳开头的是内核驱动的打印。
 
 [1]https://github/wangzhou/qemu/blob/dma_engine_sample/hw/misc/dma_engine.c
 [2]https://github/wangzhou/linux/tree/dma_engine_demo/drivers/misc/dma_engine
