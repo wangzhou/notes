@@ -69,22 +69,60 @@ softmmu_ss.add(when: 'CONFIG_DMA_ENGINE', if_true: files('dma_engine.c'))
 ```
   表示如果配置CONFIG_DMA_ENGINE打开，就把dma_engine.c编译进来。
 
-
+  在qemu/hw/misc/Kconfig里加入CONFIG_DMA_ENGINE，并配置把他直接编译到qemu里：
+```
+config DMA_ENGINE
+    bool
+    default y
+```
+  完成如上的配置后，我们在hw/misc目录加的dma_engine.c就可以参加到qemu编译里来。
+  
 - 定义一个PCIe设备
+  
+  如下[1]中的DMA engine PCIe设备的代码，我们可以套用这个模板创建其他的PCIe设备。
+  改变PCIDeviceClass里的vendor_id/device_id/revision/class_id的数值，虚拟设备
+  PCIe配置空间中的对应域段的值可以被改变。
+
+  class中的realize函数和instance_init函数是主要要实现函数。可以使用pci_register_bar
+  来给这个PCIe设备增加BAR，通过pcie_xxxxx_cap_init来给这个设备增加PCIe的各种capability。
+
+  qemu里对PCI和PCIe设备是分开模拟的，如果你要加PCIe设备可以有的capability，需要
+  创建一个PCIe设备，这个需要interfaces定义成 INTERFACE_PCIE_DEVICE，以及为这个
+  设备上PCIe extend capability，使用pcie_endpoint_cap_init就可以了。我们这里的
+  DMA engine就是一个PCIe设备。在qemu里需要通过一个PCIe RP把一个PCIe设备接入到系统
+  里。下面的章节提到具体的qemu命令。
+
+  模拟设备的代码里，用DmaEngState表示被模拟的设备，因为他是一个PCIe设备，所以在
+  这个结构体一开始的位置放一个PCIDevice的结构，后面的DmaRawState的结构用来放和具体
+  业务相关的东西。
+
+  使用lspci可以看到我们模拟的是这样一个PCIe设备：
+```
+	todo
+```
 
 - MMIO
 
+  DmaRawState里的MemoryRegion用来表示这个模拟设备上BAR对应的MMIO。在realize函数里
+  把这个地址空间和BAR0绑定，在dma_engine_state_init函数里为这段MMIO挂上read/write
+  处理函数。read/write的回调函数定义在dma_engine_io_ops, 软件读写相关的寄存器最终
+  都会在这些回调函数中处理。可以看到我们BAR size配置成了16KB。
+
 - DMA
+
+  
 
 - 中断
 
 Linux内核驱动的实现
 -------------------
 
-
+ DMA engine设备的内核驱动比较简单，源码在[2]。这个驱动同时也通过sysfs接口向用户态
+ 暴露了一个叫copy_size的文件，向这个文件写入一个数值将触发一次该数值大小的DMA数据
+ 拷贝，为了方便起见，我们在这个驱动的内部生成需要拷贝的数据。
 
 编译运行
 --------
 
-https://github/wangzhou/linux.git dma_engine_demo
-https://github/wangzhou/qemu.git dma_engine_sample
+[1]https://github/wangzhou/qemu/blob/dma_engine_sample/hw/misc/dma_engine.c
+[2]https://github/wangzhou/linux/tree/dma_engine_demo/drivers/misc/dma_engine
