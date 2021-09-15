@@ -1,0 +1,90 @@
+
+-v0.1 2021.9.14 Sherlock init
+
+简介：本文介绍在qemu里增加一个虚拟设备的步骤。本文会以一个PCIe DMA engine设备为
+      例来介绍，我们定义这个设备的软硬件接口，并且按照这样的定义在qemu里实现这个
+      设备，最后我们实现这个设备的Linux内核驱动。使用qemu可以方便的调试Linux内核，
+      有了自定义的qemu设备，使用qemu调试与设备有关的问题也会变得比较方便。
+
+一个简易PCIe DMA engine设备的定义
+---------------------------------
+
+ 内存拷贝比较消耗CPU资源，定义一个专用的DMA设备帮助CPU做内存拷贝，CPU把数据的地址
+ 和需要拷贝到的目的地址，配置到这个设备的相关寄存器里，然后启动数据拷贝，数据拷贝
+ 完成后，设备的相关寄存器的值改变，从而向软件报告任务完成。也可以通过设备中断的
+ 方式向软件报告任务完成。
+
+ 本文选DMA engine设备，完全和具体业务没有关系，只是因为这个业务模型比较简单，容易
+ 说明问题。
+
+ 具体数据搬移的实现也很简单：先把数据搬移到这个设备内部的buffer里，然后再把buffer
+ 里的数据搬移到目的地址。
+
+ 这个搬移的过程可以过IOMMU设备，也可以不过IOMMU，我们可以控制qemu系统，使得被模拟
+ 的平台有IOMMU设备或者没有IOMMU设备。
+
+ 如下是这个设备MMIO寄存器的具体定义:
+
+ 这个设备有一个32bit non-prefetch BAR, BAR base + 0x1000的位置是我们定义的寄存器。
+
+    | offset    |   定义                                                 |
+    |:---------:|:------------------------------------------------------:|
+    |0x0(只写)  |   原数据的地址。                                       |
+    |           |                                                        |
+    |0x8(只写)  |   搬移的目的地址。                                     |
+    |           |                                                        |
+    |0x10(只写) |   0-31 bit保留，32-63 bit表示搬移数据的长度。          |
+    |           |                                                        |
+    |0x18(读写) |   bit0 置1表示开始拷贝数据。bit32 置1表示数据拷贝完成。|
+
+
+qemu设备的实现
+--------------
+
+- 加入qemu编译系统
+
+  本文用来arm64平台的qemu虚拟机测试。首先我们要保证整个平台的编译运行。测试使用
+  的qemu的版本是6.1.0
+
+  我们用如下的命令编译和启动基础的qemu虚拟机：
+```
+configure --target-list=aarch64-softmmu --enable-kvm
+make -j64
+
+qemu-system-aarch64 -cpu cortex-a57 \
+-smp 1 -m 1024M \
+-nographic \
+-machine virt,iommu=smmuv3 \
+-kernel ~/Image \
+-append "console=ttyAMA0 earlycon root=/dev/ram rdinit=/init" \
+-initrd ~/rootfs.cpio.gz \
+```
+  其中，如果想去掉smmuv3这个设备可以把machine那一行改成-machine virt \
+
+  qemu使用meson来编译，我们只要在对应的meson.build文件中加入我们要编译的文件就好。
+  把这个DMA engine设备的代码放到qemu/hw/misc/dma_engine.c里，所以在qemu/hw/misc/meson.build
+  里加入如下的代码:
+```
+softmmu_ss.add(when: 'CONFIG_DMA_ENGINE', if_true: files('dma_engine.c'))
+```
+  表示如果配置CONFIG_DMA_ENGINE打开，就把dma_engine.c编译进来。
+
+
+- 定义一个PCIe设备
+
+- MMIO
+
+- DMA
+
+- 中断
+
+Linux内核驱动的实现
+-------------------
+
+
+
+编译运行
+--------
+
+https://github/wangzhou/linux.git dma_engine_demo
+https://github/wangzhou/qemu.git dma_engine_sample
