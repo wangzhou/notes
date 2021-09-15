@@ -79,24 +79,24 @@ config DMA_ENGINE
   
 - 定义一个PCIe设备
   
-  如下[1]中的DMA engine PCIe设备的代码，我们可以套用这个模板创建其他的PCIe设备。
+  如下[1]中是DMA engine PCIe设备的代码，我们可以套用这个模板创建其他的PCIe设备。
   改变PCIDeviceClass里的vendor_id/device_id/revision/class_id的数值，虚拟设备
   PCIe配置空间中的对应域段的值可以被改变。
 
   class中的realize函数和instance_init函数是主要要实现函数。可以使用pci_register_bar
   来给这个PCIe设备增加BAR，通过pcie_xxxxx_cap_init来给这个设备增加PCIe的各种capability。
 
-  qemu里对PCI和PCIe设备是分开模拟的，如果你要加PCIe设备可以有的capability，需要
+  qemu里对PCI和PCIe设备是分开模拟的，如果你要加PCIe设备相关的capability，需要
   创建一个PCIe设备，这个需要interfaces定义成 INTERFACE_PCIE_DEVICE，以及为这个
-  设备上PCIe extend capability，使用pcie_endpoint_cap_init就可以了。我们这里的
+  设备加上PCIe extend capability，使用pcie_endpoint_cap_init就可以了。我们这里的
   DMA engine就是一个PCIe设备。在qemu里需要通过一个PCIe RP把一个PCIe设备接入到系统
-  里。下面的章节提到具体的qemu命令。
+  里。下面的章节会提到具体的qemu命令。
 
   模拟设备的代码里，用DmaEngState表示被模拟的设备，因为他是一个PCIe设备，所以在
   这个结构体一开始的位置放一个PCIDevice的结构，后面的DmaRawState的结构用来放和具体
   业务相关的东西。
 
-  使用lspci可以看到我们模拟的是这样一个PCIe设备：
+  使用lspci可以看到我们模拟出的是这样一个PCIe设备：
 ```
 # ./lspci -s 00:04.0 -vvv
 00:04.0 Class 00ff: Device 1234:3456 (rev 10)
@@ -138,7 +138,7 @@ config DMA_ENGINE
   软件写0x1018 bit0为1触发一个DMA数据拷贝，相关实现代码在dma_engine_do_dma_copy里。
   这个函数直接调用pci_dma_read/pci_dma_write做设备buffer和内存之间的数据搬移，这里
   在使能smmuv3的时候，以上两个函数的内部实现会先调用smmuv3的translation函数做地址
-  翻译，然后再做数据搬移，在不使能smmuv3的时候，直接是内存地址做数据搬移。
+  翻译，然后再做数据搬移，在不使能smmuv3的时候，直接使用内存地址做数据搬移。
 
   如果只是模拟一个PCIe EP设备，可以不用管和iommu相关的内部实现。如果要做iommu的模拟，
   可以参考这里的逻辑。
@@ -159,7 +159,7 @@ Linux内核驱动的实现
 编译运行
 --------
 
- qemu的编译运行在上面。使用的Linux内核的基础版本是5.15-rc1，编译的时候打开
+ qemu的编译运行在上面有提及。使用的Linux内核的基础版本是5.15-rc1，编译的时候打开
  ARM_SMMU_V3和DMA_ENGINE_DEMO的配置即可。
 
  我们可以在启动qemu的时候带上--trace "smmuv3_*"，这样可以打开qemu smmuv3的trace，
