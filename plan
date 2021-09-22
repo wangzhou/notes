@@ -125,10 +125,10 @@ qemu smmu(add pasid logic) #
 pci pri  #
 dma need post #
 rv asid logic
-atc detail analysis
-qemu build system
-priority q
-qemu in qemu(include outtree qemu build)
+atc detail analysis #
+qemu build system  #
+priority q #
+qemu in qemu(include outtree qemu build)  #
 build rootfs modify 1. format, 2, devmmu的依赖的配置方式
 viommu构架分析
-makefile重新学习 拿一个例子分析下，用户态的pciutils库的Makefile
+makefile重新学习 拿一个例子分析下，用户态的pciutils库的Makefile #
