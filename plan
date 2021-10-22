@@ -132,3 +132,20 @@ qemu in qemu(include outtree qemu build)  #
 build rootfs modify 1. format, 2, devmmu的依赖的配置方式
 viommu构架分析
 makefile重新学习 拿一个例子分析下，用户态的pciutils库的Makefile #
+
+10.22:
+超标量处理器设计 8,9
+10.23:
+/dev/iommu patch, dma分析
+
+10.25: M1
+10.26:
+10.27:
+10.28:
+10.29:
+
+目录式缓存一致性的设计
+SIMD提高性能的原因
+GPU硬件基本构架
+Linux kernel对barrier的讲解文档
+CPU微架构使用store buffer的原因，除了store的时候不等invalid ack返回就把数据存在store buffer里的原因。
