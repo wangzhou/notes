@@ -1,0 +1,63 @@
+uacce fork功能
+==============
+
+-v0.1 2021.11.10 Sherlock init
+
+简介：我们计划在uacce/uadk里加上fork的功能，简单讲就是fork之后子进程无需再次申请
+      加速器的资源，父进程中的加速器资源在子进程里fork了一份新的，子进程可以直接
+      使用fork出的新资源下发相关的计算任务。本位梳理整个设计的逻辑。
+
+1. 需求
+-------
+
+ 进程拥有CPU和加速器这两种计算资源，这两种计算资源的使用方式不同。其中的一个不同
+ 的地方是多个上下文，比如进程，在使用加速器之前必须重新申请加速器资源，具体到uacce
+ 里，如果在新进程使用加速器，比如重新open加速器设备并且初始化队列相关资源。
+
+ 如果，加速器可以作为一个异构的计算单元，以类似CPU的方式访问，那么使用就会方便很多。
+ 具体到uacce上看，就是申请一次队列资源，mmap了mmio/dus，后面进程再次fork，子进程
+ 里的mmio/dus接口直接就可以用，直接通过mmio/dus发送计算请求就好，相关计算请求和
+ 子进程的地址空间绑定。
+
+2. 基本逻辑
+-----------
+
+ 要做到如上的特性，需要解决三个问题：1. fork队列，需要在内核里给子进程申请新的
+ 队列，用父进程里的队列是不行的，因为这会出现父子进程同时操作一个队列的情况，队列
+ 的状态做不到同步; 2. 需要把新队列的控制路劲打通，重建mmio/dus的map; 3. 需要叫
+ 新对队列可以认知子进程的地址空间，做新队列和子进程mm的sva_bind.
+
+ fork队列也就是要fork fd，这个和目前fork对文件的影响的含义是不一样的，当前linux
+ 内核里，fork的父子进程中相同的fd拥有相同的struct file，也就是说父子进程中fork
+ 的fd还是一样的文件上下文。我们需要的是，fork后子进程的fd有自己的文件上下文，这样
+ 才可以挂上新的队列。所以，可有给文件添加一个新的属性，他的语义是在fork进程的时候
+ 为文件在子进程里创建新的上下文，暂时把这个属性叫做O_FORK。
+
+ 具体实现，可以在fork->copy_files里判断一个fd是否有O_FORK，如果有就新创建struct file，
+ 还需要在file的回调里增加fork的回调，用来支持file私有数据的创建。struct file的指针
+ 会在其他地方引用，比如在vma里就有vm_file，对于有O_FORK的file，需要在每个具体的地方
+ 把原来file的指针改成新的指针。
+
+ 重建mmio/dus的map要找一个合适的点，可以在vma_open里做，也可以在vma_fault里做。
+ vma_open里做比较直白，子进程vma和新队列作为参数重新map即可(注意，如上所说，这里
+ 需要对O_FORK标记的file做vm_file的更新)。使用vma_fault做需要触发缺页，目前uacce里
+ 对vma加了两个控制flag：VM_DONTCOPY，VM_WIPEONFORK。VM_DONTCOPY需要去掉，如果保留
+ 这个flag，子进程里都没有vma，vma fault流程是救不回来的，直接会segment fault，
+ VM_WIPEONFORK存在时，fork的时候不会拷贝页表和做写保护，对于父进程，依然可以继续读写，
+ 对于子进程有vma但是没有页表，访问mmio/dus会走到vma_fault，这条路是通的，VM_WIPEONFORK
+ 不可以去掉，去掉后fork时会进入copy_page_range，但是内核现在对remap_pfn_range特殊
+ 处理，认为这段地址不是COW的，这样会导致父子进程的mmio/dus的map都是父进程里原来的map，
+ 细节上dus的map还有特殊的情况会出现，dus使用dma_mmap_coherent做map，依据内存分配
+ 的方式，map的方式可以有remap_pfn_range或者vm_map_pages。综合以上，我们可以用vma_open
+ 做，也可以用vma_fault做(需要去掉VM_DONTCOPY，保留VM_WIPEONFORK)
+
+ mmio/dus map需要考虑的数据同步的问题。一般的，我们在dus上准备BD，在mmio上发送
+ doorbell，并在dus上接收任务，当然也可以只用mmio完成任务的发送和接收。我们需要考虑
+ 的情况有: 1. fork出现在任务的发送和接收中间，2. fork出现在dus一个BD填写中间，3.
+ fork出现在mmio一个doorbell的填写中间。第一种情况，最多就是子进程里永远收不到包，
+ 我们认为是用户编码错误，第二种情况下，父进程没有问题，子进程会发给硬件一个错误bd，
+ 第三种情况下，父进程没有问题，子进程会下发一个错误doorbell。如上VM_DONTCOPY/VM_WIPEONFORK
+ 的实现在数据同步问题上没有区别。
+ 
+ 新队列做sva_bind和fd fork是两个独立的问题。uacce在open文件时给文件赋予了认知当前
+ 地址空间的能力，我们要做的是在fork fd的时候，在子进程里为fd保留这个能力。
