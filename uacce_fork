@@ -49,7 +49,7 @@ uacce fork功能
  处理，认为这段地址不是COW的，这样会导致父子进程的mmio/dus的map都是父进程里原来的map，
  细节上dus的map还有特殊的情况会出现，dus使用dma_mmap_coherent做map，依据内存分配
  的方式，map的方式可以有remap_pfn_range或者vm_map_pages。综合以上，我们可以用vma_open
- 做，也可以用vma_fault做(需要去掉VM_DONTCOPY，保留VM_WIPEONFORK)
+ 做，也可以用vma_fault做(需要去掉VM_DONTCOPkkkkY，保留VM_WIPEONFORK)
 
  mmio/dus map需要考虑的数据同步的问题。一般的，我们在dus上准备BD，在mmio上发送
  doorbell，并在dus上接收任务，当然也可以只用mmio完成任务的发送和接收。我们需要考虑
@@ -58,6 +58,11 @@ uacce fork功能
  我们认为是用户编码错误，第二种情况下，父进程没有问题，子进程会发给硬件一个错误bd，
  第三种情况下，父进程没有问题，子进程会下发一个错误doorbell。如上VM_DONTCOPY/VM_WIPEONFORK
  的实现在数据同步问题上没有区别。
- 
  新队列做sva_bind和fd fork是两个独立的问题。uacce在open文件时给文件赋予了认知当前
- 地址空间的能力，我们要做的是在fork fd的时候，在子进程里为fd保留这个能力。
+ 地址空间的能力，我们要做的是在fork fd的时候，在子进程里为fd保留这个能力。这个问题
+ 可以从fd和mm的角度分别独立看待。从fd角度看待，是uacce这个特殊的驱动赋予了fd这个
+ 能力，最直接的方式就是uacce对于新的fd再重新赋予一下，uacce和系统可以接通的地方
+ 现在看来只有vma_open和vma_fault，但是在这两个函数里做sva_bind一个是语义不符，一个
+ 是有重复加锁的问题; uacce还可以向用户态报告，然后用户态在调用uacce的接口，比如可以
+ 新加一个ioctl，重新把子进程地址空间和fd绑定下; 还有一个思路，是把fd感知地址空间
+ 这个语义向上扩展，也就是继续加fd的
