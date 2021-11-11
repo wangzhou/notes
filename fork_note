@@ -1,0 +1,30 @@
+-v0.1 2021.11.5 Sherlock init
+
+```
+/* linux/kernel/fork.c */
+fork
+  -> kernel_clone
+    -> copy_process
+      -> copy_files(clone_flags, p)
+        -> 如果是CLONE_FILES flags，直接在旧的files_struct上加引用计数，什么时候
+	   把更新新task_struct里的files_struct?
+
+	   不是CLONE_FILES，就直接copy一份files_struct到新task_struct。
+
+	   files_struct里各个域的意思？
+
+	    files_struct里的fd是怎么动态增大的？
+         [...]
+
+      -> copy_mm(clone_flags, p)
+           /* 如果配置了CLONE_VM，直接把old mm的指针给新task_struct */
+        -> dup_mm()
+	  -> dup_mmap()
+	       /* 复制新vma */
+	    -> tmp->vm_area_dup()
+	       [...]
+               /* 不配置VM_WIPEONFORK时，才会把页表都配置成只读，支持随后的cow */
+	    -> if (!(tmp->vm_flags & VM_WIPEONFORK))
+		       retval = copy_page_range(tmp, mpnt);
+	    -> tmp->vm_ops->open(tmp);
+```
