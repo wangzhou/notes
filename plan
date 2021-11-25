@@ -153,3 +153,6 @@ CPU微架构使用store buffer的原因，除了store的时候不等invalid ack�
 cmake
 mock
 iommu reserv region/MSI
+rcu使用和原理
+PLKA 4虚拟内存
+PLKA 内存回收
