@@ -149,3 +149,7 @@ SIMD提高性能的原因
 GPU硬件基本构架
 Linux kernel对barrier的讲解文档
 CPU微架构使用store buffer的原因，除了store的时候不等invalid ack返回就把数据存在store buffer里的原因。
+
+cmake
+mock
+iommu reserv region/MSI

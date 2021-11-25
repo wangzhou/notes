@@ -1,0 +1,13 @@
+git clone https://github.com/google/googletest.git
+
+cmake ./
+
+make
+
+[ 12%] Building CXX object googletest/CMakeFiles/gtest.dir/src/gtest-all.cc.o
+[ 25%] Linking CXX static library ../lib/libgtest.a
+[ 25%] Built target gtest
+[ 37%] Building CXX object googlemock/CMakeFiles/gmock.dir/src/gmock-all.cc.o
+[ 50%] Linking CXX static library ../lib/libgmock.a
+[ 50%] Built target gmock
+[ 62%] Building CXX object googlemock/CMakeFiles/gmock_main.dir/src/gmock_main.cc.o

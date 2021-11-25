@@ -145,8 +145,77 @@ swap分区来腾出内存，使用内存紧缩(compact)来移动碎片化的内�
 一个逻辑的看，这里先看page cache和他的回收，需要搞清楚的逻辑有，1. page cache
 的创建逻辑，2. page cache回收的逻辑，就是有一堆页都在page cache里，优先回收谁。
 
+page cache的创建逻辑可以顺着有文件背景的内存使用看下，分为对普通文件通过read/write
+系统调用读写和对普通文件通过mmap把文件内容映射到内存进行访问，内核对于这两种读文件
+的访问都会做预读，比如要读4KB的内容，内核可以读8KB，把多读的内容在page cache里先
+存起来。我们已mmap一个文件的逻辑看下具体的调用关系。(这一部分需要配合8.5章节来看)
+```
+mmap
+  -> ksys_mmap_pgoff
+    -> vm_mmap_pgoff
+      -> do_mmap
+         -> mmap_region
+	   -> call_mmap
+	     -> file->f_op->mmap
+/*
+ * 具体的文件系统会实现mmap这个回调函数，我们以ext2为例看下：ext2_file_mmap
+ * 代码的位置在fs/ext2/file.c
+ */
+ext2_file_mmap
+     /*
+      * 这个函数里为相关的vma挂上了generic_file_vm_ops，并没有做其他的事情。
+      * 可以看出mmap文件的系统调用完成时，文件内容并没有被copy到内存里，知道用户
+      * 真是的读mmap文件的内容是，会进入fault流程。下面继续看fault流程。
+      */
+  -> generic_file_mmap
+
+filemap_fault
+     /* 先去page cache里找 */
+  -> find_get_page
+  -> do_sync_mmap_readahead
+    -> page_cache_sync_ra
+      -> ondemand_readahead
+	-> do_page_cache_ra
+	     /* page cache 预读核心函数 */
+	  -> page_cache_ra_unbounded
+	       /*
+	        * 这里以ext2文件系统为例，其没有readpages回调，所以走到了这个分支。
+		* add_to_page_cache_lru是把page加入到lru链表的核心函数。
+		* (ext2 address_space_operations定义在fs/ext2/inode.c)
+	        */
+	    -> add_to_page_cache_lru
+	    -> read_pages
+
+  -> filemap_read_page
+     /* ext2_readahead, fs/ext2/inode.c */
+```
+
+我们再看page cache的回收逻辑，就是内存不足了，先回收那些page的cache。这里关键是
+要确定那些page我们认为是不经常访问的。struct page里的flags定义了一堆page状态的标记
+位，这些标记位的查看函数是拿宏拼起来的，定义在include/linux/page-flags.h。struct page
+里对page的引用计数有atomic_t _mapcount、atomic_t _refcount，其中_refcount是对page
+最基础的引用计数，对page的引用，包括虚拟地址到page的映射，以及内核里内存管理相关
+结构管理page是对其的引用都会增加_refcount的值，虚拟地址到page的映射也会增加_mapcount
+的引用，_mapcount在逆向映射里使用。
+
+先看下__alloc_pages里慢速路径里的内存回收的入口，具体分析需要在其他文档里展开。
+```
+__alloc_pages
+  -> __alloc_pages_slowpath
+    -> wake_all_kswapds
+    -> __alloc_pages_direct_compact
+      /* 直接内存回收在这里 */
+    -> __alloc_pages_direct_reclaim
+      -> __perform_reclaim
+           /* linux/mm/vmscan.c */
+        -> try_to_free_pages
+	  -> do_try_to_free_pages
+```
+
 slab分配器
 ----------
 
 slab分配器的逻辑比较独立，我们先分析slab分配器的使用方式，再分析其实现。
 
+创建和销毁slab内存池：kmem_cache_create/kmem_cache_free
+从slab内存池里分配和释放内存：kmem_cache_alloc/kmem_cache_free
