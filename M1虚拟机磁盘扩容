@@ -104,4 +104,9 @@ sherlock@m1:~/notes$ sudo lvdisplay
 
    lvextend -L +4GB /dev/ubuntu-vg/ubuntu-lv
 
+5. 用df -h看到上面逻辑卷的容量还没有扩大，这是因为df看的是文件系统的大小，还要对
+   逻辑卷上的文件系统扩容下，我这里的文件系统是ext4。可以使用如下命令扩容。
+
+   resize2fs /dev/ubuntu-vg/ubuntu-lv
+
 Note: ubuntu下有基于图形的分区工具GParted

@@ -50,7 +50,8 @@ uacce fork功能
  处理，认为这段地址不是COW的，这样会导致父子进程的mmio/dus的map都是父进程里原来的map，
  细节上dus的map还有特殊的情况会出现，dus使用dma_mmap_coherent做map，依据内存分配
  的方式，map的方式可以有remap_pfn_range或者vm_map_pages。综合以上，我们可以用vma_open
- 做，也可以用vma_fault做(需要去掉VM_DONTCOPkkkkY，保留VM_WIPEONFORK)
+ 做(需要去掉VM_DONTCOPY, VM_WIPEONFORK的有无没有影响，反正随后的vma open里都要重新
+ map)，也可以用vma_fault做(需要去掉VM_DONTCOPY，保留VM_WIPEONFORK)
 
  mmio/dus map需要考虑的数据同步的问题。一般的，我们在dus上准备BD，在mmio上发送
  doorbell，并在dus上接收任务，当然也可以只用mmio完成任务的发送和接收。我们需要考虑
