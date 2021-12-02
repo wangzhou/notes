@@ -1,0 +1,42 @@
+mockcpp
+=======
+
+-v0.1 Sherlock 2021.12.2
+
+简介: 这几天在用mockcpp做UT的打桩，记录下使用方式. 本来计划在系统上搭一个这样的
+　　　环境出来，但是遇见的问题比较多. 首先是不支持arm64的环境，在ubuntu 20.04
+　　　x86的机器上直接下载mockcpp的代码后，直接./build.sh, ./build_install.sh都
+　　　提示有cmake错误．
+
+MOCKER的使用
+------------
+
+MOCKER(function).stubs().with(eq(arg1), outBoundP(&arg2, sizeof(arg2)));
+
+MOCKER(function).stubs().with(eq(arg1), outBoundP(&arg2, sizeof(arg2)), outBoundP(&arg3, sizeof(arg3))).will(returnValue(xxx));
+对于function有返回值的情况，必须加上will(returnValue(xxx))，其中xxx就是你想要返回
+的值，因为mockcpp是做强类型检测的，xxx的类型必须和函数定义的类型一样，否则会报类型
+错误的问题出来．
+
+MOCKER(function).expects(exactly(3)).will(returnValue(zzz)).then(returnValue(xxx)).then(returnValue(yyy));
+这里是定义精确的返回值，对于这个函数执行三次每次的结果，第一次的返回是zzz，第二次
+的返回是xxx，第三次是yyy.
+
+MOCKER(function).stubs().will(returnValue(xxx));
+简单打桩一个函数的返回值．
+
+先定义桩函数function_sub
+MOCKER(function).stubs().will(invoke(function_sub));
+这样执行function的时候就会跳到function_sub函数执行．不知道为什么用MOCKER(function).stubs().invoke(function_sub);
+这样的语法触发不了桩函数．
+
+每个测试用例最后要加一个EXPECT的断言语句，mockcpp根据这个判断用例是否执行正确，比如:
+EXPECT_EQ(ret, 0);
+
+用例的格式是：
+TEST_F(MockCppTest, 用例名字)
+{
+	各种MOCKER打桩
+	调用被测试的函数
+	EXPECT之类的断言语句
+}
