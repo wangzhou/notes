@@ -1,0 +1,47 @@
+-v0.1 2012.12.15 Sherlock init
+
+简介：本文梳理在qemu里增加一个指令的前端解码的基本逻辑，文中会加入一个具体的例子。
+
+
+qemu基础逻辑
+------------
+
+ qemu虚拟机提供两种CPU实现的方式，一种是基于tiny code的实现，一种是基于KVM的实现。
+
+ 第一种方式，我们一般叫tcg(tiny code generator)，这种方式的基本思路是用纯软件的
+ 方式把target CPU的指令先翻译成所谓的tiny code，然后再把tiny code翻译成host CPU
+ 的指令，我们把target CPU指令翻译成tiny code的过程叫整个过程的前端，tiny code翻译
+ 成host CPU的过程对应的叫做后端。给qemu增加一个新CPU的模型需要既增加前端也增加后端，
+ 如果要把整个系统支持起来，还要增加基础设备以及user mode的支持，整个系统的支持的
+ 逻辑不在本文档里展开，本文只聚焦于前端的相关逻辑。如果目的是在一个成熟的平台上
+ 验证另一个新的CPU，比如在x86机器上跑riscv的虚拟机，验证riscv的逻辑，只需要加上
+ riscv指令到tiny code这个前端支持就好，因为tiny code到x86的后端已经存在；如果目的
+ 是，比如在一台riscv的机器上模拟x86，就需要加tiny code到riscv的后端支持，我们这里
+ 以riscv为例子，把它作为一个需要支持的CPU构架。
+
+ 一个完整的riscv到tiny code前端支持的例子可以参考：
+ https://lore.kernel.org/all/1519344729-73482-1-git-send-email-mjc@sifive.com
+
+ 以riscv为例子，体系相关的前端的代码在：target/riscv/*，后端的代码在：tcg/riscv/*，
+ 基础外设和machine的代码在hw/riscv/*
+
+ 基于KVM的方式，直接使用host CPU执行target CPU的指令，性能接近host上的性能，但是
+ 需要target CPU和host CPU是相同的构架。本文不讨论KVM的逻辑。
+
+qemu tcg前端解码逻辑
+--------------------
+
+ 把target cpu指令翻译成host cpu指令有两种方式，一种是使用helper函数，一种是使用
+ tiny code generator函数的方式。helper函数的方式还没有分析，现在只看tcg的方式。
+
+ 我们把逻辑拉高一层看问题，所谓target CPU的运行，实际上是根据target CPU指令流去
+ 不断的改变target CPU软件描述结构里的数据状态，因为实际的代码要运行到host CPU上，
+ 所以，target代码要被翻译成host代码，才可以执行，通过执行改变target CPU的数据状态。
+ qemu为了解耦把target CPU代码先翻译成tiny code，那么翻译成的tiny code的语义也就是
+ 改变target CPU数据状态的一组描述语句，所以target CPU状态参数会被当做入参传入tiny
+ code描述语句。这组tiny code是改变CPU状态的抽象的描述，有些CPU上的状态不好抽象成
+ 一般的描述就用helper函数的方式补充，所以helper函数也是改变target CPU状态的描述。
+
+ tcg的方式，我们要使用tcg_gen_xxx的函数组织逻辑描述target CPU指令对target CPU状态
+ 的改变。一些公共的代码是可以自动生成的，qemu里使用decode tree的方式自动生成这一部
+ 分代码。
