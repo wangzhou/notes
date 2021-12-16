@@ -46,7 +46,7 @@ qemu tcg前端解码逻辑
  的改变。一些公共的代码是可以自动生成的，qemu里使用decode tree的方式自动生成这一部
  分代码。
 
- 已riscv的代码来具体说明。qemu定义了一组target CPU指令的描述格式，说明文档在：
+ 以riscv的代码来具体说明。qemu定义了一组target CPU指令的描述格式，说明文档在：
  docs/devel/decodetree.rst，riscv的指令描述在target/riscv/insn16.decode、insn32.decode
  里，qemu编译的时候会解析.decode文件，生成对应的定义和函数，生成的文件放在
  qemu/build/libqemu-riscv64-softmmu.fa.p/decode-insn32.c.inc，decode-insn16.c.inc里。
@@ -75,3 +75,19 @@ qemu tcg前端解码逻辑
 	         +-> decode_insn16
 		 +-> decode_insn32
 ```
+ 
+ 基本逻辑就是这样。下面展开其中的各个细节看下，细节上大概有这么几块：
+
+ 1. tcg整个翻译流程构架分析
+ 2. decode tree的语法
+ 3. tcg trans_xxx函数的语法
+
+tcg翻译流程
+-----------
+
+decode tree语法
+-----------------
+
+trans_xxx函数语法
+-----------------
+
