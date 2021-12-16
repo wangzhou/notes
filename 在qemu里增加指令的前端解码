@@ -139,10 +139,31 @@ decode tree语法
  field、之前定义的filed的引用、argument的引用，field的引用还可以赋值。field可以
  用来匹配，argument用来生成trans_xxx函数的入参。
 
- pattern用来定义具体指令。
+ pattern用来定义具体指令。比如riscv32里的lui指令：
+```
+ lui      ....................       ..... 0110111 @u
 
- group...
+ @u       ....................      ..... ....... &u      imm=%imm_u          %rd
+ %imm_u    12:s20                 !function=ex_shift_12
+ %rd        7:5
+```
+ 上面把相关的formate、argument、field的定义也列了出来。可以看到lui的操作码是0110111，
+ 31-12bit是立即数，11-7是rd寄存器的标号，其中立即数要把31-12bit的数值左移12bit。
+ 可以看到riscv里对应的trans函数的实现是：
+```
+ static bool trans_lui(DisasContext *ctx, arg_lui *a)
+ {
+     if (a->rd != 0) {
+         tcg_gen_movi_tl(cpu_gpr[a->rd], a->imm);
+     }
+     return true;
+ }
+```
+ 用生成的立即数更新rd寄存器。
+
+ group：todo
 
 trans_xxx函数语法
 -----------------
 
+ todo
