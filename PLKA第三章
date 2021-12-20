@@ -72,15 +72,15 @@ PMD，PTE是四级页表结构里的几个域段，与之相关的有一堆宏�
     -> setup_arch
        /*
         * 解析device tree里定义的内存节点的内容，这里我用riscv qemu平台来调试，
-	* 所以memory的base在qemu/hw/riscv/virt.c里的VIRT_DRAM定义，是0x80000000，
-	* size的大小在qemu启动cmdline里定义，比如，-m 1024M，定义1GB的内存。
+        * 所以memory的base在qemu/hw/riscv/virt.c里的VIRT_DRAM定义，是0x80000000，
+        * size的大小在qemu启动cmdline里定义，比如，-m 1024M，定义1GB的内存。
         */
       -> parse_dtb()
         -> early_init_dt_scan
-	  -> early_init_dt_scan_nodes
-	    -> of_scan_flat_dt(early_init_dt_scan_memory, NULL)
-	      -> early_init_dt_add_memory_arch(base, size)
-	        -> memblock_add(base, size)
+          -> early_init_dt_scan_nodes
+            -> of_scan_flat_dt(early_init_dt_scan_memory, NULL)
+              -> early_init_dt_add_memory_arch(base, size)
+                -> memblock_add(base, size)
 
       -> setup_bootmem()
       -> paging_init()
@@ -96,14 +96,14 @@ PMD，PTE是四级页表结构里的几个域段，与之相关的有一堆宏�
            /* 这个函数把物理内存加到伙伴系统里 */
         -> memblock_free_all()
           -> free_low_memory_core_early()
-	    -> __free_memory_core()
-	      /*
-	       * 这里把若干个页搞成一个compound页，然后加到伙伴系统里。先都加到
-	       * order最高的链表里。可以看到伙伴系统的初始化复用了free page的函数，
-	       * free_one_page正式伙伴系统free page最核心的函数，具体分析在下面的
-	       * 章节。
-	       */
-	      -> free_one_page
+            -> __free_memory_core()
+              /*
+               * 这里把若干个页搞成一个compound页，然后加到伙伴系统里。先都加到
+               * order最高的链表里。可以看到伙伴系统的初始化复用了free page的函数，
+               * free_one_page正式伙伴系统free page最核心的函数，具体分析在下面的
+               * 章节。
+               */
+              -> free_one_page
     -> kmem_cache_init_late()
     -> setup_per_cpu_pageset()
     -> numa_policy_init()
@@ -155,8 +155,8 @@ mmap
     -> vm_mmap_pgoff
       -> do_mmap
          -> mmap_region
-	   -> call_mmap
-	     -> file->f_op->mmap
+           -> call_mmap
+             -> file->f_op->mmap
 /*
  * 具体的文件系统会实现mmap这个回调函数，我们以ext2为例看下：ext2_file_mmap
  * 代码的位置在fs/ext2/file.c
@@ -175,16 +175,16 @@ filemap_fault
   -> do_sync_mmap_readahead
     -> page_cache_sync_ra
       -> ondemand_readahead
-	-> do_page_cache_ra
-	     /* page cache 预读核心函数 */
-	  -> page_cache_ra_unbounded
-	       /*
-	        * 这里以ext2文件系统为例，其没有readpages回调，所以走到了这个分支。
-		* add_to_page_cache_lru是把page加入到lru链表的核心函数。
-		* (ext2 address_space_operations定义在fs/ext2/inode.c)
-	        */
-	    -> add_to_page_cache_lru
-	    -> read_pages
+        -> do_page_cache_ra
+             /* page cache 预读核心函数 */
+          -> page_cache_ra_unbounded
+               /*
+                * 这里以ext2文件系统为例，其没有readpages回调，所以走到了这个分支。
+                * add_to_page_cache_lru是把page加入到lru链表的核心函数。
+                * (ext2 address_space_operations定义在fs/ext2/inode.c)
+                */
+            -> add_to_page_cache_lru
+            -> read_pages
 
   -> filemap_read_page
      /* ext2_readahead, fs/ext2/inode.c */
@@ -209,7 +209,7 @@ __alloc_pages
       -> __perform_reclaim
            /* linux/mm/vmscan.c */
         -> try_to_free_pages
-	  -> do_try_to_free_pages
+          -> do_try_to_free_pages
 ```
 
 slab分配器

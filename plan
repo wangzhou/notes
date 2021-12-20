@@ -150,13 +150,13 @@ GPU硬件基本构架
 Linux kernel对barrier的讲解文档
 CPU微架构使用store buffer的原因，除了store的时候不等invalid ack返回就把数据存在store buffer里的原因。
 
-cmake
-mock
+cmake #
+mock  #
 iommu reserv region/MSI
 rcu使用和原理
 PLKA 4虚拟内存
 PLKA 内存回收
 qemu内存管理
 qemu tcg
-《大学》总结
+《大学》总结 #
 perf框架
