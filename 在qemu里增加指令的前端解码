@@ -168,13 +168,14 @@ decode tree语法
 
  group定指令解码的组合，这个用的不多。
 
-trans_xxx函数语法
------------------
+trans_xxx函数的逻辑
+-------------------
 
  tcg的trans_xxx函数在qemu/tcg/README里很好的介绍，这个文档里介绍了中间码的整套
  指令，可以比较容易的把这套指令和对应的trans_xxx函数对上，trans_xxxx函数的作用是
- 生成这些中间码指令。
-
+ 生成这些中间码指令。以riscv上的add指令为例看下，如下是trans_rvi.c.inc里add指令
+ 的模拟。
+```
 static bool trans_add(DisasContext *ctx, arg_add *a)
 {
     return gen_arith(ctx, a, &tcg_gen_add_tl);
@@ -197,6 +198,37 @@ static bool gen_arith(DisasContext *ctx, arg_r *a,
     tcg_temp_free(source2);
     return true;
 }
+
 void tcg_gen_addi_i64(TCGv_i64 ret, TCGv_i64 arg1, int64_t arg2);
+```
+ tcg_gen_addi_i64可以看到tcg_gen_add_tl的函数入参，riscv的add指令从target CPU的
+ rs1，rs2里取两个加数，相加后放到rd寄存里，所以上面gen_get_gpr就表示生成这样的
+ 中间码：把rs1/2位置上的数据存到source1/2位置上，gen_get_gpr的实现就是:
+```
+ tcg_gen_mov_tl(t, cpu_gpr[reg_num])
+   -> tcg_gen_mov_i64
+     -> tcg_gen_op2_i64(INDEX_op_mov_i64, ret, arg)
+       -> tcg_gen_op2(opc, tcgv_i64_arg(a1), tcgv_i64_arg(a2))
+         -> TCGOp *op = tcg_emit_op(opc);
+         -> op->args[0] = a1;
+         -> op->args[1] = a2;
+```
+ 可以看到最后生成的mov指令先挂到了一个链表里，后面的后端解码会把这些指令翻译成
+ host指令，生成的指令就是qemu/tcg/README里介绍的mov_i32/i64 t0, t1这个指令。这里
+ 有几个逻辑要打通: 1. tcg_temp_new创建的变量存在哪里; 2. cpu_gpr[reg_num]是一个
+ 全局变量，它如何索引到target CPU的寄存器。
+
+ 首先tcg_temp_new分配的空间是在TCGContext tcg_ctx里的，所谓创建一个这样的TCGv就是
+ 在tcg_ctx里用去一个TCGTemp。cpu_gpr[reg_num]可以索引到target CPU寄存器的基本逻辑
+ 是，其实只要在前端和后端约定好描述target CPU的软件结构，cpu_gpr[reg_num]描述的就
+ 时相关寄存器在这个软件结构里的位置。我们再看下这个cpu_gpr[]的初始化逻辑和tcg_ctx
+ 的初始化逻辑，以及后端的编码逻辑就可以打通整个逻辑。
+```
+ riscv_translate_init
+   -> cpu_gpr{}
+```
+
+ 
+ 
 
 
