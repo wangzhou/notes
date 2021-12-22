@@ -55,7 +55,7 @@ qemu tcg前端解码逻辑
  把target CPU指令翻译成tiny code的时候就需要调用上面两个解码函数。
 
  我们用riscv user mode的代码来看看上层具体调用关系。qemu提供system mode和user mode
- 的模拟方式，其中system mode会完整模拟整个系统，一个完成的OS可以运行在这个模拟的
+ 的模拟方式，其中system mode会完整模拟整个系统，一个完整的OS可以运行在这个模拟的
  系统上，user mode只是支持加载一个target CPU构架的用户态程序来跑，对于一般指令
  使用tcg的方式翻译执行，对于用户态程序里的系统调用，user mode代码里模拟实现了系统
  调用的语意。linux user mode的代码在qemu/linux-user/*，具体的调用过程如下：
@@ -66,15 +66,20 @@ qemu tcg前端解码逻辑
    +-> cpu_loop
      +-> cpu_exec
        +-> tb_gen_code
-             /* qemu/target/riscv/trannslate.c */
-         +-> gen_intermediate_code
-	   +-> translator_loop(&riscv_tr_ops, xxx)
-	         /* riscv_tr_translate_insn */
-	     +-> ops->translator_insn
-	       +-> decode_ops
-	         +-> decode_insn16
-		 +-> decode_insn32
+       |     /* qemu/target/riscv/trannslate.c */
+       | +-> gen_intermediate_code
+       | | +-> translator_loop(&riscv_tr_ops, xxx)
+       | |       /* riscv_tr_translate_insn */
+       | |   +-> ops->translator_insn
+       | |     +-> decode_ops
+       | |       +-> decode_insn16
+       | |       +-> decode_insn32
+       | +-> tcg_gen_code
+       |   +-> tcg_out_xxx
+       +-> cpu_loop_exec_tb
 ```
+ gen_intermediate_code是前端的解码函数，把target CPU的指令翻译成tcg中间码。tcg_gen_code
+ 是后端，把中间码翻译成host CPU上的指令，其中tcg_out_xxx的一组函数做具体的翻译工作。
  
  基本逻辑就是这样。下面展开其中的各个细节看下，细节上大概有这么几块：
 
@@ -89,7 +94,7 @@ tcg翻译流程
  把tiny code翻译成host CPU指令，整个过程动态执行。为了加速翻译，qemu把翻译成的host
  CPU指令块做了缓存，tcg前端解码的时候，先在缓存里找，如果找见就直接执行。
 
- 代码分析：todo。
+ 大致的代码调用关系如上。
 
 decode tree语法
 -----------------
@@ -161,9 +166,37 @@ decode tree语法
 ```
  用生成的立即数更新rd寄存器。
 
- group：todo
+ group定指令解码的组合，这个用的不多。
 
 trans_xxx函数语法
 -----------------
 
- todo
+ tcg的trans_xxx函数在qemu/tcg/README里很好的介绍，这个文档里介绍了中间码的整套
+ 指令，可以比较容易的把这套指令和对应的trans_xxx函数对上，trans_xxxx函数的作用是
+ 生成这些中间码指令。
+
+static bool trans_add(DisasContext *ctx, arg_add *a)
+{
+    return gen_arith(ctx, a, &tcg_gen_add_tl);
+}
+
+static bool gen_arith(DisasContext *ctx, arg_r *a,
+                      void(*func)(TCGv, TCGv, TCGv))
+{
+    TCGv source1, source2;
+    source1 = tcg_temp_new();
+    source2 = tcg_temp_new();
+
+    gen_get_gpr(source1, a->rs1);
+    gen_get_gpr(source2, a->rs2);
+
+    (*func)(source1, source1, source2);
+
+    gen_set_gpr(a->rd, source1);
+    tcg_temp_free(source1);
+    tcg_temp_free(source2);
+    return true;
+}
+void tcg_gen_addi_i64(TCGv_i64 ret, TCGv_i64 arg1, int64_t arg2);
+
+
