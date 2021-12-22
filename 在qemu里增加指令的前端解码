@@ -6,20 +6,20 @@
 qemu基础逻辑
 ------------
 
- qemu虚拟机提供两种CPU实现的方式，一种是基于tiny code的实现，一种是基于KVM的实现。
+ qemu虚拟机提供两种CPU实现的方式，一种是基于中间码的实现，一种是基于KVM的实现。
 
  第一种方式，我们一般叫tcg(tiny code generator)，这种方式的基本思路是用纯软件的
- 方式把target CPU的指令先翻译成所谓的tiny code，然后再把tiny code翻译成host CPU
- 的指令，我们把target CPU指令翻译成tiny code的过程叫整个过程的前端，tiny code翻译
- 成host CPU的过程对应的叫做后端。给qemu增加一个新CPU的模型需要既增加前端也增加后端，
- 如果要把整个系统支持起来，还要增加基础设备以及user mode的支持，整个系统的支持的
- 逻辑不在本文档里展开，本文只聚焦于前端的相关逻辑。如果目的是在一个成熟的平台上
- 验证另一个新的CPU，比如在x86机器上跑riscv的虚拟机，验证riscv的逻辑，只需要加上
- riscv指令到tiny code这个前端支持就好，因为tiny code到x86的后端已经存在；如果目的
- 是，比如在一台riscv的机器上模拟x86，就需要加tiny code到riscv的后端支持，我们这里
- 以riscv为例子，把它作为一个需要支持的CPU构架。
+ 方式把target CPU的指令先翻译成所谓的中间码，然后再把中间码翻译成host CPU 的指令，
+ 我们把target CPU指令翻译成中间码的过程叫整个过程的前端，中间码翻译成host CPU的
+ 过程对应的叫做后端。给qemu增加一个新CPU的模型需要既增加前端也增加后端，如果要把
+ 整个系统支持起来，还要增加基础设备以及user mode的支持，整个系统的支持的逻辑不在
+ 本文档里展开，本文只聚焦于前端的相关逻辑。如果目的是在一个成熟的平台上验证另一个
+ 新的CPU，比如在x86机器上跑riscv的虚拟机，验证riscv的逻辑，只需要加上riscv指令到
+ 中间码这个前端支持就好，因为中间码到x86的后端已经存在；如果目的是，比如在一台riscv
+ 的机器上模拟x86，就需要加中间码到riscv的后端支持，我们这里以riscv为例子，把它作为
+ 一个需要支持的CPU构架。
 
- 一个完整的riscv到tiny code前端支持的例子可以参考：
+ 一个完整的riscv到中间码前端支持的例子可以参考：
  https://lore.kernel.org/all/1519344729-73482-1-git-send-email-mjc@sifive.com
 
  以riscv为例子，体系相关的前端的代码在：target/riscv/*，后端的代码在：tcg/riscv/*，
@@ -37,10 +37,10 @@ qemu tcg前端解码逻辑
  我们把逻辑拉高一层看问题，所谓target CPU的运行，实际上是根据target CPU指令流去
  不断的改变target CPU软件描述结构里的数据状态，因为实际的代码要运行到host CPU上，
  所以，target代码要被翻译成host代码，才可以执行，通过执行改变target CPU的数据状态。
- qemu为了解耦把target CPU代码先翻译成tiny code，那么翻译成的tiny code的语义也就是
- 改变target CPU数据状态的一组描述语句，所以target CPU状态参数会被当做入参传入tiny
- code描述语句。这组tiny code是改变CPU状态的抽象的描述，有些CPU上的状态不好抽象成
- 一般的描述就用helper函数的方式补充，所以helper函数也是改变target CPU状态的描述。
+ qemu为了解耦把target CPU代码先翻译成中间码，那么翻译成的中间码的语义也就是改变
+ target CPU数据状态的一组描述语句，所以target CPU状态参数会被当做入参传入中间码
+ 描述语句。这组中间码是改变CPU状态的抽象的描述，有些CPU上的状态不好抽象成一般的
+ 描述就用helper函数的方式补充，所以helper函数也是改变target CPU状态的描述。
 
  tcg的方式，我们要使用tcg_gen_xxx的函数组织逻辑描述target CPU指令对target CPU状态
  的改变。一些公共的代码是可以自动生成的，qemu里使用decode tree的方式自动生成这一部
@@ -52,7 +52,7 @@ qemu tcg前端解码逻辑
  qemu/build/libqemu-riscv64-softmmu.fa.p/decode-insn32.c.inc，decode-insn16.c.inc里。
  这些文件生成的trans_xxx函数需要自己实现，riscv的这部分实现是放在了在target/riscv/insn_trans/*里。
  生成的文件里有两个很大的解码函数decode-insn32.c.inc和decode-insn16.c.inc，qemu
- 把target CPU指令翻译成tiny code的时候就需要调用上面两个解码函数。
+ 把target CPU指令翻译成中间码的时候就需要调用上面两个解码函数。
 
  我们用riscv user mode的代码来看看上层具体调用关系。qemu提供system mode和user mode
  的模拟方式，其中system mode会完整模拟整个系统，一个完整的OS可以运行在这个模拟的
@@ -90,8 +90,8 @@ qemu tcg前端解码逻辑
 tcg翻译流程
 -----------
 
- 整个tcg前后端的翻译流程按指令块的粒度来搞，收集一个指令块翻译成tiny code，然后
- 把tiny code翻译成host CPU指令，整个过程动态执行。为了加速翻译，qemu把翻译成的host
+ 整个tcg前后端的翻译流程按指令块的粒度来搞，收集一个指令块翻译成中间码，然后把
+ 中间码翻译成host CPU指令，整个过程动态执行。为了加速翻译，qemu把翻译成的host
  CPU指令块做了缓存，tcg前端解码的时候，先在缓存里找，如果找见就直接执行。
 
  大致的代码调用关系如上。
@@ -228,8 +228,9 @@ void tcg_gen_addi_i64(TCGv_i64 ret, TCGv_i64 arg1, int64_t arg2);
    -> cpu_gpr[i] = tcg_global_mem_new(cpu_env, offsetof(CPURISCVState, gpr[i]), riscv_int_regnames[i]);            
 ```
  cpu_env在tcg_context_init(unsigned max_cpus)里初始化，得到的是tcg_ctx里TCGTemp temps
- 的地址。
+ 的地址。tcg_global_mem_new一次在tcg_ctx里从TCGTemp temps上分配空间，返回空间在
+ tcg_ctx上的相对地址。这样cpu_gpr[reg_name]就可以作为标记在前端和后端之间建立连接。
  
- 
-
-
+ 后端的代码直接把中间码翻译成host指令，中间码中的TCGv直接映射到host CPU的寄存器上，
+ 从逻辑上讲，应该是翻译得到的host代码修改中间码对应TCGv对应的内存才对，这里还没有
+ 搞明白。
