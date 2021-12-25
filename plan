@@ -160,3 +160,5 @@ qemu内存管理
 qemu tcg
 《大学》总结 #
 perf框架
+gdb学习
+rv指令分析：跳转指令

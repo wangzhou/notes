@@ -232,5 +232,25 @@ void tcg_gen_addi_i64(TCGv_i64 ret, TCGv_i64 arg1, int64_t arg2);
  tcg_ctx上的相对地址。这样cpu_gpr[reg_name]就可以作为标记在前端和后端之间建立连接。
  
  后端的代码直接把中间码翻译成host指令，中间码中的TCGv直接映射到host CPU的寄存器上，
- 从逻辑上讲，应该是翻译得到的host代码修改中间码对应TCGv对应的内存才对，这里还没有
- 搞明白。
+ 从逻辑上讲，应该是翻译得到的host代码修改中间码对应TCGv对应的内存才对。这里的基本
+ 逻辑是qemu在生成的中间码中以及TB执行后做了host寄存器到target CPU描述内存之间的
+ 同步。
+```
+ /* qemu/tcg/riscv/tcg-target.c.inc */
+ /* tcg_out_op是整个后端解码体系架构相关的入口函数，每个架构都要做具体实现 */
+ tcg_out_op
+   -> case INDEX_op_add_i64
+     -> tcg_out_opc_reg
+       -> tcg_out32
+```
+ 可以看到add_i64的中间码直接翻译到了host上的寄存器，这里后端的翻译还是拿riscv举例了。
+
+```
+ tcg_gen_code
+      /* 如上提到的同步代码逻辑在这个函数中 */
+   -> default: tcg_reg_alloc_op
+     -> 生成用host指令描述的同步逻辑，放在TB里
+        /* 生成业务相关的host指令，后端译码的总入口 */
+     -> tcg_out_op
+```
+ 如上是同步的一个大概逻辑，具体细节需要进一步分析。
