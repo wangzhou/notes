@@ -162,3 +162,5 @@ qemu tcg
 perf框架
 gdb学习
 rv指令分析：跳转指令
+tcg后端解码细节分析
+qemu user mode分析

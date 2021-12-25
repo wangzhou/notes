@@ -1,6 +1,6 @@
 -v0.1 2021.7.30 Sherlock init
 
-简介：一直没有系统的看看gdb的使用方法，用这个文档记录下gdb的使用技巧。
+简介：一直没有系统的看看gdb的使用方法，用这个文档持续记录下gdb的使用技巧。
 
 最简单的用法就是在本地用gdb, gdb + 被调试的程序，注意被调试程序的参数要通过
 set args xxx这样传给gdb。
@@ -60,7 +60,7 @@ warning: Source file is more recent than executable.
 ```
 如上，使用gdb qemu-riscv64启动调试，set args ~/a.out设置qemu-riscv64的参数，b tcg_gen_code
 在tcg_gen_code上打一个断点，r把程序跑起来，程序会在断点处停下来，bt可以把这个时候
-的调用栈打出来。
+的调用栈打出来。c可以叫程序继续跑起来，一直到下一个断点处停下来。
 
 我们也可以用.gdbinit把gdb启动后需要执行的命令先写到这个配置文件里，gdb启动后就会
 自动调用。
@@ -73,12 +73,17 @@ warning: Source file is more recent than executable.
 4. b file:function  文件名 + 函数名
 5. b xxxx if cond   满足后面的条件才会断住程序
 
+info命令可以查看gdb的信息，比如info b查看当前所有设定的断点，info registers查看
+寄存器的值。
+
+delete number可以删去对应的断点，这里的number就是info b里显示的断点的编号。
+
 gdb可以单步执行程序，或者跳入跳出函数。用n单步执行，这个是以函数为单位的，要想
 调入函数执行需要用s，退出函数回到上层执行用finish。如果单步执行到一个循环里，可以
 用u直接把循环一次都执行完。在gdb输入enter会重复输入上次的命令。
 
-用p可以打出参数的值。打印地址的上的值？打印数组？
+用p可以打出参数的值，如果是一个地址，可以p *arg打印地址上的数据，对于静态数组可以
+直接用"p 数组名"打印数组成员，对于动态申请的内存可以"p 地址@size"打印这个地址开始
+的长度为size的数据，p file::variable、p function::variable可以给变量限定作用域。
 
-删除断点，打印断点。
-
-watch
+watch cond可以监控变量和表达式的值没有改变，只要改变，程序就会停止。
