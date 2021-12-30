@@ -1,0 +1,57 @@
+-v0.1 2021.12.30 Sherlock init
+
+简介：本文分析qemu tcg里模拟系统指令的思路，比如模拟一个riscv的ecall指令。
+
+ ecall指令是riscv里系统调用的指令，这个指令改变CPU的模式，并且改变CPU PC到异常处理
+ 代码的入口。可以想象，qemu里把这些两条模拟了就可以。
+
+```
+cpu_exec
+  -> while (!cpu_handle_exception()) {
+       -> while (!cpu_handle_interrupt()) {
+	    -> 生成host上的指令并模拟guest cpu的行为
+	  }
+     }
+```
+ qemu的cpu_exec在一个循环中模拟guest cpu的行为，每次进入循环就查下有没有异常发生，
+ 所以，应该循环内在异常发生时设置一个flag，每次进入的时候就检测这个flag，flag置位
+ 了就做异常处理。
+
+ 大概的流程是这样：
+```
+/* qemu/accel/tcg/cpu-exec.c */
+cpu_handle_exception
+     /* 检测cpu->exception_index，这个就是flag */
+  -> cc->tcg_ops->do_interrupt
+     /* target/riscv/cpu.c */
+     (riscv_cpu_do_interrupt)
+       -> 配置各种cpu状态，其中包括pc
+       -> riscv_cpu_set_mode
+```
+
+ 再以ecall指令的模拟函数为例看下：
+```
+/* target/riscv/insn_trans/trans_privileged.c.inc */
+trans_ecall
+  -> generate_exception
+       /*
+        * 这个函数是宏生成的，相关的定义在riscv目录的helper.h，顺着查看就可以，
+        * 有个注意的地方是其中有个名叫glue的宏，作用是字符串拼接。
+	*/
+    -> gen_helper_raise_exception
+      -> tcg_gen_callN
+        -> 在哈希表里找注册的函数，这里名字是helper_raise_exception
+	   这个函数定义在riscv目录下的op_helper.c，可以看到其中配置了cpu里的
+	   exception_index，然后cpu_restore_state，cpu_loop_exit。
+```
+ 但是helper_raise_exception怎么注册的？看下helper_table这哈希表在哪里初始化的。
+```
+/* tcg/tcg.c */
+tcg_context_init
+  -> g_hash_table_insert(helper_table, all_helpers[i].func, ...)
+```
+ 上面把all_helpers这个表里的元素一个一个加到哈希表里。all_helpers这个表是静态
+ include了一个头文件生成的，里面把helper.h也包含了进来，但是上面分析helper.h
+ 里生成的是gen_helper_raise_exception，这里qemu里针对DEF_HELP_FLAGS_2尽然定义
+ 了两个版本，helper-gen.h里的生成gen_helper_xxx函数，helper-tcg.h里生成哈希表里
+ 的注册entry，用undef控制宏的作用域。
