@@ -1,0 +1,45 @@
+-v0.1 2022.1.3 Sherlock init
+
+简介：本文是学习ReStructuredText和Sphinx的一个速记，主要是跟着这个网页上的教程
+      走了一遍：https://sphinx-tutorial.readthedocs.io。另外，sphinx官网的入门
+      文档也讲的比较好，可以用来学习。
+
+
+基本逻辑
+--------
+
+ RST是一套书写规则，和markdown的意思一样，而且语法还和markdown的比较像。
+ sphinx是一个工具，它可以把RST写的文档转变成各种格式。sphinx还可以用来组织文档，
+ 可以把一组文档组织成一本书。
+
+ 当需要用sphinx组织文档的时候，可以使用sphinx-quickstart快速生成相关的配置文档。
+ 相关的细节可以查看简介中的链接。
+
+基本语法
+--------
+
+ 这里只记录一开始没有用对的。
+
+ 1. toctree
+
+    .. toctree:
+       :maxdepth: 2
+
+    这个用来表示下一级目录，2表示的是在这一级的页面上显示的下一级目录的级数。
+
+ 2. 内部链接
+
+    这个在之前写MD的时候没有用到，都是直接用字写的。
+
+    .. _xxxx:
+
+
+    sub-tile
+    ---------
+
+    如上是定义了一个xxxx的内部链接，这个链接点就是在sub-tile这个点上。
+
+
+    :ref:`xxxx`
+
+    在引用的地方这样写就可以。
