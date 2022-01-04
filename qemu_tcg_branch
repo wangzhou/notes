@@ -1,0 +1,51 @@
+-v0.1 2022.1.4 Sherlock
+
+简介：本文分析qemu tcg中跳转指令模拟，以riscv平台作为例子。
+
+以beq为例:
+```
+trans_beq
+  -> gen_branch
+    -> gen_new_lable
+    -> tcg_gen_brcond_tl
+    -> gen_goto_tb
+    -> gen_set_label
+    -> gen_goto_tb
+    -> ctx->base.is_jmp = DISAS_NORETURN;
+```
+如上的逻辑是生成中间码的，生成的代码还要执行，我们不用关注host上执行的细节，只要
+中间码这边的逻辑通就好。那就比较好立即上面的代码，结合tcg/README里的介绍。
+
+gen_new_lable是创建了一个lable，brcond_t是brcond_i32/i64 t0, t1, cond, label，根据
+t0/t1的计算决定是否要跳到lable处执行，gen_set_lable是set_label $label，相当于在
+当前位置设置lable。所以上面的代码生成的代码伪代码表示大概是：
+```
+lable l;
+
+if (t0 cond t1) {
+    goto l;
+}
+
+goto_tb(pc顺移);
+
+l:
+    goto_tb(计算新pc);
+```
+其中gen_goto_tb的逻辑是：
+```
+gen_goto_tb
+    if (translator_use_goto_tb(&ctx->base, dest)) {
+        tcg_gen_goto_tb(n);
+        tcg_gen_movi_tl(cpu_pc, dest);
+        tcg_gen_exit_tb(ctx->base.tb, n);
+    } else {
+        tcg_gen_movi_tl(cpu_pc, dest);
+        tcg_gen_lookup_and_goto_ptr();
+    }
+```
+如果goto_tb在tcg后端有实现就用goto_tb来跳转，可以看到riscv的tcg后端对于goto_tb
+是直接用jump指令实现的。但是，还不清楚goto_tb后面要加movi_tl把PC再set回来。
+goto_tb的n可以取0和1，应该跳转还是顺序执行的意思？
+
+没有goto_tb支持时，先设置跳转的PC，然后会调用到lookup_tb_ptr(在accel/tcg/cpu-exec.c)，
+找对应的tb执行，如果没有找见就退出当前tb。
