@@ -14,7 +14,7 @@ trans_beq
     -> ctx->base.is_jmp = DISAS_NORETURN;
 ```
 如上的逻辑是生成中间码的，生成的代码还要执行，我们不用关注host上执行的细节，只要
-中间码这边的逻辑通就好。那就比较好立即上面的代码，结合tcg/README里的介绍。
+中间码这边的逻辑通就好。那就比较好理解上面的代码，结合tcg/README里的介绍。
 
 gen_new_lable是创建了一个lable，brcond_t是brcond_i32/i64 t0, t1, cond, label，根据
 t0/t1的计算决定是否要跳到lable处执行，gen_set_lable是set_label $label，相当于在
