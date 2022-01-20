@@ -61,9 +61,34 @@ ABI_TYPE ATOMIC_NAME(X)(CPUArchState *env, target_ulong addr,       \
 ```
 可以看到，里面还是使用的host平台上的基本的原子语义函数做的。
 
-如果需要模拟多条指令拼起来的原子指令，我们就考虑用锁保护。要保护的对象是CPU以及
-内存的状态，并发访问的执行流是在这个guest cpu上跑的各种形态的线程。可以看到，如果
-我们用普通的锁，在一个进程执行一个原子指令的时候，其他的线程都要等待，OS里的线程
-很多，如果原子指令比较多，估计性能会比较差。
+如果需要模拟多条指令拼起来的原子指令，我们就考虑用锁保护。要保护的对象是内存的状态。
+之所以需要保护，是多CPU可能会去改相同的内存位置。qemu使用一个线程模拟一个CPU，
+所以一个CPU对本CPU的寄存器的更新总是顺序的，所以CPU的寄存器状态是不需要做互斥的。
 
-qemu里提供了rcu的实现，文档在docs/devel/rcu.txt
+对于无法映射到host上原子指令的情况，其实qemu里已经做了处理，我们也可以直接使用
+qemu中的方式处理。我们可以参考qemu对i386 cmpxchg16b指令的处理：qemu/target/i386/tcg/mem_helper.c
+```
+helper_cmpxchg16b
+  +-> cpu_loop_exit_atomic
+    +-> cpu->exception_index = EXCP_ATOMIC;
+    +-> cpu_loop_exit_restore(cpu, pc);
+      +-> cpu_restore_state
+      +-> cpu_loop_exit(cpu);
+```
+如上，把CPU的状态设置为atomic异常，回退当前guest PC对应的在tb中的指令，这个使得下
+次再进来的时候可以使指令再次执行。最后用长跳转跳出整个tb翻译执行的大循环。
+可以从accel/tcg/tcg-accel-ops-mttcg.c中的CPU线程代码看相关调用：
+```
+mttcg_cpu_thread_fn
+  +-> tcg_cpus_exec
+  +-> cpu_exec_step_atomic
+     ...
+```
+可以看到cpu_exec_step_atomic里有tb的翻译执行的小循环。这里有注意的地方有，tb
+翻译执行是在一个互斥区里，执行tb翻译执行之前把这个tb配置成了只容许有一条guest指令，
+这样做是为了使临界区尽量小。相应的cmpxchg16b翻译执行跑两遍，第一遍出发原子异常，
+第二便跑到同样的位置会进入一个无锁的实现里执行一遍：target/i386/tcg/translate.c:
+gen_helper_cmpxchg16b_unlocked，控制进那个分支的逻辑是tb cflags的CF_PARALLEL，
+在进入cpu_exec_step_atomic的时候会把这个标记为去掉，翻译的时候就会进入进入相应
+的代码，产生相应的tb，如果是直接lookup执行这个tb，注意tb lookup的参数里也包含了
+tb的cflags。(todo: 产生tb的hash的key中也包含tb的cflags)
