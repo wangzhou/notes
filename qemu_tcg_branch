@@ -4,6 +4,7 @@
 
 以beq为例:
 ```
+/* qemu/target/riscv/insn_trans/trans_rvi.c.inc */
 trans_beq
   -> gen_branch
     -> gen_new_lable
@@ -43,9 +44,47 @@ gen_goto_tb
         tcg_gen_lookup_and_goto_ptr();
     }
 ```
-如果goto_tb在tcg后端有实现就用goto_tb来跳转，可以看到riscv的tcg后端对于goto_tb
-是直接用jump指令实现的。但是，还不清楚goto_tb后面要加movi_tl把PC再set回来。
-goto_tb的n可以取0和1，应该跳转还是顺序执行的意思？
+可见这里有两种实现方式：如果goto_tb在tcg后端有实现就用goto_tb来跳转，否则就用
+goto_ptr来实现。goto_ptr的方式相对简单，先设置跳转的PC，然后会调用到
+lookup_tb_ptr(在accel/tcg/cpu-exec.c)，找对应的tb执行，如果没有找见就退出当前tb。
 
-没有goto_tb支持时，先设置跳转的PC，然后会调用到lookup_tb_ptr(在accel/tcg/cpu-exec.c)，
-找对应的tb执行，如果没有找见就退出当前tb。
+goto_tb的方式比较绕一点，我们那riscv的后端实现具体看下。tcg_gen_goto_tb对应的
+中间码是INDEX_op_goto_tb，riscv的后端实现是：
+```
+/* tcg/riscv/tcg-target.c.inc */
+tcg_out_op
+  -> tcg_out_ld(s, TCG_TYPE_PTR, TCG_REG_TMP0, TCG_REG_ZERO,
+                   (uintptr_t)(s->tb_jmp_target_addr + a0));
+  -> tcg_out_opc_imm(s, OPC_JALR, TCG_REG_ZERO, TCG_REG_TMP0, 0);
+  -> set_jmp_reset_offset(s, a0);
+       /*
+        * 注意a0就是tcg_gen_goto_tb的入参，就是n。注意，这个是理解goto_tb的关键，
+	* tcg_out_opc_imm在当前的tb里产生一条指令，这个地方把这个指令在tb里的位置
+	* 写在了tb_jmp_target_addr[n]这个地方。这个动作为后面链接下一个tb留出了
+	* 一个指令的位置。
+        */
+    -> s->tb_jmp_reset_offset[which] = tcg_current_code_size(s);
+```
+riscv exit_tb的后端实现：
+```
+tcg_out_op
+   if (a0 == 0) {
+       tcg_out_call_int(s, tcg_code_gen_epilogue, true);
+   } else {
+       tcg_out_movi(s, TCG_TYPE_PTR, TCG_REG_A0, a0);
+       tcg_out_call_int(s, tb_ret_addr, true);
+   }
+```
+注意这里的a0和n相关，n这个变量从这里被传入后端执行，然后从exit_tb里带出来，给到
+下个tb。我们回到主循环。
+```
+  cpu_exec
+    -> cpu_loop_exec_tb(cpu, tb, &last_tb, &tb_exit);
+    -> tb_add_jump(last_tb, tb_exit, tb);
+      -> tb_set_jmp_target(tb, n, (uintptr_t)tb_next->tc.ptr);
+        -> uintptr_t offset = tb->jmp_target_arg[n];
+        -> tb_target_set_jmp_target(tc_ptr, jmp_rx, jmp_rw, addr);
+```
+如上，在下一次tb翻译执行循环里会把新tb里指令的地址直接覆盖上次tb里保留的位置。
+所以，使用go_tb，第一次执行的时候会退出tb，执行下一个tb，用新tb指令地址覆盖之前tb
+里的跳转预留位置，当再次执行前一个tb时，会直接跳转到新tb，就不会退出当前tb。

@@ -55,3 +55,5 @@ tcg_context_init
  里生成的是gen_helper_raise_exception，这里qemu里针对DEF_HELP_FLAGS_2尽然定义
  了两个版本，helper-gen.h里的生成gen_helper_xxx函数，helper-tcg.h里生成哈希表里
  的注册entry，用undef控制宏的作用域。
+
+ 至此qemu tcg模拟异常处理的逻辑就都打通了。

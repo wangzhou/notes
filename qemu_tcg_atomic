@@ -1,6 +1,6 @@
 -v0.1 2022.1.4 Sherlock init
 
-简介：qemu tcg中原子指令的学习的一个速记，以riscv为平台。
+简介：qemu tcg中原子指令学习的一个速记，以riscv为平台。
 
 ```
 /* target/riscv/insn_trans/trans_rva.c.inc */
@@ -75,20 +75,20 @@ helper_cmpxchg16b
       +-> cpu_restore_state
       +-> cpu_loop_exit(cpu);
 ```
-如上，把CPU的状态设置为atomic异常，回退当前guest PC对应的在tb中的指令，这个使得下
-次再进来的时候可以使指令再次执行。最后用长跳转跳出整个tb翻译执行的大循环。
-可以从accel/tcg/tcg-accel-ops-mttcg.c中的CPU线程代码看相关调用：
+如上，把CPU的状态设置为atomic异常，回退当前guest PC，这个使得下次再进来的时候可以
+使指令再次执行。最后用长跳转跳出整个tb翻译执行的大循环。可以从
+accel/tcg/tcg-accel-ops-mttcg.c中的CPU线程代码看相关调用：
 ```
 mttcg_cpu_thread_fn
   +-> tcg_cpus_exec
   +-> cpu_exec_step_atomic
      ...
 ```
-可以看到cpu_exec_step_atomic里有tb的翻译执行的小循环。这里有注意的地方有，tb
+可以看到cpu_exec_step_atomic里有tb的翻译执行的小循环。这里需要注意的地方有，tb
 翻译执行是在一个互斥区里，执行tb翻译执行之前把这个tb配置成了只容许有一条guest指令，
-这样做是为了使临界区尽量小。相应的cmpxchg16b翻译执行跑两遍，第一遍出发原子异常，
-第二便跑到同样的位置会进入一个无锁的实现里执行一遍：target/i386/tcg/translate.c:
-gen_helper_cmpxchg16b_unlocked，控制进那个分支的逻辑是tb cflags的CF_PARALLEL，
-在进入cpu_exec_step_atomic的时候会把这个标记为去掉，翻译的时候就会进入进入相应
-的代码，产生相应的tb，如果是直接lookup执行这个tb，注意tb lookup的参数里也包含了
-tb的cflags。(todo: 产生tb的hash的key中也包含tb的cflags)
+这样做是为了使临界区尽量小。相应的cmpxchg16b翻译执行跑两遍，第一遍触发发原子异常，
+第二遍跑到同样的位置会进入一个无锁的实现里执行一遍：target/i386/tcg/translate.c:
+gen_helper_cmpxchg16b_unlocked，控制进哪个分支的逻辑是tb cflags的CF_PARALLEL，
+在进入cpu_exec_step_atomic的时候会把这个标记为去掉，翻译的时候就会进入相应的代码，
+产生相应的tb，如果是直接lookup执行这个tb，注意tb lookup的参数里也包含了
+tb的cflags。

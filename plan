@@ -164,3 +164,11 @@ gdb学习
 rv指令分析：跳转指令
 tcg后端解码细节分析
 qemu user mode分析
+qemu tcg branch
+qemu tcg atomci
+qemu tcg load/store缺页
+qemu模拟系统指令
+qemu tcg/kvm模型
+qemu atomic互斥区
+qemu helper函数的实现
+qemu tb代码和cpu状态的关系
