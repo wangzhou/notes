@@ -63,7 +63,15 @@ warning: Source file is more recent than executable.
 的调用栈打出来。c可以叫程序继续跑起来，一直到下一个断点处停下来。
 
 我们也可以用.gdbinit把gdb启动后需要执行的命令先写到这个配置文件里，gdb启动后就会
-自动调用。
+自动调用。.gdbinit可以放到自己的home目录作为默认配置文件，也可以放到运行gdb的当前
+目录，.gdbinit里可以用file把要跑的命令加上，用set args把命令的参数加上：
+```
+file ./qemu_path/qemu-system-riscv
+set args -m 2048M  \
+	qemu parameters \
+break main
+run
+```
 
 打断点的方式还有很多变种：
 
