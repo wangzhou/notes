@@ -11,7 +11,7 @@
 ```
 
 正常的流程，翻译成中间码后，还要有中间码翻译成host指令的过程，qemu把load/store里
-处理tlb访问、页表page walk、发起缺页异常的这些操作插到了把load的中间码翻译长host
+处理tlb访问、页表page walk、发起缺页异常的这些操作插到了把load的中间码翻译成host
 指令的过程中。
 
 tcg_gen_code一路调用下去，会到tcg/riscv/tcg-target.c.inc里的tcg_out_qemu_ld_slow_path。
@@ -26,4 +26,12 @@ tcg_gen_code一路调用下去，会到tcg/riscv/tcg-target.c.inc里的tcg_out_q
 	       /* accel/tcg/cputlb.c */
 	    -> load_helper
 ```
-在load_helper里做如上提到的load的各种硬件模拟。
+在load_helper里做如上提到的load的各种硬件模拟。load_helper里会与没有找到tlb的情况
+会调用体系构架相关的回调函数做tlb fill：
+```
+  tlb_fill
+       /* target/riscv/cpu.c */
+    -> cc->tcg_ops_tlb_fill risv下的riscv_cpu_tlb_fill
+         /* 先做page walk，翻译成功自然可以，翻译失败报缺页异常 */
+      -> riscv_raise_exception
+```
