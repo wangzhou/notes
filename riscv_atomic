@@ -28,7 +28,7 @@ riscv原子指令
 
  Linux内核里riscv cmpxchg是这样实现的，和spec里提供的代码类似，多个一个fence。
  实际上最后更新内存的只是sc.w.rl这个指令，多核之间对于同一内存位置，sc之间，一个
- 成功，另外一个就必须失败，这个是硬件语义保证的。
+ 成功，另外一个就必须失败，这个是硬件语义保证的。相关的代码在arch/riscv/include/asm/cmpxchg.h
 ```
 #define __cmpxchg(ptr, old, new, size)					\
 ({									\
@@ -69,6 +69,8 @@ riscv原子指令
 })
 ```
 
+ riscv里的AMO指令是单原子指令对内存做更新，有swap/add/and/xor/or/max/min操作。
+
 qemu实现
 --------
 
@@ -78,9 +80,35 @@ qemu实现
  如果相等，使用一个host上cmpxchg原子指令做store操作。
 
  这个操作的语义和上面内核里的是一样的:
+```
  tcg_gen_atomic_cmpxchg_i64(retv, addr, cmpv, newv, idx, memop)
- 如果是addr上的数据和cmpv相等，就把newv写入addr的位置，retv用来存储cmpv。
+```
+ 如果是addr上的数据和cmpv相等，就把newv写入addr的位置，retv用来存储addr地址上原来
+ 的值。qemu里sc的这个代码的意思就是，如果load_res这个地址上的值和load_val相等，就
+ 把src2这个寄存器上的数据写入load_res地址，dest保存load_res地址上原来的值。
+```
+    tcg_gen_atomic_cmpxchg_tl(dest, load_res, load_val, src2,
+                              ctx->mem_idx, mop);
+```
+ 我们反过来看riscv sc的定义，sc写的地址和lr reserve地址不一样的情况在之前就排除了，
+ 对于其他cpu也在并发写reserve地址的情况，如果其他cpu已经把load_res地址上的数据修改
+ 了，那么load_res地址上的数据和load_val相等就不成立，dest是load_res处被其他cpu修改
+ 后的值，下面的判断会成立，把1写入rd标志这个sc失败。如果load_res上数据和load_val
+ 相等，src2数据被写入load_res的位置，下面dest和load_val的判断相等，写0到rd里表示
+ sc成功。
 
+ 不管sc成功还是失败都跳到l2 lable，这个地方会把load_res清掉。
 
+ qemu里对AMO的实现比较简单，就是直接映射到host上的对应原子指令实现。
 
+原子指令里的内存序
+-------------------
 
+ lr/sc和AMO的指令都支持在上叠加内存序的约束。aq表示本条执行之后的访存指令不能越
+ 过本条指令完成，rl表示本条指令不能越过之前的访存指令完成。
+
+ qemu的实现中，对于AMO的指令都没有对aq和rl做处理，对于lr/sc指令，是加了相关的
+ memory barrier，aq是TCG_BAR_LDAQ，rl是TCG_BAR_STRL，但是对于sc的正常处理分支，
+ 由于使用了host的atomic_cmpxchg指令，也是没有对aq/rl做显示的处理。
+
+ 内存序还有待深入分析。
