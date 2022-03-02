@@ -176,3 +176,4 @@ global TCGv存在cpu里，TCGTemps存在TCGContext里，TCGContext是tb执行的
 生成的。atomic互斥区只锁了tb执行，没有锁翻译。chained TB有可能一直chained。
 goto_tb只能是固定地址，lookup可以是动态变的。
 riscv head.S和entry.S代码分析
+qemu irq

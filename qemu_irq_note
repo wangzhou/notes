@@ -1,0 +1,38 @@
+-v0.1 2022.2.22 Sherlock init
+
+简介：记录qemu irq相关的代码逻辑，以riscv为例。
+
+/* target/riscv/cpu.c */
+
+qdev_init_gpio_in(DEVICE(cpu), riscv_cpu_set_irq, 12)
+注册一个向cpu写入中断的接口？
+
+这个函数改riscv系统寄存器mip，把中断号写入到里面。
+riscv_cpu_set_irq
+  -> riscv_cpu_update_mip
+       /*
+        * 写cpu->interrupt_request, 大循环里的cpu_handle_irq根据这个判断是否
+        * 要处理中断
+	*/
+    -> cpu_interrupt
+
+
+/* cpu_handle_irq里调用cpu_exec_interrupt处理中断，从mip里拿到中断号，改pc
+ * riscv的回调函数是，target/riscv/cpu_helper.c: riscv_cpu_exec_interrupt
+ */
+riscv_cpu_exec_interrupt
+     /* 拿到中断号 */
+  -> interruptno = riscv_cpu_local_irq_pending(env);
+     /*
+      * 注意这里会配置exception_index这个值，这个值在异常处理
+      * cpu_handle_exception里也会读
+      */
+  -> cs->exception_index = RISCV_EXCP_INT_FLAG | interruptno;
+     /* riscv在这个里一并处理异常和中断，改变机器的状态和pc，最后清exception_index */
+  -> riscv_cpu_do_interrupt(cs);
+       /* RISCV_EXCP_NONE是-1 */
+    -> cs->exception_index = RISCV_EXCP_NONE
+
+大循环的异常处理里会跑下do_interrupt回调，有几个问题没有搞清楚：
+1. replay_xxx是做什么？
+2. 测试发现cpu_handle_exception会得到中断的case: exception_index < 0x10000，这个怎么进来?
