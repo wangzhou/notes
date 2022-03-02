@@ -1,0 +1,86 @@
+riscv atomic note
+
+-v0.1 2022.3.1 sherlock init
+
+简介：本文分析risvc中原子指令的定义，以及qemu里的实现方式，qemu的代码是6.2.50，
+      riscv spec的版本是20191213。
+
+
+riscv原子指令
+-------------
+
+ riscv的原子指令定义了load reserved/store conditional和直接更新内存的原子指令两大
+ 类。前者需要几条指令配合实现原子操作，后者一条指令就可以对内存做更新。riscv的这个
+ 版本里还没有提供CAS的单指令实现，协议推荐用lr/sc的方式实现CAS，并给出了参考代码。
+
+ lr/sc的方式在其他的构架里也都有，其基本的使用逻辑是，load的时候同时更新一个硬件
+ flag，store的执行有成功和失败，当store的时候，如果load配置的flag有效，并且store
+ 的地址和load的一样，就做store操作，并且store成功，否则store失败。这里的store/load
+ 是在同一个core上。lr/sc基础上还可以叠加上order的语义，有acquire和release。
+
+ 如上只是初步看lr/sc，详细的指令定义还需要各种限制堵住各种出问题的情况。用这两个
+ 指令做原子操作的逻辑就是用lr去抢这个flag，如果抢到，与之配对的store就可以把数据
+ 写下去。这里更多的细节就是lr可以有多个，但是store只和相同core上的上一个匹配，
+ sc只要有就会消除之前的flag，不管这个sc是成功还是失败，sc成功的情况只有上面一种，
+ 但是失败的情况就很多了，sc和上一个lr的地址不匹配会失败，sc之前已经有来自其他core
+ 或者设备做完相同地址的sc，本core上这个sc也是失败，同一个core上，sc和lr中间有sc，
+ 那么后一个sc也是失败。
+
+ Linux内核里riscv cmpxchg是这样实现的，和spec里提供的代码类似，多个一个fence。
+ 实际上最后更新内存的只是sc.w.rl这个指令，多核之间对于同一内存位置，sc之间，一个
+ 成功，另外一个就必须失败，这个是硬件语义保证的。
+```
+#define __cmpxchg(ptr, old, new, size)					\
+({									\
+	__typeof__(ptr) __ptr = (ptr);					\
+	__typeof__(*(ptr)) __old = (old);				\
+	__typeof__(*(ptr)) __new = (new);				\
+	__typeof__(*(ptr)) __ret;					\
+	register unsigned int __rc;					\
+	switch (size) {							\
+	case 4:								\
+		__asm__ __volatile__ (					\
+			"0:	lr.w %0, %2\n"				\
+			"	bne  %0, %z3, 1f\n"			\
+			"	sc.w.rl %1, %z4, %2\n"			\
+			"	bnez %1, 0b\n"				\
+			"	fence rw, rw\n"				\
+			"1:\n"						\
+			: "=&r" (__ret), "=&r" (__rc), "+A" (*__ptr)	\
+			: "rJ" ((long)__old), "rJ" (__new)		\
+			: "memory");					\
+		break;							\
+	case 8:								\
+		__asm__ __volatile__ (					\
+			"0:	lr.d %0, %2\n"				\
+			"	bne %0, %z3, 1f\n"			\
+			"	sc.d.rl %1, %z4, %2\n"			\
+			"	bnez %1, 0b\n"				\
+			"	fence rw, rw\n"				\
+			"1:\n"						\
+			: "=&r" (__ret), "=&r" (__rc), "+A" (*__ptr)	\
+			: "rJ" (__old), "rJ" (__new)			\
+			: "memory");					\
+		break;							\
+	default:							\
+		BUILD_BUG();						\
+	}								\
+	__ret;								\
+})
+```
+
+qemu实现
+--------
+
+ qemu实现lr/sc的代码在：qemu/target/riscv/insn_trans/trans_rva.c.inc。cpu的结构体
+ 里会增加load_res和load_val。lr指令会把load的地址保存到load_res，sc先判断store的
+ 地址是否和load_res相同，如果不相同，store失败，写1到rd寄存器，并清掉load_res，
+ 如果相等，使用一个host上cmpxchg原子指令做store操作。
+
+ 这个操作的语义和上面内核里的是一样的:
+ tcg_gen_atomic_cmpxchg_i64(retv, addr, cmpv, newv, idx, memop)
+ 如果是addr上的数据和cmpv相等，就把newv写入addr的位置，retv用来存储cmpv。
+
+
+
+
