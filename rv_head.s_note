@@ -45,7 +45,11 @@ ENTRY(_start)
 	 * that expects this header format!!
 	 */
 #ifdef CONFIG_EFI
-	/* n: 为啥要加载-13到s4 */
+	/*
+	 * n: 这里是riscv上UEFI和内核约定格式，具体的说明可以看内核文档:
+	 *    linux/Documentation/riscv/boot-image-header.rst
+	 *    _start最开头的格式要符合如上文档里的定义。
+	 */
 	/*
 	 * This instruction decodes to "MZ" ASCII required by UEFI.
 	 */
@@ -95,22 +99,28 @@ relocate:
 	/* Relocate return address */
 	la a1, kernel_map
 	XIP_FIXUP_OFFSET a1
+	/* n: 把内核Image的虚拟地址放到a1里 */
 	REG_L a1, KERNEL_MAP_VIRT_ADDR(a1)
 	la a2, _start
+	/* n: a1放内核线性地址空间虚拟地址和物理地址的偏移 */
 	sub a1, a1, a2
+	/* n: 调用relocate的时候ra放的物理地址，这里加一个偏移的到对应的虚拟地址 */
 	add ra, ra, a1
 
 	/* Point stvec to virtual address of intruction after satp write */
 	la a2, 1f
+	/* n: 得到label 1的虚拟地址，放到a2里 */
 	add a2, a2, a1
 	csrw CSR_TVEC, a2
 
 	/* Compute satp for kernel page tables, but don't load it yet */
+	/* n: a0传入页表page，这里计算得到页表基地址，注意这个是物理地址 */
 	srl a2, a0, PAGE_SHIFT
 	la a1, satp_mode
 	REG_L a1, 0(a1)
 	or a2, a2, a1
 
+	/* n: 这几个pg_dir的逻辑？*/
 	/*
 	 * Load trampoline page directory, which will cause us to trap to
 	 * stvec if VA != PA, or simply fall through if VA == PA.  We need a
@@ -194,6 +204,7 @@ secondary_start_sbi:
 
 .align 2
 setup_trap_vector:
+	/* n: handle_exception定义在arch/riscv/kernel/entry.S里 */
 	/* Set trap vector to exception handler */
 	la a0, handle_exception
 	csrw CSR_TVEC, a0
@@ -214,7 +225,7 @@ setup_trap_vector:
 END(_start)
 
 ENTRY(_start_kernel)
-	/* n: CSR_IE根据宏确定是这只M mode还是S mode，不是必须有M mode? */
+	/* n: 配置相关的CSR寄存器，mask掉中断， */
 	/* Mask all interrupts */
 	csrw CSR_IE, zero
 	csrw CSR_IP, zero
@@ -226,7 +237,7 @@ ENTRY(_start_kernel)
 	/* Reset all registers except ra, a0, a1 */
 	call reset_regs
 
-	/* n: pmp的操作先不看？*/
+	/* n: pmp的操作 */
 	/*
 	 * Setup a PMP to permit access to all of memory.  Some machines may
 	 * not implement PMPs, so we set up a quick trap handler to just skip
@@ -250,11 +261,19 @@ pmp_done:
 	csrr a0, CSR_MHARTID
 #endif /* CONFIG_RISCV_M_MODE */
 
-	/* n: push没有找见? 需要搜：riscv assembly .option push */
+	/*
+	 * n: .option是给riscv编译器看的，push就是保存编译器当前的配置，比如，
+	 *    下面的norelax就是一个编译器的配置，编译器处理push就是把它自己目前
+	 *    编译代码用的配置先存起来，之后再用.option pop来恢复。
+	 */
 	/* Load the global pointer */
 .option push
 .option norelax
-	/* n: gp是啥？*/
+	/*
+	 * n: gp是riscv的一个全局寄存器，这里把__global_pointer$这个符号的地址
+	 *    存到gp里也是一个编译器的优化手段，编译器后续可以使用这个地址做地址
+	 *    索引，编译器会自动在编译生成的汇编中使用gp。
+	 */
 	la gp, __global_pointer$
 .option pop
 	
@@ -270,7 +289,7 @@ pmp_done:
 	li t0, CONFIG_NR_CPUS
 	/*
 	 * n: cpu id没有超过最大范围，就继续跑，否则直接跳到Lsecondary_park，
-	 * 这里会停在wfi
+	 *    这里会停在wfi
 	 */
 	blt a0, t0, .Lgood_cores
 	tail .Lsecondary_park
@@ -326,12 +345,18 @@ clear_bss_done:
 	mv s0, a0
 	mv s1, a1
 
+	/* n: 哪里初始化boot_cpu_hartid这个量的？*/
 	la a2, boot_cpu_hartid
 	/* n: 这个是XIP用来调整地址的，没有XIP这个是空，可以不看 */
 	XIP_FIXUP_OFFSET a2
 	REG_S a0, (a2)
 
-	/* n: sp保存这个地址？存放栈基址的地址？*/
+	/*
+	 * n: sp保存栈指针，这里是物理地址，不过init_thread_union在什么地方定义？
+	 *    init_thread_union这里是thread_info的基地址，thread_info在task_struct
+	 *    里，存放硬件架构相关的信息，内核栈在内存中的位置在thread_info上方，
+	 *    和thread_info紧邻。THREAD_SIZE就是内核栈大小，64BIT下是PAGE_SIZE * 4
+	 */
 	/* Initialize page tables and relocate to virtual addresses */
 	la sp, init_thread_union + THREAD_SIZE
 	XIP_FIXUP_OFFSET sp
@@ -342,21 +367,22 @@ clear_bss_done:
 	/* n: dtb地址给a0，为后面call setup_vm做入参 */
 	mv a0, s1
 #endif /* CONFIG_BUILTIN_DTB */
-	/* n: 不用留栈空间？*/
+	/*
+	 * n: 建立初始化阶段的页表，start_kernel里的mm_init会创建正式页表，
+	 *    setup_vm在arch/riscv/mm/init.c里，单独分析这块的逻辑。
+	 */
 	call setup_vm
 #ifdef CONFIG_MMU
+	/* n: setup_vm里会更新这个页表的总入口 */
 	la a0, early_pg_dir
 	XIP_FIXUP_OFFSET a0
-	/* n: 这个点之后就可以正常用页表了？*/
+	/* n: relocate把setup_vm里创建的初始阶段页表配置给硬件 */
 	call relocate
 #endif /* CONFIG_MMU */
-
+	/* n: 把异常向量配置给硬件 */
 	call setup_trap_vector
 	/* Restore C environment */
-	/*
-	 * n: tp, sp在这里赋值，可见tp是内核的task_struct的指针? sp现在是内核栈指针
-	 *    之前的函数调用怎么搞的？
-	 */
+	/* n: tp, sp在这里赋值，tp是内核的task_struct的指针，sp是内核栈指针 */
 
 	la tp, init_task
 	la sp, init_thread_union + THREAD_SIZE
@@ -366,10 +392,7 @@ clear_bss_done:
 #endif
 	/* Start the kernel */
 	call soc_early_init
-	/*
-	 * n: 开始跑start_kernel，注意是单核在跑，知道系统都起来了，才继续起多核?
-	 *    怎么起多核？？
-	 */
+	/* n: 开始跑start_kernel，注意是单核在跑，多核启动逻辑另外分析 */
 	tail start_kernel
 
 #if CONFIG_RISCV_BOOT_SPINWAIT
