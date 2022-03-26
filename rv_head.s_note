@@ -5,6 +5,8 @@ from code 5.17-rc3 head.S。笔记在注释里，以n:开始。
 head.S是其中机器的初始化配置，之定义了三个符号：_start, _start_kernel, reset_regs。
 主要问题集中在：1. 内存初始化? 2. 怎么起多核？
 
+目前只看了单核启动相关的东西，而且所有不常用的内核配置先跳过不看。
+
 /* n: 这个是 kernel execute in place, 就是可以从一个持久存储里上直接启动内核 */
 #ifdef CONFIG_XIP_KERNEL
 .macro XIP_FIXUP_OFFSET reg
@@ -34,8 +36,6 @@ __HEAD
 /*
  * n: ENTRY这个宏定义了一个叫_start的符号，一直到对应的END处。在END处也生成了对应
  * 符号的size：.size name, .-name
- *
- * _start在哪里调用？
  */
 ENTRY(_start)
 	/*
