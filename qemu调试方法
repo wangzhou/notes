@@ -135,7 +135,7 @@ Trace 0: 0xffff98026ac0 [0000000000000000/000000000001046c/00006100/00000000] ma
  之前CPU寄存器的值。逻辑上，test_add调用之前先把1放到a0、2放到a1，和log是一致的。
 
  使用singlestep可以看到一条guest指令执行后CPU的状态，我们只看CPU的状态，使用如下
- 的命令：qemu-riscv64 -d cpu -singlestep -D ./log a.out
+ 的命令：qemu-riscv64 -d in_asm,cpu -singlestep -D ./log a.out
 ```
 [...]
 ----------------
@@ -193,4 +193,18 @@ IN: test_add
 qemu代码分析
 -------------
 
- (todo)
+ in_asm的入口在：translator_loop的最后，可见guest汇编只在翻译的时候会打印，这些
+ 打印不反应执行的流程。另外，qemu对于同一段代码是可能会翻译到不同的TB里的，这个
+ 和翻译参数有关系。guest指令的反汇编是独立的逻辑，不在本文中描述。
+
+ exec和cpu的入口在：cpu_tb_exec的log_cpu_exec里，可见是在TB执行的时候打印。但是，
+ qemu为了提高执行效率，TB和TB之间可以直接跳过去，这个叫chained TB，而log_cpu_exec
+ 是在翻译-执行的循环里加的打印，所以，要跟踪程序执行流程，必须断开qemu里的chained
+ TB，所以参数变成了：-d in_asm,cpu,nochain -singlestep
+
+ qemu里有两个singlestep相关的flag，一个是全局变量singlestep，一个是cpu结构体里的
+ singlestep_enabled。后者应该和gdb单步运行有关系，不是我们考虑东西。singlestep
+ 的相关逻辑在翻译执行主循环里，如果是singlestep就配置翻译flag(cflags)为CF_NO_GOTO_TB，
+ 并且一个TB只进行一条guest指令的翻译执行，CF_NO_GOTO_TB禁止qemu在TB之间跳转。
+
+ 可以看到，singlestep和nochain改变了qemu翻译执行的粒度，效率上是变差了很多的。
