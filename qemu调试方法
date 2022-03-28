@@ -11,10 +11,10 @@
 ---------
 
  qemu-riscv64 -d help可以看到支持的各种debug选项，我们一般用的有in_asm/exec/cpu
- 以及singlestep，其他的参数，比如，out_asm是翻译都得到的host上的汇编，op是qemu的
- 中间码，这些都合qemu自己的调试有关。
+ 以及singlestep，其他的参数，比如，out_asm是翻译后得到的host上的汇编，op是qemu的
+ 中间码，这些都和qemu自己的调试有关。
 
- 我们看下之前的几个：in_asm是输出guest的汇编，exec是记录每个翻译块执行的trace，
+ 我们看下前面的几个：in_asm是输出guest的汇编，exec是记录每个翻译块执行的trace，
  cpu是在执行一个翻译块之前打印当前的CPU各个寄存器的值，在没有配置singlestep的时候，
  上面的打印都是和翻译块(TB)相关的，singlestep可以看到每条guest指令模拟执行后的各种
  调试信息。上面的调试配置可以配合使用，使用-D file，可以输出到文件file，需要注意
@@ -206,5 +206,10 @@ qemu代码分析
  singlestep_enabled。后者应该和gdb单步运行有关系，不是我们考虑东西。singlestep
  的相关逻辑在翻译执行主循环里，如果是singlestep就配置翻译flag(cflags)为CF_NO_GOTO_TB，
  并且一个TB只进行一条guest指令的翻译执行，CF_NO_GOTO_TB禁止qemu在TB之间跳转。
+ 这里有个点需要注意，GOTO_PTR也可能在TB之间跳转，这里之所没有连CF_NO_GOTO_PTR也
+ 配置上，是因为GOTO_PTR的help函数里调用了log_cpu_exec，所以，在GOTO_PTR的时候是
+ 可以打印trace的。
 
  可以看到，singlestep和nochain改变了qemu翻译执行的粒度，效率上是变差了很多的。
+ 实际在qemu system mode上用-d in_asm,cpu -singlestep跑，会慢的一塌糊涂，可以在qemu
+ 里加一点代码限定要trace的地址范围。
