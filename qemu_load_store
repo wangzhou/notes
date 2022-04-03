@@ -9,24 +9,27 @@
       -> tcg_gen_qemu_ld_tl
         -> gen_ldst_i64 INDEX_op_qemu_ld_i64
 ```
+如上，load操作的中间码是用gen_ldst_i64生成的，中间码的op code是INDEX_op_qemu_ld_i64。
 
 正常的流程，翻译成中间码后，还要有中间码翻译成host指令的过程，qemu把load/store里
 处理tlb访问、页表page walk、发起缺页异常的这些操作插到了把load的中间码翻译成host
 指令的过程中。
 
-tcg_gen_code一路调用下去，会到tcg/riscv/tcg-target.c.inc里的tcg_out_qemu_ld_slow_path。
+中间码翻译成host指令在tcg_gen_code函数里，tcg_gen_code一路调用下去，会到
+tcg/riscv/tcg-target.c.inc里的tcg_out_qemu_ld_slow_path。
 ```
   tcg_gen_code
        /* tcg/tcg-ldst.c.inc */
     -> tcg_out_ldst_finalize
+         /* tcg/riscv/tcg-target.c.inc里的这个函数为例 */
       -> tcg_out_qemu_ld_slow_path
+           /* 各种不同数据宽度的load函数被定义到qemu_ld_helpers这个表里 */
         -> qemu_ld_helpers
-	     /* 取ldul为例子 */
+	     /* 取ldul为例子，这是一个公共函数，定义在accel/tcg/cputlb */
 	  -> helper_le_ldul_mmu
-	       /* accel/tcg/cputlb.c */
 	    -> load_helper
 ```
-在load_helper里做如上提到的load的各种硬件模拟。load_helper里会与没有找到tlb的情况
+在load_helper里做如上提到的load的各种硬件模拟。load_helper里对于没有找到tlb的情况
 会调用体系构架相关的回调函数做tlb fill：
 ```
   tlb_fill
