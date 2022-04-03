@@ -166,7 +166,7 @@ tcg后端解码细节分析
 qemu user mode分析 #
 qemu tcg branch #
 qemu tcg atomci #
-qemu tcg load/store缺页
+qemu tcg load/store缺页         to post
 qemu模拟系统指令 #
 qemu tcg/kvm模型
 qemu atomic互斥区
@@ -175,5 +175,10 @@ qemu tb代码和cpu状态的关系
 global TCGv存在cpu里，TCGTemps存在TCGContext里，TCGContext是tb执行的时候动态
 生成的。atomic互斥区只锁了tb执行，没有锁翻译。chained TB有可能一直chained。
 goto_tb只能是固定地址，lookup可以是动态变的。
-riscv head.S和entry.S代码分析
+riscv head.S和entry.S代码分析    to post
 qemu irq
+elf格式分析以及相关工具          to do
+qemu opensbi以及加载内核的逻辑   to do
+中庸总结		         to do
+riscv系统构架总结		 to do
+内核初始化阶段初始页表		 to do

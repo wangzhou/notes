@@ -63,11 +63,16 @@ ENTRY(_start)
 #endif
 
 	.balign 8
+	/*
+	 * n: M mode下MMU是不开的，所以，一般内核都不开这个，而是S mode，
+	 *    一般是bios跑在M mode，在进入内核的时候把机器切到S mode。
+	 */
 #ifdef CONFIG_RISCV_M_MODE
 	/* Image load offset (0MB) from start of RAM for M-mode */
 	.dword 0
 #else
 #if __riscv_xlen == 64
+	/* n: 把Image加载到内存2MB偏移处 */
 	/* Image load offset(2MB) from start of RAM */
 	.dword 0x200000
 #else
@@ -225,7 +230,10 @@ setup_trap_vector:
 END(_start)
 
 ENTRY(_start_kernel)
-	/* n: 配置相关的CSR寄存器，mask掉中断， */
+	/*
+	 * n: 配置相关的CSR寄存器，mask掉中断，调试的时候注意，M mode的相关bit
+	 *    是清不掉的
+	 */
 	/* Mask all interrupts */
 	csrw CSR_IE, zero
 	csrw CSR_IP, zero
@@ -237,7 +245,7 @@ ENTRY(_start_kernel)
 	/* Reset all registers except ra, a0, a1 */
 	call reset_regs
 
-	/* n: pmp的操作 */
+	/* n: pmp的操作，pmp是M mode的地址保护机制，S mode的时候用MMU */
 	/*
 	 * Setup a PMP to permit access to all of memory.  Some machines may
 	 * not implement PMPs, so we set up a quick trap handler to just skip
@@ -272,7 +280,8 @@ pmp_done:
 	/*
 	 * n: gp是riscv的一个全局寄存器，这里把__global_pointer$这个符号的地址
 	 *    存到gp里也是一个编译器的优化手段，编译器后续可以使用这个地址做地址
-	 *    索引，编译器会自动在编译生成的汇编中使用gp。
+	 *    索引，编译器会自动在编译生成的汇编中使用gp。在MMU起来之前，还没法
+	 *    使用虚拟地址，所以就使用相对gp的相对寻址方式。
 	 */
 	la gp, __global_pointer$
 .option pop
@@ -297,12 +306,13 @@ pmp_done:
 
 	/* The lottery system is only required for spinwait booting method */
 #ifndef CONFIG_XIP_KERNEL
-	/* n: hart_lottery是外部定义的一个原子变量 */
+	/* n: hart_lottery是外部定义的一个原子变量，在arch/riscv/kernel/setup.c */
 	/* Pick one hart to run the main boot sequence */
 	la a3, hart_lottery
 	li a2, 1
+	/* n: 把a2的值和a3地址上的值相加，并存入a3地址，a3地址上原来的值写入a3 */
 	amoadd.w a3, a2, (a3)
-	/* n: a3不是0就要跳转，这里a3是1，会跳进来，应该走下面的主流程啊？*/
+	/* n: a3不是0就要跳转，这里a3在上一步中更新成0，所以下面走到bss清理的逻辑 */
 	bnez a3, .Lsecondary_start
 
 #else
@@ -340,12 +350,12 @@ clear_bss:
 	blt a3, a4, clear_bss
 clear_bss_done:
 #endif
-	/* n：上面不是选了cpu id放到a3里了么? 这里是和bootload的约定么？*/
+	/* n：a0放cpu id, a1放DTB的地址，这个从openSBI代码里可以看到 */
 	/* Save hart ID and DTB physical address */
 	mv s0, a0
 	mv s1, a1
 
-	/* n: 哪里初始化boot_cpu_hartid这个量的？*/
+	/* n: boot_cpu_hartid全局变量，初始化是0 */
 	la a2, boot_cpu_hartid
 	/* n: 这个是XIP用来调整地址的，没有XIP这个是空，可以不看 */
 	XIP_FIXUP_OFFSET a2
