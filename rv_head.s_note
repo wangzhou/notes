@@ -101,15 +101,36 @@ pe_head_start:
 .align 2
 #ifdef CONFIG_MMU
 relocate:
+	/* n: 把kernel_map这个符号的地址放到a1里 */
 	/* Relocate return address */
 	la a1, kernel_map
 	XIP_FIXUP_OFFSET a1
-	/* n: 把内核Image的虚拟地址放到a1里 */
+	/*
+	 * n: 把内核Image的虚拟地址放到a1里，kernle_map.virt_addr这个地址在setup_vm
+	 *    里确定，是KERNEL_LINK_ADDR，一般的就是0xffffffff80000000这个地址，
+	 *    就是内核的起始地址，在Documentation/riscv/vm-layout.rst里也有说明。
+	 */
 	REG_L a1, KERNEL_MAP_VIRT_ADDR(a1)
+	/*
+	 * n: _start这个符号的地址是在内核链接脚本里定义的arch/riscv/kernel/vmlinux.lds.S:
+	 *
+	 *    . = LOAD_OFFSET;
+	 *    _start = .;
+	 *
+	 *    LOAD_OFFSET是KERNEL_LINK_ADDR的封装。但是，这里加载到a2里的值并不是
+	 *    链接脚本里静态定义的值，la是一个伪指令，要被编译器替换成auipc和ld
+	 *    指令，编译器处理auip时使用地址无关的处理方式，当前PC和_start符号的
+	 *    相对偏移是编译时已知的，所以，地址无关的处理方式使用和当前PC的偏移
+	 *    得到运行是_start的具体地址。这里还没有开MMU，得到的是_start的物理地址，
+	 *    也就是内核被加载到的物理地址。qemu virt机器上，这个地址是0x80200000
+	 *
+	 *    一个符号是不是位置无关(PIC)，可以由编译器的选项控制，比如-fPIC，从
+	 *    汇编指令的角度看，la、auipc编译出来的就是位置无关的代码。
+	 */
 	la a2, _start
-	/* n: a1放内核线性地址空间虚拟地址和物理地址的偏移 */
+	/* n: a1放内核Image加载虚拟地址和物理地址的差值 */
 	sub a1, a1, a2
-	/* n: 调用relocate的时候ra放的物理地址，这里加一个偏移的到对应的虚拟地址 */
+	/* n: 调用relocate的时候ra放的物理地址，这里加一个偏移得到对应的虚拟地址 */
 	add ra, ra, a1
 
 	/* Point stvec to virtual address of intruction after satp write */
