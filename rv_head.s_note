@@ -146,7 +146,13 @@ relocate:
 	REG_L a1, 0(a1)
 	or a2, a2, a1
 
-	/* n: 这几个pg_dir的逻辑，先看trampoline_pg_dir和early_pg_dir */
+	/*
+	 * n: 这几个pg_dir的逻辑，先看trampoline_pg_dir和early_pg_dir。看setup_vm
+	 *    里的逻辑，trampoline_pg_dir的页表只是覆盖了内核Image的开头2MB。
+	 *
+	 *    这里先把trampoline_pg_dir配置成当前页表。SATP是页表的基地址寄存器，
+	 *    页表相关信息在这里配置，包括：页表的种类、ASID和页表基地址。
+	 */
 	/*
 	 * Load trampoline page directory, which will cause us to trap to
 	 * stvec if VA != PA, or simply fall through if VA == PA.  We need a
@@ -158,9 +164,22 @@ relocate:
 	srl a0, a0, PAGE_SHIFT
 	or a0, a0, a1
 	sfence.vma
+	/* n: 这条指令后MMU就生效了，CPU访问内存都要翻译下 */
 	csrw CSR_SATP, a0
 .align 2
 1:
+	/*
+	 * n: CPU在当前的PC上取这条指令的时候，会发生异常。CPU的执行逻辑是，先
+	 *    尝试把当前PC(还是物理地址)做翻译，trampoline_pg_dir页表里没有PC
+	 *    相关的页表项导致CPU异常，CPU跳到异常向量入口执行指令，这个异常向量
+	 *    的地址就是上面配置到CSR_TVEC里的值，上面在配置的时候已经把label 1
+	 *    的虚拟地址计算出来，并把这个虚拟地址写到了CSR_TVEC。因为已经打开
+	 *    MMU，CPU在执行异常向量地址上的指令时，先通过MMU得到label 1的物理地
+	 *    址，然后再次执行下面的指令。
+	 *
+	 *    需要注意的是，当前PC已经是虚拟地址了，这样相对寻址得到.Lsecondary_park
+	 *    的虚拟地址，a0里是.Lsecondary_park的虚拟地址。
+	 */
 	/* Set trap vector to spin forever to help debug */
 	la a0, .Lsecondary_park
 	csrw CSR_TVEC, a0
@@ -168,6 +187,7 @@ relocate:
 	/* Reload the global pointer */
 .option push
 .option norelax
+	/* n: 同理，这里重新加载下__global_pointer$，gp里放的是虚拟地址了 */
 	la gp, __global_pointer$
 .option pop
 
@@ -177,9 +197,14 @@ relocate:
 	 * the first superpage.  Fetching the fence is guaranteed to work
 	 * because that first superpage is translated the same way.
 	 */
+	/* n: 把页表改成early_pg_dir，这个页表覆盖了全部内核Image和DT的内存 */
 	csrw CSR_SATP, a2
 	sfence.vma
 
+	/*
+	 * n: 跳转到ra，call relocate的下一条指令的地址，这个地址已经在上面被
+	 *    改成虚拟地址。
+	 */
 	ret
 #endif /* CONFIG_MMU */
 #ifdef CONFIG_SMP
