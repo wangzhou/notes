@@ -146,7 +146,7 @@ relocate:
 	REG_L a1, 0(a1)
 	or a2, a2, a1
 
-	/* n: 这几个pg_dir的逻辑？*/
+	/* n: 这几个pg_dir的逻辑，先看trampoline_pg_dir和early_pg_dir */
 	/*
 	 * Load trampoline page directory, which will cause us to trap to
 	 * stvec if VA != PA, or simply fall through if VA == PA.  We need a
