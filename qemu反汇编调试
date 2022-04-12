@@ -1,0 +1,37 @@
+qemu -d in_asm反汇编支持的逻辑
+
+-v0.1 2022.4.12 Sherlock init
+
+简介：本文介绍qemu使用-d in_asm输出guest指令反汇编的相关代码逻辑，本文以riscv
+      构架为例分析。
+
+
+反汇编的代码在translator_loop函数里，就是说反汇编只是在翻译的时候输出，如果一个
+tb多次被执行，后面执行的时候将没有反汇编输出。大概的调用流程是：
+```
+    translator_loop
+         /* target/riscv/translate.c里的riscv_tr_disas_log */
+      -> ops->disas_log(db, cpu)
+           /*
+	    * 可见反汇编是以tb为单位进行，当-singlestep时，一个tb包含一条指令，
+	    * 反汇编的就是一条指令。
+	    */
+        -> log_target_disas(cpu, dcbase->pc_first, dcbase->tb->size)
+	     /*
+	      * 这个函数先创建反汇编需要的上下文，然后循环解析tb里的每个指令，
+              * 针对每个指令调用提前注册的解析函数，输出反汇编的内容，注册是通过
+	      * 调用cc里的disas_set_info，riscv上这个函数在target/riscv/cpu.c里
+	      * 注册，回调函数是riscv_cpu_disas_set_info，实际调用的反汇编函数是
+	      * disas/riscv.c里的print_insn_riscv
+	      */
+	  -> target_disas(logfile->fd, cpu, start, len)
+	    -> s.info.print_insn(addr, &s.info)
+	       /*
+	        * 实际调用print_insn_riscv，这里以rv64为例, 这个函数提取一条指令，
+		* 然后逐步解析指令的操作码、操作数、处理压缩指令，然后打印。
+		* 在输出打印格式的时候，使用的技巧是先提取待输出的各个量，然后
+		* 按照每个指令的定义格式输出反汇编。
+	        */
+	    -> print_insn_riscv(memaddr, info, rv64)
+              -> disasm_inst(buf, sizeof(buf), isa, memaddr, inst)
+```
