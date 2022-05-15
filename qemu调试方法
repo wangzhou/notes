@@ -4,21 +4,25 @@
       时CPU各个寄存器的变化。本文分析相关的使用方法和qemu代码逻辑。
 
       本文以一个简单的例子说明使用方式，以riscv平台为基础。以qemu user mode为例
-      说明，system mode是一样的。
+      说明，system mode是一样的。分析中使用的qemu的版本是5.1.50。
       
 
 基础介绍
 ---------
 
  qemu-riscv64 -d help可以看到支持的各种debug选项，我们一般用的有in_asm/exec/cpu
- 以及singlestep，其他的参数，比如，out_asm是翻译后得到的host上的汇编，op是qemu的
+ 以及singlestep等，其他的参数，比如，out_asm是翻译后得到的host上的汇编，op是qemu的
  中间码，这些都和qemu自己的调试有关。
 
  我们看下前面的几个：in_asm是输出guest的汇编，exec是记录每个翻译块执行的trace，
  cpu是在执行一个翻译块之前打印当前的CPU各个寄存器的值，在没有配置singlestep的时候，
  上面的打印都是和翻译块(TB)相关的，singlestep可以看到每条guest指令模拟执行后的各种
  调试信息。上面的调试配置可以配合使用，使用-D file，可以输出到文件file，需要注意
- 的是调试信息往往比较多。
+ 的是调试信息往往比较多。如果是用user mode调试小的程序，输出的log的大小还可以接受，
+ 如果，比如你用system mode起Linux内核的时候加上了上面的调试选项，运行的速度就会
+ 很慢，因为要输出的log太多了，qemu还有-dfilter可以只输出特定地址区间的log，这样就
+ 可以先不加-dfilter运行一遍，大概知道需要debug的地方，然后再加上-dfilter仔细的跟踪。
+ qemu里还可以用-d mmu去跟踪mmu翻译，用-d int去跟踪中断和异常。
 
 举个例子
 ---------
@@ -188,7 +192,66 @@ IN: test_add
 ```
  如上，因为显示的寄存器是执行本条指令之前的寄存器的数值，比如，test_add的第一条指令
  addi sp,sp,-32对sp寄存器的更新要在test_add的第二个指令(sd s0,24(sp))的打印log里
- 才能看到：x0/zero 0000000000000000 x1/ra 000000000001046c x2/sp 0000004000800320 x3/gp 0000000000071028
+ 才能看到：x0/zero 0000000000000000 x1/ra 000000000001046c x2/sp 0000004000800320 x3/gp 0000000000071028。
+ 如果你想用qemu跟踪指令指令的流程，只要用脚本处理下如上的-singlestep的反汇编log就好，
+ 具体的处理方式可以参考下面代码分析中的介绍。
+
+ 我们加上-dfilter运行下qemu-riscv64 -d in_asm,exec,cpu -dfilter 0x10430+0x26 -D ./log a.out
+ dfilter的这种写法表示只输出pc在[0x10430, 0x10430+0x26]区间的log，这段区间是test_add
+ 函数的代码。全部log就只有：
+```
+----------------
+IN: test_add
+0x0000000000010430:  1101              addi            sp,sp,-32
+0x0000000000010432:  ec22              sd              s0,24(sp)
+0x0000000000010434:  1000              addi            s0,sp,32
+0x0000000000010436:  87aa              mv              a5,a0
+0x0000000000010438:  872e              mv              a4,a1
+0x000000000001043a:  fef42623          sw              a5,-20(s0)
+0x000000000001043e:  87ba              mv              a5,a4
+0x0000000000010440:  fef42423          sw              a5,-24(s0)
+0x0000000000010444:  fec42703          lw              a4,-20(s0)
+0x0000000000010448:  fe842783          lw              a5,-24(s0)
+0x000000000001044c:  9fb9              addw            a5,a5,a4
+0x000000000001044e:  2781              sext.w          a5,a5
+0x0000000000010450:  853e              mv              a0,a5
+0x0000000000010452:  6462              ld              s0,24(sp)
+0x0000000000010454:  6105              addi            sp,sp,32
+0x0000000000010456:  8082              ret             
+
+Trace 0: 0xffffa00265c0 [0000000000000000/0000000000010430/0x6100] test_add
+ pc       0000000000010430
+ x0/zero 0000000000000000 x1/ra 000000000001046c x2/sp 0000004000800160 x3/gp 0000000000071028
+ x4/tp 0000000000072710 x5/t0 0000000000072000 x6/t1 2f2f2f2f2f2f2f2f x7/t2 0000000000072000
+ x8/s0 0000004000800180 x9/s1 00000000000109da x10/a0 0000000000000001 x11/a1 0000000000000002
+ x12/a2 00000040008002d8 x13/a3 0000000000000000 x14/a4 00000040008001a8 x15/a5 0000000000010458
+ x16/a6 0000000000071140 x17/a7 0112702f5b5a4001 x18/s2 0000000000000000 x19/s3 0000000000000000
+ x20/s4 0000000000000000 x21/s5 0000000000000000 x22/s6 0000000000000000 x23/s7 0000000000000000
+ x24/s8 0000000000000000 x25/s9 0000000000000000 x26/s10 0000000000000000 x27/s11 0000000000000000
+ x28/t3 ffffffffffffffff x29/t4 000000000006ead0 x30/t5 0000000000000000 x31/t6 0000000000072000
+```
+ dfilter参数还有其他的描述格式，从qemu的自测试代码可以看到具体的使用方式：qemu/tests/test-logging.c。
+ 还可以用: 基地址-区间大小、基地址..结尾地址，用逗号分开可以加多段不同的地址，比如：
+ -dfilter 0x1000+0x100,0x2100-0x100,0x3000..0x3100
+
+ 加上-d mmu可以打印出qemu上MMU相关的行为，打印大概是这样的：
+```
+riscv_cpu_tlb_fill ad ffffffe001003fe0 rw 0 mmu_idx 1
+riscv_cpu_tlb_fill address=ffffffe001003fe0 ret 0 physical 0000000081203fe0 prot 3
+```
+ 上面表示MMU要查ffffffe001003fe0对应的物理地址，并且查到的结果是0000000081203fe0，
+ rw后面的数字表示访问类型，0表示数据load，1表示数据store，2表示指令fetch，ret后面
+ 的数字，0表示翻译成功，1表示翻译失败。
+
+ 加上-d int可以打印中断和异常的log，但是在5.1.50的版本上，这个打印还没有加上，在
+ 7.0.50上, 这个打印大概是这样的：
+```
+riscv_cpu_do_interrupt: hart:0, async:0, cause:0000000000000009, epc:0xffffffe00020455e, tval:0x0000000000000000, desc=supervisor_ecall
+[...]
+riscv_cpu_do_interrupt: hart:0, async:1, cause:0000000000000005, epc:0xffffffe000201558, tval:0x0000000000000000, desc=s_timer
+```
+ hart表示异常或中断的cpu，async后面的数据，0表示异常，1表示中断，cause/epc/tval
+ 就是相关寄存器中的值，最后一个desc是一个描述异常或中断的字符串。
 
 qemu代码分析
 -------------
@@ -200,7 +263,12 @@ qemu代码分析
  exec和cpu的入口在：cpu_tb_exec的log_cpu_exec里，可见是在TB执行的时候打印。但是，
  qemu为了提高执行效率，TB和TB之间可以直接跳过去，这个叫chained TB，而log_cpu_exec
  是在翻译-执行的循环里加的打印，所以，要跟踪程序执行流程，必须断开qemu里的chained
- TB，所以参数变成了：-d in_asm,cpu,nochain -singlestep
+ TB，所以参数变成了：-d in_asm,cpu,nochain -singlestep，如果只要得到程序的执行流程，
+ cpu可以去掉，就变成了-d in_asm,exec,nochain --singlestep, in_asm可以打出反汇编，
+ 但是，只是翻译的时候打一下，随后执行的时候不会打印，exec + nochain可以打印具体执行
+ 的流程，但是没有反汇编，所以，我们可以对得到的log在exec的log下插入对应的汇编代码，
+ 再把所有exec对应的汇编代码提取到一个文件里就得到了实际指令执行流程，可以写一个脚本
+ 搞定这个事情。
 
  qemu里有两个singlestep相关的flag，一个是全局变量singlestep，一个是cpu结构体里的
  singlestep_enabled。后者应该和gdb单步运行有关系，不是我们考虑东西。singlestep
@@ -211,5 +279,5 @@ qemu代码分析
  可以打印trace的。
 
  可以看到，singlestep和nochain改变了qemu翻译执行的粒度，效率上是变差了很多的。
- 实际在qemu system mode上用-d in_asm,cpu -singlestep跑，会慢的一塌糊涂，可以在qemu
- 里加一点代码限定要trace的地址范围。
+ 实际在qemu system mode上用-d in_asm,cpu -singlestep跑，会慢的一塌糊涂，这个时候
+ 就可以用-dfilter指定输出log的指令地址区间。
