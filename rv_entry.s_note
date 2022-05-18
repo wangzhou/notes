@@ -11,22 +11,37 @@ riscv entry.S
 .set resume_kernel, restore_all
 #endif
 
+/* n: 在head.S里配置给CSR_TVEC */
 ENTRY(handle_exception)
 	/*
 	 * If coming from userspace, preserve the user thread pointer and load
 	 * the kernel thread pointer.  If we came from the kernel, the scratch
 	 * register will contain 0, and we should continue on the current TP.
 	 */
+	/* n: 交换tp寄存器和scratch寄存器里的值? */
 	csrrw tp, CSR_SCRATCH, tp
+	/* n: tp不为0，异常来自用户态，需要保存上下文 */
 	bnez tp, _save_context
 
 _restore_kernel_tpsp:
+	/*
+	 * n: csrr伪指令，把scratch寄存器的值写入tp，上面为了判断是否在内核把tp
+	 * 的值和CSR_SCRATCH的值做了交换。
+	 */
 	csrr tp, CSR_SCRATCH
+	/* n: 把内核sp保存到内核thread_info上 */
 	REG_S sp, TASK_TI_KERNEL_SP(tp)
 _save_context:
+	/* n: 保存sp到thread_info用户态指针的位置 */
 	REG_S sp, TASK_TI_USER_SP(tp)
+	/* n: sp换成内核栈 */
 	REG_L sp, TASK_TI_KERNEL_SP(tp)
+	/* n: sp指向内核栈的栈顶 */
 	addi sp, sp, -(PT_SIZE_ON_STACK)
+	/*
+	 * n: 下面的一段代码把各个系统寄存器保存到struct pt_regs，看来这个结构放在
+	 * 内核栈的栈顶的位置。
+	 */
 	REG_S x1,  PT_RA(sp)
 	REG_S x3,  PT_GP(sp)
 	REG_S x5,  PT_T0(sp)
@@ -64,14 +79,18 @@ _save_context:
 	 * Disable the FPU to detect illegal usage of floating point in kernel
 	 * space.
 	 */
+	/* n: 配置先放到t0寄存器里 */
 	li t0, SR_SUM | SR_FS
 
+	/* n: 上面已经保存了寄存器现成，下面可以使用系统寄存器了，s0保存用户态sp */
 	REG_L s0, TASK_TI_USER_SP(tp)
+	/* n: 把中断异常相关的csr寄存器读出来 */
 	csrrc s1, CSR_STATUS, t0
 	csrr s2, CSR_EPC
 	csrr s3, CSR_TVAL
 	csrr s4, CSR_CAUSE
 	csrr s5, CSR_SCRATCH
+	/* n: 把中断异常相关的csr寄存器以及用户态sp保存到栈上 */
 	REG_S s0, PT_SP(sp)
 	REG_S s1, PT_STATUS(sp)
 	REG_S s2, PT_EPC(sp)
@@ -91,10 +110,12 @@ _save_context:
 	la gp, __global_pointer$
 .option pop
 
+	/* n: todo */
 #ifdef CONFIG_TRACE_IRQFLAGS
 	call trace_hardirqs_off
 #endif
 
+	/* n: todo */
 #ifdef CONFIG_CONTEXT_TRACKING
 	/* If previous state is in user mode, call context_tracking_user_exit. */
 	li   a0, SR_PP
@@ -108,14 +129,20 @@ skip_context_tracking:
 	 * MSB of cause differentiates between
 	 * interrupts and exceptions
 	 */
+	/* n: 最高位为1会解释为一个负数，如果是异常最高位为0，会跳到lable 1f */
 	bge s4, zero, 1f
 
+	/* n: 如果是中断，会走到这里，先把返回地址保存到ra */
 	la ra, ret_from_exception
 
 	/* Handle interrupts */
+	/* n: 上面可以知道sp就是pt_regs的地址，a0存放pt_regs的地址 */
 	move a0, sp /* pt_regs */
+	/* n: a1存handle_arch_irq的地址 */
 	la a1, handle_arch_irq
+	/* n: ? */
 	REG_L a1, (a1)
+	/* n: ra是下一条指令的地址？*/
 	jr a1
 1:
 	/*
@@ -123,10 +150,16 @@ skip_context_tracking:
 	 * state of SR_PIE in m/sstatus.
 	 */
 	andi t0, s1, SR_PIE
+	/*
+	 * n: 如果为0，也就是PIE位没有pending的中断才继续向下跳？如果有pending的
+	 * 的中断，我们继续检测是不是ebreak异常，如果是ebreak异常，跳到下面lable 1，
+	 * 如果不是ebreak异常，会走到csrs CSR_STATUS, SR_IE，
+	 */
 	beqz t0, 1f
 	/* kprobes, entered via ebreak, must have interrupts disabled. */
 	li t0, EXC_BREAKPOINT
 	beq s4, t0, 1f
+	/* n: todo */
 #ifdef CONFIG_TRACE_IRQFLAGS
 	call trace_hardirqs_on
 #endif
@@ -139,19 +172,25 @@ skip_context_tracking:
 	beq s4, t0, handle_syscall
 
 	/* Handle other exceptions */
+	/* n: 向左移动3bit就是得到函数指针的偏移 */
 	slli t0, s4, RISCV_LGPTR
 	la t1, excp_vect_table
 	la t2, excp_vect_table_end
 	move a0, sp /* pt_regs */
+	/* n: t1是异常向量表的基地址，再加上对应异常处理函数的偏移，t0的值就是对应异常处理函数的地址 */
 	add t0, t1, t0
 	/* Check if exception code lies within bounds */
+	/* n: 计算的异常处理函数的地址超出了异常向量表的结尾 */
 	bgeu t0, t2, 1f
+	/* n: ? */
 	REG_L t0, 0(t0)
+	/* n: ? */
 	jr t0
 1:
 	tail do_trap_unknown
 
 handle_syscall:
+	/* n: todo */
 #ifdef CONFIG_RISCV_M_MODE
 	/*
 	 * When running is M-Mode (no MMU config), MPIE does not get set.
@@ -161,6 +200,7 @@ handle_syscall:
 	 */
 	csrs CSR_STATUS, SR_IE
 #endif
+	/* n: todo */
 #if defined(CONFIG_TRACE_IRQFLAGS) || defined(CONFIG_CONTEXT_TRACKING)
 	/* Recover a0 - a7 for system calls */
 	REG_L a0, PT_A0(sp)
@@ -172,7 +212,8 @@ handle_syscall:
 	REG_L a6, PT_A6(sp)
 	REG_L a7, PT_A7(sp)
 #endif
-	 /* save the initial A0 value (needed in signal handlers) */
+	/* save the initial A0 value (needed in signal handlers) */
+	/* n: ? */
 	REG_S a0, PT_ORIG_A0(sp)
 	/*
 	 * Advance SEPC to avoid executing the original
