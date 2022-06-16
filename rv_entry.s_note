@@ -32,7 +32,7 @@ _restore_kernel_tpsp:
 	/* n: 把内核sp保存到内核thread_info上 */
 	REG_S sp, TASK_TI_KERNEL_SP(tp)
 _save_context:
-	/* n: 保存sp到thread_info用户态指针的位置 */
+	/* n: 保存sp到thread_info用户态指针的位置，如果是就在内核态，那么把内核栈sp保存到了thread_info用户态栈指针的位置 */
 	REG_S sp, TASK_TI_USER_SP(tp)
 	/* n: sp换成内核栈 */
 	REG_L sp, TASK_TI_KERNEL_SP(tp)

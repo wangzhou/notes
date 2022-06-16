@@ -1,7 +1,8 @@
 -v0.1 2022.1.30 init
 
-简介：本文分析qemu tcg里关于load/store的流程，以riscv平台为分析对象。
+简介：本文分析qemu tcg里关于load/store的流程，以riscv平台为分析对象。qemu的版本是5.1.5。
 
+我们从一个普通的load指令的模拟代码入手分析。
 /* qemu/target/riscv/insn_trans/trans_rvi.c.inc */
 ```
   trans_lw
@@ -12,23 +13,34 @@
 如上，load操作的中间码是用gen_ldst_i64生成的，中间码的op code是INDEX_op_qemu_ld_i64。
 
 正常的流程，翻译成中间码后，还要有中间码翻译成host指令的过程，qemu把load/store里
-处理tlb访问、页表page walk、发起缺页异常的这些操作插到了把load的中间码翻译成host
-指令的过程中。
+处理tlb访问、页表page walk、发起缺页异常的这些操作插到了把中间码翻译成host指令的过程中。
+接着上面INDEX_op_qemu_ld_i64往下分析。
 
 中间码翻译成host指令在tcg_gen_code函数里，tcg_gen_code一路调用下去，会到
 tcg/riscv/tcg-target.c.inc里的tcg_out_qemu_ld_slow_path。
 ```
   tcg_gen_code
-       /* tcg/tcg-ldst.c.inc */
+       /* tcg/riscv/tcg-target.c.inc, 这里我们假设host平台也是riscv */
+    -> tcg_out_op
+         /* 可以看到这里分了有MMU和没有MMU的情况 */
+      -> tcg_out_qemu_ld
+           /* 有MMU的情况 */
+        -> tcg_out_tlb_load
+	-> tcg_out_qemu_ld_direct
+	-> add_qemu_ldst_label
+           /* 没有有MMU的情况, 计算地址后直接用tcg_out_qemu_ld_direct */
+	   /* 这里没有看到gueset做tlb fill的代码 */
+       /* tcg/tcg-ldst.c.inc, 为啥最后面才插入慢速路径代码? */
     -> tcg_out_ldst_finalize
-         /* tcg/riscv/tcg-target.c.inc里的这个函数为例 */
       -> tcg_out_qemu_ld_slow_path
            /* 各种不同数据宽度的load函数被定义到qemu_ld_helpers这个表里 */
         -> qemu_ld_helpers
 	     /* 取ldul为例子，这是一个公共函数，定义在accel/tcg/cputlb */
 	  -> helper_le_ldul_mmu
+	       /* accel/tcg/cputlb.c */
 	    -> load_helper
 ```
+
 在load_helper里做如上提到的load的各种硬件模拟。load_helper里对于没有找到tlb的情况
 会调用体系构架相关的回调函数做tlb fill：
 ```
@@ -36,5 +48,6 @@ tcg/riscv/tcg-target.c.inc里的tcg_out_qemu_ld_slow_path。
        /* target/riscv/cpu.c */
     -> cc->tcg_ops_tlb_fill risv下的riscv_cpu_tlb_fill
          /* 先做page walk，翻译成功自然可以，翻译失败报缺页异常 */
+	 /* todo: 两级翻译 */
       -> riscv_raise_exception
 ```
