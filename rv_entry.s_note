@@ -2,11 +2,13 @@ riscv entry.S
 ==============
 
 -v0.1 2022.5.12 sherlock init
+-v0.2 2022.6.28 sherlock continue
 
 简介：本文分析Linux内核里riscv构架下的entry.S这个文件，内核代码使用的版本是5.12-rc8。
       采用直接在代码里加注释的方式写分析的内容，注释用“n:”开头。
 
 ```
+/* n: .set是什么意思？*/
 #if !IS_ENABLED(CONFIG_PREEMPTION)
 .set resume_kernel, restore_all
 #endif
@@ -18,7 +20,7 @@ ENTRY(handle_exception)
 	 * the kernel thread pointer.  If we came from the kernel, the scratch
 	 * register will contain 0, and we should continue on the current TP.
 	 */
-	/* n: 交换tp寄存器和scratch寄存器里的值? */
+	/* n: 交换tp寄存器和scratch寄存器里的值 */
 	csrrw tp, CSR_SCRATCH, tp
 	/* n: tp不为0，异常来自用户态，需要保存上下文 */
 	bnez tp, _save_context
@@ -26,7 +28,7 @@ ENTRY(handle_exception)
 _restore_kernel_tpsp:
 	/*
 	 * n: csrr伪指令，把scratch寄存器的值写入tp，上面为了判断是否在内核把tp
-	 * 的值和CSR_SCRATCH的值做了交换。
+	 * 的值和CSR_SCRATCH的值做了交换。这里恢复tp寄存器。
 	 */
 	csrr tp, CSR_SCRATCH
 	/* n: 把内核sp保存到内核thread_info上 */
@@ -36,7 +38,7 @@ _save_context:
 	REG_S sp, TASK_TI_USER_SP(tp)
 	/* n: sp换成内核栈 */
 	REG_L sp, TASK_TI_KERNEL_SP(tp)
-	/* n: sp指向内核栈的栈顶 */
+	/* n: sp指向内核栈的栈顶，那么这个sp是栈的基地址？*/
 	addi sp, sp, -(PT_SIZE_ON_STACK)
 	/*
 	 * n: 下面的一段代码把各个系统寄存器保存到struct pt_regs，看来这个结构放在
@@ -79,12 +81,12 @@ _save_context:
 	 * Disable the FPU to detect illegal usage of floating point in kernel
 	 * space.
 	 */
-	/* n: 配置先放到t0寄存器里 */
+	/* n: 配置先放到t0寄存器里，SR_SUM为1容许S mode接入U mode地址，反之不容许 */
 	li t0, SR_SUM | SR_FS
 
-	/* n: 上面已经保存了寄存器现成，下面可以使用系统寄存器了，s0保存用户态sp */
+	/* n: 上面已经保存了寄存器现场，下面可以使用系统寄存器了，s0保存用户态sp */
 	REG_L s0, TASK_TI_USER_SP(tp)
-	/* n: 把中断异常相关的csr寄存器读出来 */
+	/* n: 把中断异常相关的csr寄存器读出来, ~t0 & csr_status旧值，然后写入csr_status，相当于清SR_SUM和SR_FS */
 	csrrc s1, CSR_STATUS, t0
 	csrr s2, CSR_EPC
 	csrr s3, CSR_TVAL
@@ -140,9 +142,9 @@ skip_context_tracking:
 	move a0, sp /* pt_regs */
 	/* n: a1存handle_arch_irq的地址 */
 	la a1, handle_arch_irq
-	/* n: ? */
+	/* n: a1存成handle_arch_irq的第一条指令？*/
 	REG_L a1, (a1)
-	/* n: ra是下一条指令的地址？*/
+	/* n: 返回地址已经配置到ra里 */
 	jr a1
 1:
 	/*
@@ -154,6 +156,12 @@ skip_context_tracking:
 	 * n: 如果为0，也就是PIE位没有pending的中断才继续向下跳？如果有pending的
 	 * 的中断，我们继续检测是不是ebreak异常，如果是ebreak异常，跳到下面lable 1，
 	 * 如果不是ebreak异常，会走到csrs CSR_STATUS, SR_IE，
+	 *
+	 * 注意，这里是在处理异常。硬件在处理中断或异常时会改变SPIE/SPP/SIE的值。
+	 * SPP会保存中断或异常时CPU的mode，SPIE会保存sstatus里的SIE值，SIE表示S
+	 * mode中断是否被enable，最后硬件会把关中断就是把SIE配置成0。
+	 *
+	 * 总结下，硬件在CPU进入异常或中断处理时，是第一时间把全局中断关掉的。
 	 */
 	beqz t0, 1f
 	/* kprobes, entered via ebreak, must have interrupts disabled. */
@@ -163,16 +171,34 @@ skip_context_tracking:
 #ifdef CONFIG_TRACE_IRQFLAGS
 	call trace_hardirqs_on
 #endif
+	/*
+	 * n: csrs是csrrs x0, csr, rs, 意思是把csr的值存入x0, csr的旧值和rs或写入csr。
+	 * 这里是把S mode全局中断打开。注意，上面的逻辑是如果检测到是ebreak异常
+	 * 是直接跳过开中断的。
+	 *
+	 * 总结下这里的逻辑，首先看有没有pending的中断，如果没有pending的中断，还
+	 * 是保持关中断的状态，如果有pending的中断，我们看看是不是ebreak异常，如果
+	 * 是ebreak异常，就是说ebreak异常的时候同时有中断进来，pending住了，因为
+	 * 我们要处理ebreak异常，只能继续pending中断，因为一旦打开中断，就会立即
+	 * 响应中断，如果不是ebreak异常，就打开中断(放这个pengding中断进来)，这个
+	 * 时候因为有pending中断，硬件会马上去响应中断。
+	 *
+	 * 再总结下，异常处理的时候，如果有中断来，除了ebreak异常不能被打断，其他
+	 * 异常都可以被中断打断。这里如果被中断打断，就会再进一层去处理中断，中断
+	 * 处理完后返回label 1。
+	 */
 	csrs CSR_STATUS, SR_IE
 
+	/* n: 开始处理异常，先配置返回地址 */
 1:
 	la ra, ret_from_exception
 	/* Handle syscalls */
 	li t0, EXC_SYSCALL
+	/* n: 如果是ecall异常就跳到系统调用的地方处理 */
 	beq s4, t0, handle_syscall
 
 	/* Handle other exceptions */
-	/* n: 向左移动3bit就是得到函数指针的偏移 */
+	/* n: 向左移动3bit就是得到函数指针的偏移，其他异常的入口函数排到了excp_vect_table这个表里 */
 	slli t0, s4, RISCV_LGPTR
 	la t1, excp_vect_table
 	la t2, excp_vect_table_end
@@ -182,13 +208,14 @@ skip_context_tracking:
 	/* Check if exception code lies within bounds */
 	/* n: 计算的异常处理函数的地址超出了异常向量表的结尾 */
 	bgeu t0, t2, 1f
-	/* n: ? */
+	/* n: t0是存放函数指针的地址，这里把t0更新成函数指针 */
 	REG_L t0, 0(t0)
-	/* n: ? */
+	/* n: 跳到对应异常处理函数执行 */
 	jr t0
 1:
 	tail do_trap_unknown
 
+	/* 这个是handle_syscall这个函数的独立代码了 */
 handle_syscall:
 	/* n: todo */
 #ifdef CONFIG_RISCV_M_MODE
@@ -213,7 +240,7 @@ handle_syscall:
 	REG_L a7, PT_A7(sp)
 #endif
 	/* save the initial A0 value (needed in signal handlers) */
-	/* n: ? */
+	/* n: 把a0保存到栈的PT_ORIG_A0这个位置 */
 	REG_S a0, PT_ORIG_A0(sp)
 	/*
 	 * Advance SEPC to avoid executing the original
@@ -222,12 +249,14 @@ handle_syscall:
 	addi s2, s2, 0x4
 	REG_S s2, PT_EPC(sp)
 	/* Trace syscalls, but only if requested by the user. */
+	/* n: 读一个thread_info里的flag，判断是否要走syscall trace */
 	REG_L t0, TASK_TI_FLAGS(tp)
 	andi t0, t0, _TIF_SYSCALL_WORK
 	bnez t0, handle_syscall_trace_enter
 check_syscall_nr:
 	/* Check to make sure we don't jump to a bogus syscall number. */
 	li t0, __NR_syscalls
+	/* n: ni的意思是no implemented，下面可以看出如果系统调用号大于等于最大值了，就会进入这个函数 */
 	la s0, sys_ni_syscall
 	/*
 	 * Syscall number held in a7.
@@ -235,10 +264,18 @@ check_syscall_nr:
 	 */
 	bgeu a7, t0, 1f
 	/* Call syscall */
+	/*
+	 * n: sys_call_table这个表定义在arch/riscv/kernel/syscall_table.c，又include
+	 * 到了其他地方，最终系统调用都在linux/include/uapi/asm-generic/unistd.h
+	 * 里定义。
+	 *
+	 * 注意riscv系统调用的参数使用a0-a7传递，a7里放系统调用号。
+	 */
 	la s0, sys_call_table
 	slli t0, a7, RISCV_LGPTR
 	add s0, s0, t0
 	REG_L s0, 0(s0)
+	/* n: 从这里返回，返回到ret_from_syscall, 之前的几个跳转返回，会返回到之前配置的ra，就是ret_from_exception */
 1:
 	jalr s0
 
@@ -257,7 +294,9 @@ ret_from_syscall_rejected:
 	bnez t0, handle_syscall_trace_exit
 
 ret_from_exception:
+	/* n: 把sstatus的值加载到s0里 */
 	REG_L s0, PT_STATUS(sp)
+	/* n: 为啥这里要关中断？处理异常的时候，除了ebreak异常，其他的异常处理都是开中断的 */
 	csrc CSR_STATUS, SR_IE
 #ifdef CONFIG_TRACE_IRQFLAGS
 	call trace_hardirqs_off
@@ -267,22 +306,26 @@ ret_from_exception:
 	li t0, SR_MPP
 	and s0, s0, t0
 #else
+	/* n: 恢复进入S mode之前的mode, 并保存到s0 */
 	andi s0, s0, SR_SPP
 #endif
+	/* n: s0不是0，即不是user mode，那只恢复内核的上下文就好, 否则要先恢复用户态上下文 */
 	bnez s0, resume_kernel
 
 resume_userspace:
 	/* Interrupts must be disabled here so flags are checked atomically */
 	REG_L s0, TASK_TI_FLAGS(tp) /* current_thread_info->flags */
+	/* n: 哪里会配置这个值？*/
 	andi s1, s0, _TIF_WORK_MASK
 	bnez s1, work_pending
 
 #ifdef CONFIG_CONTEXT_TRACKING
 	call context_tracking_user_enter
 #endif
-
+	/* n: 看来sp一直指向的是栈顶，这里加了一个栈大小，s0得到了栈底? */
 	/* Save unwound kernel stack pointer in thread_info */
 	addi s0, sp, PT_SIZE_ON_STACK
+	/* n: thread_info的内核栈指针保存的是栈底？*/
 	REG_S s0, TASK_TI_KERNEL_SP(tp)
 
 	/*
@@ -320,6 +363,7 @@ restore_all:
 	 * completes, implementations are allowed to expand reservations to be
 	 * arbitrarily large.
 	 */
+	/* n: ? */
 	REG_L  a2, PT_EPC(sp)
 	REG_SC x0, a2, PT_EPC(sp)
 
@@ -365,6 +409,7 @@ restore_all:
 	sret
 #endif
 
+/* n: 抢占相关？*/
 #if IS_ENABLED(CONFIG_PREEMPTION)
 resume_kernel:
 	REG_L s0, TASK_TI_PREEMPT_COUNT(tp)
@@ -380,6 +425,7 @@ work_pending:
 	/* Enter slow path for supplementary processing */
 	la ra, ret_from_exception
 	andi s1, s0, _TIF_NEED_RESCHED
+	/* n: 异常或中断返回时主动调度 */
 	bnez s1, work_resched
 work_notifysig:
 	/* Handle pending signals and notify-resume requests */
@@ -436,6 +482,7 @@ ENDPROC(ret_from_kernel_thread)
  * The value of a0 and a1 must be preserved by this function, as that's how
  * arguments are passed to schedule_tail.
  */
+/* n: 哪里调用的？*/
 ENTRY(__switch_to)
 	/* Save context into prev->thread */
 	li    a4,  TASK_THREAD_RA

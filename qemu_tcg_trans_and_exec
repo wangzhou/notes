@@ -1,0 +1,142 @@
+qemu tcg 翻译执行核心逻辑分析
+
+-v0.1 Sherlock 2022.6.17 init
+
+简介：本文分析qemu tcg翻译执行的核心逻辑。分析代码用的qemu版本是5.1.50。
+
+
+翻译执行循环基本逻辑
+--------------------
+
+ 整个模拟CPU执行指令的过程就是一个不断翻译执行的循环，当指令执行过程中有中断或者
+ 异常，整个翻译执行的循环被打断，处理中断或者异常。异常是执行指令的时候触发的，qemu
+ 在翻译执行的时候通过一个长跳转跳出循环，处理完异常，异常改变CPU状态和PC，qemu处理完
+ 异常后，从新PC位置继续翻译执行(这个新PC一般就是异常处理向量的入口)。中断是外设
+ 异步产生的，qemu在每次翻译执行的循环执行一次后，再次执行翻译执行之前检查下中断，
+ 如果有中断，qemu就处理中断，和异常一样，qemu改变CPU状态和PC后，再次进入翻译执行
+ 的循环。
+```
+ setjmp;
+
+ while (检查并处理中断或异常) {
+ 	前端翻译;
+	后端翻译;
+	执行host执行改变guest CPU状态; // 有异常时longjmp到setjmp处
+ }
+```
+ qemu在翻译的时候不是逐条guest指令翻译的，而是把一堆guest指令翻译到一个translation
+ block(tb)里，执行也是以tb为单位。qemu针对tb做了一些优化，它把已经翻译的tb放到哈希表
+ 里，需要翻译的时候先查表，找到了就可以直接在host上运行tb里翻译好的指令，省去翻译
+ 的过程，在这个基础上，如果tb和tb之间有跳转关系，qemu也可以在前一个tb里加指针，直接
+ 指向下一个tb，一个tb执行完成，直接跳到下一个tb执行，这样连上面查表的过程也省去了，
+ 这样的tb叫chained tb，宏观上看，qemu执行时，如果都是chained tb，完全有可能翻译过
+ 一次后，再次执行的时候都在tb之间直接跳来跳去，没有翻译和查tb hash表的过程。
+
+ 整个翻译的逻辑都在tb_gen_code里。
+
+ 要理解具体的翻译执行的细节需要，需要了解整个机器是怎么起来的。qemu启动的时候时候，
+ 会在如下的流程里初始化所谓accelerator的东西，qemu把tcg和kvm看成是qemu翻译执行的
+ 两种加速器，如下就是相关初始化的配置，我们这里只关心tcg。
+```
+ main
+   +-> qemu_init
+     +-> configure_accelerators
+       +-> do_configure_accelerator
+         +-> accel_init_machine(accel, current_machine)
+	       /*
+	        * tcg的init_machine定义在accel/tcg/tcg-all.c, tcg_accel会被qemu
+	        * 定义成一个类对象。tcg	init_machine的回调函数是tcg_init
+		*/
+	   +-> acc->init_machine (tcg_init)
+	     +-> tcg_exec_init
+	           /*
+	            * tcg_ctx是TCGContext, 线程变量，是tb翻译执行的上下文. 每个
+		    * tb里都有一个断前导代码，这个代码用来在真正执行tb里的host
+		    * 指令的时候，做环境的准备。下面这个函数生成这段前导的指令。
+		    * 从下面可见tb的结尾时的代码的在这里生成了，前后都在准备和
+		    * 恢复执行tb的这个host函数的上下文，中间的br是跳掉tb的业务
+		    * 逻辑里执行业务代码。
+		    */
+	       +-> tcg_prologue_init(tcg_ctx)
+	             /* 我们这里假设host是riscv，tcg/aarch64/tcg-target.c.inc */
+	         +-> tcg_target_qemu_prologue
+		     /*
+		      * 如上的这个函数里，用代码生成了一段riscv的汇编，大概是：
+		      * (这个可以-d out_asm，通过输出host的反汇编得到)
+                      *  stp      x29, x30, [sp, #-0x60]!
+                      *  mov      x29, sp
+                      *  stp      x19, x20, [sp, #0x10]
+                      *  stp      x21, x22, [sp, #0x20]
+                      *  stp      x23, x24, [sp, #0x30]
+                      *  stp      x25, x26, [sp, #0x40]
+                      *  stp      x27, x28, [sp, #0x50]
+                      *  sub      sp, sp, #0x480
+                      *  mov      x19, x0
+                      *  br       x1
+                      *  movz     w0, #0         <------ 这个地址保存到TCGContext的code_gen_epilogue
+                      *  add      sp, sp, #0x480
+                      *  ldp      x19, x20, [sp, #0x10]
+                      *  ldp      x21, x22, [sp, #0x20]
+                      *  ldp      x23, x24, [sp, #0x30]
+                      *  ldp      x25, x26, [sp, #0x40]
+                      *  ldp      x27, x28, [sp, #0x50]
+                      *  ldp      x29, x30, [sp], #0x60
+                      *  ret      
+		      *
+		      *  这些生成的指令被放到TCGContext的code_ptr, code_gen_prologue
+		      *  也指向相同的一片buf。
+		      */
+```
+ 
+ 各个CPU线程的初始化流程是：
+```
+ /* target/riscv/cpu.c */
+ riscv_cpu_realize
+       /* softmmu/cpus.c */
+   +-> qemu_init_vcpu
+         /* 拉起guest cpu的线程, tcg的回调定义在accel/tcg/tcg-cpus.c */
+     +-> cpus_accel->create_vcpu_thread  // tcg_start_vcpu_thread
+       +-> qemu_thread_create拉起线程: tcg_cpu_thread_fn
+           /* 如上线程的主体就是上面翻译执行的主循环 */
+```
+
+前端翻译
+--------
+ 
+ 前端翻译在gen_intermediate_code里完成, 翻译成的中间码都挂到了tcg_ctx的ops链表里。
+ 这里有几个相关的数据结构：TranslationBlock tb, TCGContext tcg_ctx, DisasContextBase dcbase。
+ tb是指一个具体翻译块，tcg_ctx是一个CPU的翻译上下文，对于每个具体的翻译快，进入和
+ 出来翻译翻译块的host二进制都是相同的，就是上面prologue中的二进制。tb中翻译的业务
+ 代码的host二进制在一个翻译上下文中产生，并添加到tb的各种缓存结构中。(todo：还没有
+ 找见tcg_ctx的到一个tb时，新建tb中host二进制存储空间的地方)。dcbase用于前端翻译，
+ 前端翻译可以看作是guest二进制反汇编成qemu中间指令的过程，想必disas context的命名
+ 也来自这里。
+```
+ tb_gen_code
+   +-> gen_intermediate_code
+         /* 这里翻译就是把一个个的guest指令得到的中间码连同操作数挂到ops链表里 */
+     +-> translator_loop
+   +-> tcg_gen_code
+```
+
+后端翻译
+--------
+
+ 后端翻译在tcg_gen_code里，核心是在一个循环里处理前端翻译的中间码，把中间码翻译成
+ host上的汇编。
+
+执行
+----
+
+ 执行翻译好的host指令是在大循环的cpu_loop_exec_tb里。翻译好的host汇编的整体逻辑
+ 如上面prologue的样子，tb里的业务代码对应的host汇编通过中间的br指令调用。tb对应的
+ 业务代码对应的host汇编，也就是前端翻译、后端翻译一起得到的host二进制放在tb->tc.ptr
+ 指向的地址，prologue的二进制放在tcg_ctx->code_gen_prologue指向的地址。tb->tc.ptr
+ 在函数调用的时候被放到了x1寄存器，这个和br x1也是想对应的。
+```
+ cpu_loop_exec_tb
+   +-> cpu_tb_exec
+     +-> tcg_qemu_tb_exec(env, tb->tc.ptr)
+       +-> tcg_ctx->code_gen_prologue(env, tb->tc.ptr)
+```
+
