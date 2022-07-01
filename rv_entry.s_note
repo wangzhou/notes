@@ -8,7 +8,7 @@ riscv entry.S
       采用直接在代码里加注释的方式写分析的内容，注释用“n:”开头。
 
 ```
-/* n: .set是什么意思？*/
+/* n: 在非抢占的情况下，下面两个符号等价 */
 #if !IS_ENABLED(CONFIG_PREEMPTION)
 .set resume_kernel, restore_all
 #endif
@@ -38,12 +38,9 @@ _save_context:
 	REG_S sp, TASK_TI_USER_SP(tp)
 	/* n: sp换成内核栈 */
 	REG_L sp, TASK_TI_KERNEL_SP(tp)
-	/* n: sp指向内核栈的栈顶，那么这个sp是栈的基地址？*/
+	/* n: 扩大栈的范围，扩大的范围用来保存相关的寄存器 */
 	addi sp, sp, -(PT_SIZE_ON_STACK)
-	/*
-	 * n: 下面的一段代码把各个系统寄存器保存到struct pt_regs，看来这个结构放在
-	 * 内核栈的栈顶的位置。
-	 */
+	/* n: 下面的一段代码把各个系统寄存器保存到栈上刚刚开辟出来的空间 */
 	REG_S x1,  PT_RA(sp)
 	REG_S x3,  PT_GP(sp)
 	REG_S x5,  PT_T0(sp)
