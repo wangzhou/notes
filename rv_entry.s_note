@@ -54,7 +54,12 @@ _save_context:
 	REG_L sp, TASK_TI_KERNEL_SP(tp)
 	/* n: 扩大栈的范围，扩大的范围用来保存相关的寄存器。移动sp其实就相当于在栈上分配空间 */
 	addi sp, sp, -(PT_SIZE_ON_STACK)
-	/* n: 下面的一段代码把各个系统寄存器保存到栈上刚刚开辟出来的空间 */
+	/*
+	 * n: 下面的一段代码把各个系统寄存器保存到栈上刚刚开辟出来的空间, 注意需要
+	 * 特殊处理的是sp(x2)和tp(x4)。当前的sp，由于上面的变动已经不是需要保存的sp，
+	 * 但是，之前我们已经把需要保存的sp放到了thread_info里，所以下面把thread_info
+	 * 里的sp取出后再入栈。
+	 */
 	REG_S x1,  PT_RA(sp)
 	REG_S x3,  PT_GP(sp)
 	REG_S x5,  PT_T0(sp)
@@ -168,15 +173,15 @@ skip_context_tracking:
 	/* n: s1之前被存入sstatus的值，这里把SR_PIE的值存入t0 */
 	andi t0, s1, SR_PIE
 	/*
-	 * n: 如果为0，也就是PIE位没有pending的中断才继续向下跳？如果有pending的
-	 * 的中断，我们继续检测是不是ebreak异常，如果是ebreak异常，跳到下面lable 1，
-	 * 如果不是ebreak异常，会走到csrs CSR_STATUS, SR_IE，
+	 * n: PIE表示进入中断或者异常之前IE的配置情况，如果之前就是关中断，现在
+	 * 继续关中断跑，如果之前是开中断的，需要打开中断继续跑，但是ebreak异常中
+	 * 不能开中断，所以，如果之前是开中断的，我们继续检测是不是ebreak异常，
+	 * 如果是ebreak异常，在关中断下继续跑，如果不是ebreak异常，会走到csrs CSR_STATUS, SR_IE，
+	 * 这里会把中断打开。
 	 *
 	 * 注意，这里是在处理异常。硬件在处理中断或异常时会改变SPIE/SPP/SIE的值。
 	 * SPP会保存中断或异常时CPU的mode，SPIE会保存sstatus里的SIE值，SIE表示S
 	 * mode中断是否被enable，最后硬件会关中断就是把SIE配置成0。
-	 *
-	 * 总结下，硬件在CPU进入异常或中断处理时，是第一时间把全局中断关掉的。
 	 */
 	beqz t0, 1f
 	/* kprobes, entered via ebreak, must have interrupts disabled. */
@@ -190,21 +195,10 @@ skip_context_tracking:
 	 * n: csrs是csrrs x0, csr, rs, 意思是把csr的值存入x0, csr的旧值和rs或写入csr。
 	 * 这里是把S mode全局中断打开。注意，上面的逻辑是如果检测到是ebreak异常
 	 * 是直接跳过开中断的。
-	 *
-	 * 总结下这里的逻辑，首先看有没有pending的中断，如果没有pending的中断，还
-	 * 是保持关中断的状态，如果有pending的中断，我们看看是不是ebreak异常，如果
-	 * 是ebreak异常，就是说ebreak异常的时候同时有中断进来，pending住了，因为
-	 * 我们要处理ebreak异常，只能继续pending中断，因为一旦打开中断，就会立即
-	 * 响应中断，如果不是ebreak异常，就打开中断(放这个pengding中断进来)，这个
-	 * 时候因为有pending中断，硬件会马上去响应中断。
-	 *
-	 * 再总结下，异常处理的时候，如果有中断来，除了ebreak异常不能被打断，其他
-	 * 异常都可以被中断打断。这里如果被中断打断，就会再进一层去处理中断，中断
-	 * 处理完后返回下面的label 1。
 	 */
 	csrs CSR_STATUS, SR_IE
 
-	/* n: 开始处理异常，先配置返回地址 */
+	/* n: 开始处理异常，先配置返回地址。非ebreak，且之前是开中断的，异常处理开中断 */
 1:
 	la ra, ret_from_exception
 	/* Handle syscalls */
@@ -312,7 +306,7 @@ ret_from_syscall_rejected:
 ret_from_exception:
 	/* n: 把sstatus的值加载到s0里 */
 	REG_L s0, PT_STATUS(sp)
-	/* n: 为啥这里要关中断？处理异常的时候，除了ebreak异常，其他异常处理前可以先处理掉pending的中断 */
+	/* n: 关中断？处理异常的时候，除了ebreak异常，其他异常处理可能是开中断的 */
 	csrc CSR_STATUS, SR_IE
 #ifdef CONFIG_TRACE_IRQFLAGS
 	call trace_hardirqs_off
