@@ -3,6 +3,7 @@ riscv entry.S
 
 -v0.1 2022.5.12 sherlock init
 -v0.2 2022.6.28 sherlock continue
+-v0.3 2022.7.4  sherlock continue
 
 简介：本文分析Linux内核里riscv构架下的entry.S这个文件，内核代码使用的版本是5.12-rc8。
       采用直接在代码里加注释的方式写分析的内容，注释用“n:”开头。
@@ -20,7 +21,14 @@ ENTRY(handle_exception)
 	 * the kernel thread pointer.  If we came from the kernel, the scratch
 	 * register will contain 0, and we should continue on the current TP.
 	 */
-	/* n: 交换tp寄存器和scratch寄存器里的值 */
+	/*
+	 * n: 交换tp寄存器和scratch寄存器里的值。如果exception从用户态进来，tp和
+	 * scratch的值应该是相等的(下面在厉害内核的时候，会把用户进程的task_struct
+	 * 指针赋给tp)，如果exception从内核态进来，tp应该是内核的task_struct
+	 * 指针，scratch应该是0。
+	 *
+	 * 所以，下面紧接着的处理中，如果从内核进来，要恢复下tp。
+	 */
 	csrrw tp, CSR_SCRATCH, tp
 	/* n: tp不为0，异常来自用户态，需要保存上下文 */
 	bnez tp, _save_context
@@ -34,11 +42,17 @@ _restore_kernel_tpsp:
 	/* n: 把内核sp保存到内核thread_info上 */
 	REG_S sp, TASK_TI_KERNEL_SP(tp)
 _save_context:
-	/* n: 保存sp到thread_info用户态指针的位置，如果是就在内核态，那么把内核栈sp保存到了thread_info用户态栈指针的位置 */
+	/*
+	 * n: 保存sp到thread_info用户态指针的位置，如果是就在内核态，那么把内核栈
+	 * sp保存到了thread_info用户态栈指针的位置。
+	 *
+	 * 异常或中断来自内核或者用户态，再下面合并处理。当来自用户态时，tp的值和
+	 * scratch寄存器的值是一样的，所以这里不需要恢复tp。
+	 */
 	REG_S sp, TASK_TI_USER_SP(tp)
 	/* n: sp换成内核栈 */
 	REG_L sp, TASK_TI_KERNEL_SP(tp)
-	/* n: 扩大栈的范围，扩大的范围用来保存相关的寄存器 */
+	/* n: 扩大栈的范围，扩大的范围用来保存相关的寄存器。移动sp其实就相当于在栈上分配空间 */
 	addi sp, sp, -(PT_SIZE_ON_STACK)
 	/* n: 下面的一段代码把各个系统寄存器保存到栈上刚刚开辟出来的空间 */
 	REG_S x1,  PT_RA(sp)
@@ -81,7 +95,10 @@ _save_context:
 	/* n: 配置先放到t0寄存器里，SR_SUM为1容许S mode接入U mode地址，反之不容许 */
 	li t0, SR_SUM | SR_FS
 
-	/* n: 上面已经保存了寄存器现场，下面可以使用系统寄存器了，s0保存用户态sp */
+	/*
+	 * n: 上面已经保存了寄存器现场，下面可以使用系统寄存器了，s0保存用户态sp。
+	 * 把task_struct里保存的用户态栈指针提取出来，然后在后面保存到内核栈上。
+	 */
 	REG_L s0, TASK_TI_USER_SP(tp)
 	/* n: 把中断异常相关的csr寄存器读出来, ~t0 & csr_status旧值，然后写入csr_status，相当于清SR_SUM和SR_FS */
 	csrrc s1, CSR_STATUS, t0
@@ -139,15 +156,16 @@ skip_context_tracking:
 	move a0, sp /* pt_regs */
 	/* n: a1存handle_arch_irq的地址 */
 	la a1, handle_arch_irq
-	/* n: a1存成handle_arch_irq的第一条指令？*/
+	/* n: handle_arch_irq看起来像一个数组，这个在哪里定义？*/
 	REG_L a1, (a1)
-	/* n: 返回地址已经配置到ra里 */
+	/* n: 返回地址已经配置到ra里。这里是中断处理函数的入口，下面的处理都和异常有关了 */
 	jr a1
 1:
 	/*
 	 * Exceptions run with interrupts enabled or disabled depending on the
 	 * state of SR_PIE in m/sstatus.
 	 */
+	/* n: s1之前被存入sstatus的值，这里把SR_PIE的值存入t0 */
 	andi t0, s1, SR_PIE
 	/*
 	 * n: 如果为0，也就是PIE位没有pending的中断才继续向下跳？如果有pending的
@@ -156,7 +174,7 @@ skip_context_tracking:
 	 *
 	 * 注意，这里是在处理异常。硬件在处理中断或异常时会改变SPIE/SPP/SIE的值。
 	 * SPP会保存中断或异常时CPU的mode，SPIE会保存sstatus里的SIE值，SIE表示S
-	 * mode中断是否被enable，最后硬件会把关中断就是把SIE配置成0。
+	 * mode中断是否被enable，最后硬件会关中断就是把SIE配置成0。
 	 *
 	 * 总结下，硬件在CPU进入异常或中断处理时，是第一时间把全局中断关掉的。
 	 */
@@ -182,7 +200,7 @@ skip_context_tracking:
 	 *
 	 * 再总结下，异常处理的时候，如果有中断来，除了ebreak异常不能被打断，其他
 	 * 异常都可以被中断打断。这里如果被中断打断，就会再进一层去处理中断，中断
-	 * 处理完后返回label 1。
+	 * 处理完后返回下面的label 1。
 	 */
 	csrs CSR_STATUS, SR_IE
 
@@ -207,12 +225,12 @@ skip_context_tracking:
 	bgeu t0, t2, 1f
 	/* n: t0是存放函数指针的地址，这里把t0更新成函数指针 */
 	REG_L t0, 0(t0)
-	/* n: 跳到对应异常处理函数执行 */
+	/* n: 跳到对应异常处理函数执行，返回地址还是之前配置的ret_from_exception */
 	jr t0
 1:
 	tail do_trap_unknown
 
-	/* 这个是handle_syscall这个函数的独立代码了 */
+	/* 这个是handle_syscall这个函数的独立代码了, 异常的处理被分为系统调用和其他异常 */
 handle_syscall:
 	/* n: todo */
 #ifdef CONFIG_RISCV_M_MODE
@@ -237,7 +255,7 @@ handle_syscall:
 	REG_L a7, PT_A7(sp)
 #endif
 	/* save the initial A0 value (needed in signal handlers) */
-	/* n: 把a0保存到栈的PT_ORIG_A0这个位置 */
+	/* n: 把a0保存到栈的PT_ORIG_A0这个位置，a0为什么要存都这里？*/
 	REG_S a0, PT_ORIG_A0(sp)
 	/*
 	 * Advance SEPC to avoid executing the original
@@ -278,6 +296,7 @@ check_syscall_nr:
 
 ret_from_syscall:
 	/* Set user a0 to kernel a0 */
+	/* n: a0保存返回值，这里把a0存入内核栈保存的寄存器是为了后面恢复？*/
 	REG_S a0, PT_A0(sp)
 	/*
 	 * We didn't execute the actual syscall.
@@ -293,7 +312,7 @@ ret_from_syscall_rejected:
 ret_from_exception:
 	/* n: 把sstatus的值加载到s0里 */
 	REG_L s0, PT_STATUS(sp)
-	/* n: 为啥这里要关中断？处理异常的时候，除了ebreak异常，其他的异常处理都是开中断的 */
+	/* n: 为啥这里要关中断？处理异常的时候，除了ebreak异常，其他异常处理前可以先处理掉pending的中断 */
 	csrc CSR_STATUS, SR_IE
 #ifdef CONFIG_TRACE_IRQFLAGS
 	call trace_hardirqs_off
@@ -309,25 +328,30 @@ ret_from_exception:
 	/* n: s0不是0，即不是user mode，那只恢复内核的上下文就好, 否则要先恢复用户态上下文 */
 	bnez s0, resume_kernel
 
+	/* n: 用户态和内核态恢复唯一的区别就在resume_userspace这一段 */
 resume_userspace:
 	/* Interrupts must be disabled here so flags are checked atomically */
 	REG_L s0, TASK_TI_FLAGS(tp) /* current_thread_info->flags */
-	/* n: 哪里会配置这个值？*/
+	/* n: 哪里会配置这个值？定义在arch/riscv/include/asm/thread_info.h */
 	andi s1, s0, _TIF_WORK_MASK
 	bnez s1, work_pending
 
 #ifdef CONFIG_CONTEXT_TRACKING
 	call context_tracking_user_enter
 #endif
-	/* n: 看来sp一直指向的是栈顶，这里加了一个栈大小，s0得到了栈底? */
+	/* n: 这里把相当于sp向上移动，相当于退栈，释放保存寄存器上下文的栈空间 */
 	/* Save unwound kernel stack pointer in thread_info */
 	addi s0, sp, PT_SIZE_ON_STACK
-	/* n: thread_info的内核栈指针保存的是栈底？*/
+	/* n: 把当前内核栈sp保存到task_struct */
 	REG_S s0, TASK_TI_KERNEL_SP(tp)
 
 	/*
 	 * Save TP into the scratch register , so we can find the kernel data
 	 * structures again.
+	 */
+	/*
+	 * n: 每次离开内核的时候把当前进程的tp存入scratch寄存器。注意，只有进入
+	 * 用户态的时候才这样，这里也和一开始的分析呼应。
 	 */
 	csrw CSR_SCRATCH, tp
 
@@ -342,6 +366,7 @@ restore_all:
 	call trace_hardirqs_off
 2:
 #endif
+	/* n: 注意，前面虽然已经"退栈"，但是sp的指向还没有变，这里依然可以继续使用sp */
 	REG_L a0, PT_STATUS(sp)
 	/*
 	 * The current load reservation is effectively part of the processor's
@@ -360,7 +385,7 @@ restore_all:
 	 * completes, implementations are allowed to expand reservations to be
 	 * arbitrarily large.
 	 */
-	/* n: ? */
+	/* n: 处理和lr/sc相关的逻辑? */
 	REG_L  a2, PT_EPC(sp)
 	REG_SC x0, a2, PT_EPC(sp)
 
@@ -406,7 +431,7 @@ restore_all:
 	sret
 #endif
 
-/* n: 抢占相关？*/
+/* n: 开抢占的时候，在恢复上下文之前要先处理下抢占 */
 #if IS_ENABLED(CONFIG_PREEMPTION)
 resume_kernel:
 	REG_L s0, TASK_TI_PREEMPT_COUNT(tp)
@@ -479,12 +504,20 @@ ENDPROC(ret_from_kernel_thread)
  * The value of a0 and a1 must be preserved by this function, as that's how
  * arguments are passed to schedule_tail.
  */
-/* n: 哪里调用的？*/
+/*
+ * n: 哪里调用的？__switch_to这个函数的第一个入参是前task_struct, 后一个是要
+ * switch到的线程的task_struct。task_struct里有一个架构相关的结构thread_struct。
+ * riscv的定义在arch/riscv/include/asm/processor.h, TASK_THREAD_RA是这个结构在
+ * task_struct里的偏移，所以a3、a4得到thread_struct在切出、切入线程task_struct里
+ * thread_struct的地址。
+ * 
+ */
 ENTRY(__switch_to)
 	/* Save context into prev->thread */
 	li    a4,  TASK_THREAD_RA
 	add   a3, a0, a4
 	add   a4, a1, a4
+	/* n: 保存这些就够了？*/
 	REG_S ra,  TASK_THREAD_RA_RA(a3)
 	REG_S sp,  TASK_THREAD_SP_RA(a3)
 	REG_S s0,  TASK_THREAD_S0_RA(a3)
@@ -515,11 +548,13 @@ ENTRY(__switch_to)
 	REG_L s10, TASK_THREAD_S10_RA(a4)
 	REG_L s11, TASK_THREAD_S11_RA(a4)
 	/* Swap the CPU entry around. */
+	/* n: 交换两个task_struct里的thread_info里的cpu域段，cpu的语意是？*/
 	lw a3, TASK_TI_CPU(a0)
 	lw a4, TASK_TI_CPU(a1)
 	sw a3, TASK_TI_CPU(a1)
 	sw a4, TASK_TI_CPU(a0)
 	/* The offset of thread_info in task_struct is zero. */
+	/* n: tp指向新的task_struct */
 	move tp, a1
 	ret
 ENDPROC(__switch_to)
