@@ -1,6 +1,7 @@
 qemu tcg 翻译执行核心逻辑分析
 
 -v0.1 Sherlock 2022.6.17 init
+-v0.2 Sherlock 2022.7.15 add TCGv and helper function
 
 简介：本文分析qemu tcg翻译执行的核心逻辑。分析代码用的qemu版本是5.1.50。
 
@@ -19,9 +20,9 @@ qemu tcg 翻译执行核心逻辑分析
  setjmp;
 
  while (检查并处理中断或异常) {
- 	前端翻译;
-	后端翻译;
-	执行host执行改变guest CPU状态; // 有异常时longjmp到setjmp处
+        前端翻译;
+        后端翻译;
+        执行host执行改变guest CPU状态; // 有异常时longjmp到setjmp处
  }
 ```
  qemu在翻译的时候不是逐条guest指令翻译的，而是把一堆guest指令翻译到一个translation
@@ -43,26 +44,26 @@ qemu tcg 翻译执行核心逻辑分析
      +-> configure_accelerators
        +-> do_configure_accelerator
          +-> accel_init_machine(accel, current_machine)
-	       /*
-	        * tcg的init_machine定义在accel/tcg/tcg-all.c, tcg_accel会被qemu
-	        * 定义成一个类对象。tcg	init_machine的回调函数是tcg_init
-		*/
-	   +-> acc->init_machine (tcg_init)
-	     +-> tcg_exec_init
-	           /*
-	            * tcg_ctx是TCGContext, 线程变量，是tb翻译执行的上下文. 每个
-		    * tb里都有一个断前导代码，这个代码用来在真正执行tb里的host
-		    * 指令的时候，做环境的准备。下面这个函数生成这段前导的指令。
-		    * 从下面可见tb的结尾时的代码的在这里生成了，前后都在准备和
-		    * 恢复执行tb的这个host函数的上下文，中间的br是跳掉tb的业务
-		    * 逻辑里执行业务代码。
-		    */
-	       +-> tcg_prologue_init(tcg_ctx)
-	             /* 我们这里假设host是riscv，tcg/aarch64/tcg-target.c.inc */
-	         +-> tcg_target_qemu_prologue
-		     /*
-		      * 如上的这个函数里，用代码生成了一段riscv的汇编，大概是：
-		      * (这个可以-d out_asm，通过输出host的反汇编得到)
+               /*
+                * tcg的init_machine定义在accel/tcg/tcg-all.c, tcg_accel会被qemu
+                * 定义成一个类对象。tcg init_machine的回调函数是tcg_init
+                */
+           +-> acc->init_machine (tcg_init)
+             +-> tcg_exec_init
+                   /*
+                    * tcg_ctx是TCGContext, 线程变量，是tb翻译执行的上下文. 每个
+                    * tb里都有一个断前导代码，这个代码用来在真正执行tb里的host
+                    * 指令的时候，做环境的准备。下面这个函数生成这段前导的指令。
+                    * 从下面可见tb的结尾时的代码也在这里生成了，前后都在准备和
+                    * 恢复执行tb的这个host函数的上下文，中间的br是跳掉tb的业务
+                    * 逻辑里执行业务代码。
+                    */
+               +-> tcg_prologue_init(tcg_ctx)
+                     /* 我们这里假设host是arm64，tcg/aarch64/tcg-target.c.inc */
+                 +-> tcg_target_qemu_prologue
+                     /*
+                      * 如上的这个函数里，用代码生成了一段riscv的汇编，大概是：
+                      * (这个可以-d out_asm，通过输出host的反汇编得到)
                       *  stp      x29, x30, [sp, #-0x60]!
                       *  mov      x29, sp
                       *  stp      x19, x20, [sp, #0x10]
@@ -82,10 +83,10 @@ qemu tcg 翻译执行核心逻辑分析
                       *  ldp      x27, x28, [sp, #0x50]
                       *  ldp      x29, x30, [sp], #0x60
                       *  ret      
-		      *
-		      *  这些生成的指令被放到TCGContext的code_ptr, code_gen_prologue
-		      *  也指向相同的一片buf。
-		      */
+                      *
+                      *  这些生成的指令被放到TCGContext的code_ptr, code_gen_prologue
+                      *  也指向相同的一片buf。
+                      */
 ```
  
  各个CPU线程的初始化流程是：
@@ -105,7 +106,7 @@ qemu tcg 翻译执行核心逻辑分析
  
  前端翻译在gen_intermediate_code里完成, 翻译成的中间码都挂到了tcg_ctx的ops链表里。
  这里有几个相关的数据结构：TranslationBlock tb, TCGContext tcg_ctx, DisasContextBase dcbase。
- tb是指一个具体翻译块，tcg_ctx是一个CPU的翻译上下文，对于每个具体的翻译快，进入和
+ tb是指一个具体翻译块，tcg_ctx是一个CPU的翻译上下文，对于每个具体的翻译块，进入和
  出来翻译翻译块的host二进制都是相同的，就是上面prologue中的二进制。tb中翻译的业务
  代码的host二进制在一个翻译上下文中产生，并添加到tb的各种缓存结构中。(todo：还没有
  找见tcg_ctx的到一个tb时，新建tb中host二进制存储空间的地方)。dcbase用于前端翻译，
@@ -119,6 +120,87 @@ qemu tcg 翻译执行核心逻辑分析
    +-> tcg_gen_code
 ```
 
+ 前端翻译中，我们会涉及TCGv以及helper函数的概念。TCGv从概念的角度可以看成是中间码
+ 使用的寄存器，前端模拟实现一个指令的时候，要用到临时变量的时候，都要申请一个这样
+ 的寄存器。比如，我们看下riscv的add指令的前端翻译的实现：
+```
+ static bool trans_add(DisasContext *ctx, arg_add *a)
+ {
+     return gen_arith(ctx, a, &tcg_gen_add_tl);
+ }
+
+ static bool gen_arith(DisasContext *ctx, arg_r *a,
+                       void(*func)(TCGv, TCGv, TCGv))
+ {
+     TCGv source1, source2;
+     source1 = tcg_temp_new();        <------ A
+     source2 = tcg_temp_new();
+ 
+     gen_get_gpr(source1, a->rs1);    <------ B
+     gen_get_gpr(source2, a->rs2);
+ 
+     (*func)(source1, source1, source2);
+ 
+     gen_set_gpr(a->rd, source1);
+     tcg_temp_free(source1);
+     tcg_temp_free(source2);
+     return true;
+ }
+
+ static inline void gen_get_gpr(TCGv t, int reg_num)
+ {
+     if (reg_num == 0) {
+         tcg_gen_movi_tl(t, 0);
+     } else {
+         tcg_gen_mov_tl(t, cpu_gpr[reg_num]);     <------ C
+     }
+ }
+```
+ 在A行，我们申请了一个source1 TCGv, 在C行，我们把add指令的rs1寄存器上的值传递给
+ source1，后续继续使用source1参与计算。source1和guest寄存器实际上都是保存在host
+ 的内存上的，实际运行的时候，host上的程序其实做的就是内存数据搬移的操作。后续add
+ 指令的模拟，在中间码的层面看是把source1/source2相加，host实际计算的时候要把数据
+ 移动到寄存器上计算，所以直接翻译可能是这样的：reg1 = load(rs1的内存), store(reg1, source1的内存),
+ reg1 = load(source1的内存), 同样的方式把rs2保存的值加载到reg2，reg3 = add(reg1, reg2),
+ store(reg3, rd的内存), 最后可能就优化成了reg1 = load(rs1的内存), reg2 = load(rs2的内存),
+ reg3 = add(reg1, reg2), store(reg3, rd的内存)。
+
+ 我们实际看个模拟执行的例子，使用-d in_asm,op,out_asm得到guest汇编、中间码和host汇编：
+```
+ IN: test_add
+ 0x0000000000010430:  1101              addi            sp,sp,-32
+ 0x0000000000010432:  ec22              sd              s0,24(sp)
+ 0x0000000000010434:  1000              addi            s0,sp,32
+ [...]
+ 
+ OP:
+  ld_i32 tmp0,env,$0xfffffffffffffff0
+  movi_i32 tmp1,$0x0
+  brcond_i32 tmp0,tmp1,lt,$L0
+ 
+  ---- 0000000000010430
+  mov_i64 tmp2,x2/sp
+  movi_i64 tmp3,$0xffffffffffffffe0
+  add_i64 tmp2,tmp2,tmp3
+  mov_i64 x2/sp,tmp2
+  [...]
+ 
+ OUT: [size=192]
+ 0xffff7c025c00:  b85f0274  ldur     w20, [x19, #0xfffffffffffffff0]		[tb header & initial instruction]
+ 0xffff7c025c04:  7100029f  cmp      w20, #0
+ 0xffff7c025c08:  5400052b  b.lt     #0xffff7c025cac
+ 0xffff7c025c0c:  f9400a74  ldr      x20, [x19, #0x10]    <----- 10430
+ 0xffff7c025c10:  d1008294  sub      x20, x20, #0x20
+ 0xffff7c025c14:  f9000a74  str      x20, [x19, #0x10]
+ [...]
+```
+ 就只看第一条addi指令的模拟过程，这是test_add这个函数一进来开栈的指令，把sp向低地址
+ 移动32。可以看到中间码是和前端翻译过程相对应的，先把寄存器值和-32保存到TCGv变量上，
+ 然后对TCGv做add运算，然后把运算结果保存回sp。最终翻译得到的host代码，把sp的值load
+ 到x20，计算后再存回cpu结构体的对应位置，x19保存就是cpu结构体的地址。
+
+ 代码分析(todo)
+ 
 后端翻译
 --------
 
@@ -132,7 +214,7 @@ qemu tcg 翻译执行核心逻辑分析
  如上面prologue的样子，tb里的业务代码对应的host汇编通过中间的br指令调用。tb对应的
  业务代码对应的host汇编，也就是前端翻译、后端翻译一起得到的host二进制放在tb->tc.ptr
  指向的地址，prologue的二进制放在tcg_ctx->code_gen_prologue指向的地址。tb->tc.ptr
- 在函数调用的时候被放到了x1寄存器，这个和br x1也是想对应的。
+ 在函数调用的时候被放到了x1寄存器，这个和br x1也是相对应的。
 ```
  cpu_loop_exec_tb
    +-> cpu_tb_exec
