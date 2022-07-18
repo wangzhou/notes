@@ -186,3 +186,4 @@ riscv多核启动
 riscv DEBUG实现/ebreak的使用     to do
 riscv虚拟化			 to do
 qemu monitor			 to do
+qemu gpio

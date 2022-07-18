@@ -1,6 +1,6 @@
 -v0.1 2022.1.30 init
 
-简介：本文分析qemu tcg里关于load/store的流程，以riscv平台为分析对象。qemu的版本是5.1.5。
+简介：本文分析qemu tcg里关于load/store的流程，以riscv平台为分析对象。qemu的版本是5.1.50。
 
 我们从一个普通的load指令的模拟代码入手分析。
 /* qemu/target/riscv/insn_trans/trans_rvi.c.inc */
@@ -24,21 +24,22 @@ tcg/riscv/tcg-target.c.inc里的tcg_out_qemu_ld_slow_path。
     -> tcg_out_op
          /* 可以看到这里分了有MMU和没有MMU的情况 */
       -> tcg_out_qemu_ld
-           /* 有MMU的情况 */
+           /* 有MMU的情况，似乎tlb_load这个函数检测是否tlb可以直接命中，如果命中，直接就load数据了(todo: 继续分析) */
         -> tcg_out_tlb_load
-	-> tcg_out_qemu_ld_direct
-	-> add_qemu_ldst_label
+	   /* tlb hit时，直接load完，为啥还要做下面add_qemu_ldst_label? */
+        -> tcg_out_qemu_ld_direct
+        -> add_qemu_ldst_label
            /* 没有有MMU的情况, 计算地址后直接用tcg_out_qemu_ld_direct */
-	   /* 这里没有看到gueset做tlb fill的代码 */
+           /* 这里没有看到gueset做tlb fill的代码 */
        /* tcg/tcg-ldst.c.inc, 为啥最后面才插入慢速路径代码? */
     -> tcg_out_ldst_finalize
       -> tcg_out_qemu_ld_slow_path
            /* 各种不同数据宽度的load函数被定义到qemu_ld_helpers这个表里 */
         -> qemu_ld_helpers
-	     /* 取ldul为例子，这是一个公共函数，定义在accel/tcg/cputlb */
-	  -> helper_le_ldul_mmu
-	       /* accel/tcg/cputlb.c */
-	    -> load_helper
+              /* 取ldul为例子，这是一个公共函数，定义在accel/tcg/cputlb */
+           -> helper_le_ldul_mmu
+                /* accel/tcg/cputlb.c */
+             -> load_helper
 ```
 
 在load_helper里做如上提到的load的各种硬件模拟。load_helper里对于没有找到tlb的情况
@@ -46,7 +47,7 @@ tcg/riscv/tcg-target.c.inc里的tcg_out_qemu_ld_slow_path。
 ```
   tlb_fill
        /* target/riscv/cpu.c */
-    -> cc->tcg_ops_tlb_fill risv下的riscv_cpu_tlb_fill
+    -> cc->tcg_ops_tlb_fill risv下是riscv_cpu_tlb_fill
          /* 先做page walk，翻译成功自然可以，翻译失败报缺页异常 */
 	 /* todo: 两级翻译 */
       -> riscv_raise_exception
