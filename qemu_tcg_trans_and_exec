@@ -62,7 +62,7 @@ qemu tcg 翻译执行核心逻辑分析
                      /* 我们这里假设host是arm64，tcg/aarch64/tcg-target.c.inc */
                  +-> tcg_target_qemu_prologue
                      /*
-                      * 如上的这个函数里，用代码生成了一段riscv的汇编，大概是：
+                      * 如上的这个函数里，用代码生成了一段arm64的汇编，大概是：
                       * (这个可以-d out_asm，通过输出host的反汇编得到)
                       *  stp      x29, x30, [sp, #-0x60]!
                       *  mov      x29, sp
@@ -72,8 +72,8 @@ qemu tcg 翻译执行核心逻辑分析
                       *  stp      x25, x26, [sp, #0x40]
                       *  stp      x27, x28, [sp, #0x50]
                       *  sub      sp, sp, #0x480
-                      *  mov      x19, x0
-                      *  br       x1
+                      *  mov      x19, x0        <------ 第一个入参保存cpu结构体地址
+                      *  br       x1             <------ 第二个入参保存的是生成指令地址
                       *  movz     w0, #0         <------ 这个地址保存到TCGContext的code_gen_epilogue
                       *  add      sp, sp, #0x480
                       *  ldp      x19, x20, [sp, #0x10]
@@ -199,13 +199,32 @@ qemu tcg 翻译执行核心逻辑分析
  然后对TCGv做add运算，然后把运算结果保存回sp。最终翻译得到的host代码，把sp的值load
  到x20，计算后再存回cpu结构体的对应位置，x19保存就是cpu结构体的地址。
 
- 代码分析(todo)
- 
+ 具体代码实现上，TCGv这个变量的数值其实就是对应变量相对于存储空间基地址的偏移。
+ 这个存储空间不只是有描述cpu的结构体(riscv上是CPURISCVState)，还有TCGContext，CPU
+ 的寄存器都是存在cpu结构体里的，上面这个例子的sp就是这样。TCGContext保存变量的逻辑
+ 还没有搞清。前端翻译只是把这些信息都挂到中间码的链表里，得到host指令在后端翻译里。
+
+ qemu可以用生成的host指令模拟guest，也可以直接调用host上的函数改变guest CPU的状态，
+ 后者在qemu里叫helper函数。理论上，所有的模拟都可以用helper函数，但是，显然helper
+ 函数会降低模拟的速度。
+
+ 以riscv为例，增加一个helper函数的一般套路是: 1. 在target/riscv/op_helper.c里增加
+ 函数的定义；2. 在target/riscv/helper.h增加对应的宏，宏的参数分别是：helper函数名字、
+ 函数的返回值、函数的入参；3. 在中间码里用gen_helper_xxx直接调用helper函数，返回值
+ 保存在gen_helper_xxx的第一个参数里，常数入参需要用tcg_const_i32/i64生成下常数TCGv，
+ 实际上是为这个常数分配中间码存储空间(todo)。
+
+ helper函数的实现逻辑是生成函数调用的上下文，然后跳转到函数的地址执行指令，也就是
+ 先把函数的入参放到寄存器上，然后调用跳转指令跳到函数地址执行。
+
+
 后端翻译
 --------
 
  后端翻译在tcg_gen_code里，核心是在一个循环里处理前端翻译的中间码，把中间码翻译成
  host上的汇编。
+
+ (todo: 代码分析)
 
 执行
 ----
@@ -221,4 +240,3 @@ qemu tcg 翻译执行核心逻辑分析
      +-> tcg_qemu_tb_exec(env, tb->tc.ptr)
        +-> tcg_ctx->code_gen_prologue(env, tb->tc.ptr)
 ```
-
