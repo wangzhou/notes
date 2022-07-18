@@ -1,0 +1,83 @@
+riscv ebreak指令的使用
+
+-v0.1 2022.7.18 Sherlock init
+
+简介：本文分析riscv ebreak指令在Linux内核中的使用，分析基于的代码时Linux主线v5.12-rc8，
+      主要分析BUG_ON宏、kprobe、uaccess实现。
+
+ebreak指令
+-----------
+
+ riscv上的ebreak指令和ecall指令的功能基本一致，都是用指令触发一个异常，ebreak使用
+ 指令出发一个ebreak异常。
+
+BUG_ON宏实现
+------------
+
+ BUG_ON()是内核里常用的一个断言，当不满足BUG_ON的条件时，内核就会打印出当前的CPU
+ 寄存器上下文以及相关的内核调用栈。
+
+ riscv上BUG_ON内部实现是BUG()，它的定义在arch/riscv/include/asm/bug.h
+```
+#define BUG() do {						\
+	__BUG_FLAGS(0);						\
+	unreachable();						\
+} while (0)
+
+#define __BUG_FLAGS(flags)					\
+do {								\
+	__asm__ __volatile__ (					\
+		"1:\n\t"					\
+			"ebreak\n"				\
+			".pushsection __bug_table,\"aw\"\n\t"	\
+		"2:\n\t"					\
+			__BUG_ENTRY "\n\t"			\
+			".org 2b + %3\n\t"                      \
+			".popsection"				\
+		:						\
+		: "i" (__FILE__), "i" (__LINE__),		\
+		  "i" (flags),					\
+		  "i" (sizeof(struct bug_entry)));              \
+} while (0)
+```
+如上的.pushsection指示编译器把下面label2开头的一段二进制在链接的时候
+放到名叫__bug_table的段里。
+
+ebreak指令的执行最终会执行到ebreak的异常处理函数: do_trap_break，这个函数的定义在
+linux/arch/riscv/kernel/traps.c，这个函数的实现包含了kprobe、uprobe、kgdb以及BUG
+的逻辑。
+
+BUG的逻辑实现在report_bug函数，核心的逻辑是使用异常PC在__bug_table这个段里查找对应
+的信息，然后打印查找到的内容。
+
+
+uaccess实现
+------------
+
+ riscv的对应实现在linux/arch/riscv/include/asm/uaccess.h，用户态内核态之间传递信息
+ 的逻辑基本上在uaccess里实现，比如，copy_from_user、copy_to_user等等。
+
+ 这里只看一个copy_to_user的实现:
+```
+ /* linux/include/linux/uaccess.h */
+ copy_to_user
+       /* linux/lib/usercopy.c */
+   +-> _copy_to_user
+         /* 下面的体系构架相关的函数在arch/riscv/include/asm/uaccess.h */
+     +-> access_ok
+     +-> raw_copy_to_user
+           /* arch/riscv/lib/uaccess.S */
+       +-> __asm_copy_to_user(void __user *to, const void *from, unsigned long n)
+
+       (todo: 分析代码)
+```
+
+kprobe实现
+-----------
+
+ (todo: 分析代码)
+
+GDB场景
+--------
+
+ (todo: 分析代码)
