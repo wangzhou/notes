@@ -1,4 +1,5 @@
 -v0.1 2022.7.19 Sherlock init
+-v0.2 2022.7.20 Sherlock 增加代码分析，还没有分析清楚，QMP、增加子命令还没有完成。
 
 简介：本文介绍qemu monitor的一些使用方法，使用qemu调试问题的时候可以参考。分析使用
       的qemu版本是6.2.0。
@@ -181,7 +182,7 @@ x_colo_lost_heartbeat  -- Tell COLO that heartbeat is lost,
                         a failover or takeover is needed.
 xp /fmt addr -- physical memory dump starting at 'addr'        <--- 打印物理地址上的数据
 ```
-其中info命令还有自命令：
+ 其中info命令还有自命令：
 ```
 (qemu) info
 info balloon  -- show balloon information
@@ -242,16 +243,62 @@ info version  -- show the version of QEMU
 info vm-generation-id  -- Show Virtual Machine Generation ID
 info vnc  -- show the vnc server status
 ```
-需要注意的时候，运行如上命令的时候，qemu上的guest系统还处于活动的状态，可以使用
-stop|s暂停模拟，用cont｜c继续模拟。
+ 需要注意的时候，运行如上命令的时候，qemu上的guest系统还处于活动的状态，可以使用
+ stop|s暂停模拟，用cont｜c继续模拟。
 
 增加选项
 ---------
 
-PMQ分析和使用
+ qemu的源码目录下有一个怎么增加monitor命令的指导：qemu/docs/devel/writing-monitor-commands.rst
+
+ (todo)
+
+QMP分析和使用
 --------------
+
+ qemu monitor支持两种模式的对外交互，一种是方便人理解的文本方式，一种是方便代码处理
+ 的json的格式，我们叫后者QMP，叫前者HMP，qemu的官方文档说，代码演进的方向是，HMP
+ 底层都用QMP实现。
+
+ QMP可以直接使用，用户需要使用json格式和qemu monitor交互，基于QMP的工具有virsh/libvirt。
+
+ (todo)
 
 代码分析
 ---------
 
  qemu线程模型
+
+ 在qemu代码里的hmp_info_kvm的函数上打断点，使用gdb运行qemu，在断点处打印调用栈如下：
+```
+ main
+   +-> qemu_main_loop
+     +-> main_loop_wait
+       +-> os_host_main_loop_wait
+         +-> glib_pollfds_poll
+           +-> g_main_context_dispatch
+             +-> fd_chr_read
+	       +-> mux_chr_read
+	         +-> monitor_read
+	           +-> readline_handle_byte
+	             +-> monitor_command_cb
+	               +-> handle_hmp_command
+	                 +-> handle_hmp_command_exec
+	                   +-> hmp_info_kvm
+```
+ guest系统启动后，进入monitor，输出info kvm会触发如上这个断点。
+
+ qemu启动就会触发如下对monitor_init_hmp的断点。
+```
+ main
+   +-> qemu_init
+     +-> qemu_create_late_backends
+       +-> foreach_device_config
+         +-> serial_parse
+           +-> qemu_chr_new_mux_mon
+             +-> qemu_chr_new_permit_mux_mon
+               +-> qemu_chr_new_noreplay
+	         +-> monitor_init_hmp
+```
+ 搞不清楚整个逻辑是怎么组织的？似乎是把stdio也放到glib的事件循环里去监控，但是
+ 这个和chardev的前后端又有什么关系？
