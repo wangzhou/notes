@@ -187,3 +187,5 @@ riscv DEBUG实现/ebreak的使用     to do
 riscv虚拟化			 to do
 qemu monitor			 to do
 qemu gpio
+gdb 看线程信息
+qemu 线程模型、怎么处理信号的

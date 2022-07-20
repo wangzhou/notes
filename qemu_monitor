@@ -1,3 +1,257 @@
 -v0.1 2022.7.19 Sherlock init
 
-简介：本文介绍qemu monitor的一些使用方法，使用qemu调试问题的时候可以参考。
+简介：本文介绍qemu monitor的一些使用方法，使用qemu调试问题的时候可以参考。分析使用
+      的qemu版本是6.2.0。
+
+
+直观使用
+---------
+
+ 启动qemu后，ctrl + a + c可以进入monitor的界面，再次ctrl + a + c可以从monitor里退出，
+ 输入help可以列出monitor里可以使用的命令。我们把部分命令的含义直接用注释的形式写到下面，
+ 后面用到再持续补充进来吧。
+```
+# QEMU 6.2.0 monitor - type 'help' for more information
+(qemu) help
+announce_self [interfaces] [id] -- Trigger GARP/RARP announcements
+balloon target -- request VM to change its memory allocation (in MB)
+block_job_cancel [-f] device -- stop an active background block operation (use -f
+                         if you want to abort the operation immediately
+                         instead of keep running until data is in sync)
+block_job_complete device -- stop an active background block operation
+block_job_pause device -- pause an active background block operation
+block_job_resume device -- resume a paused background block operation
+block_job_set_speed device speed -- set maximum speed for a background block operation
+block_resize device size -- resize a block image
+block_set_io_throttle device bps bps_rd bps_wr iops iops_rd iops_wr -- change I/O throttle limits for a block drive
+block_stream device [speed [base]] -- copy data from a backing file into a block device
+boot_set bootdevice -- define new values for the boot device list
+calc_dirty_rate [-r] [-b] second [sample_pages_per_GB] -- start a round of guest dirty rate measurement (using -r to
+                         specify dirty ring as the method of calculation and
+                         -b to specify dirty bitmap as method of calculation)
+change device filename [format [read-only-mode]] -- change a removable medium, optional format
+chardev-add args -- add chardev
+chardev-change id args -- change chardev
+chardev-remove id -- remove chardev
+chardev-send-break id -- send a break on chardev
+client_migrate_info protocol hostname port tls-port cert-subject -- set migration information for remote display
+closefd closefd name -- close a file descriptor previously passed via SCM rights
+commit device|all -- commit changes to the disk images (if -snapshot is used) or backing files
+cont|c  -- resume emulation
+cpu index -- set the default CPU
+delvm tag -- delete a VM snapshot from its tag
+device_add driver[,prop=value][,...] -- add device, like -device on the command line
+device_del device -- remove device
+drive_add [-n] [[<domain>:]<bus>:]<slot>
+[file=file][,if=type][,bus=n]
+[,unit=m][,media=d][,index=i]
+[,snapshot=on|off][,cache=on|off]
+[,readonly=on|off][,copy-on-read=on|off] -- add drive to PCI storage controller
+drive_backup [-n] [-f] [-c] device target [format] -- initiates a point-in-time
+                        copy for a device. The device's contents are
+                        copied to the new image file, excluding data that
+                        is written after the command is started.
+                        The -n flag requests QEMU to reuse the image found
+                        in new-image-file, instead of recreating it from scratch.
+                        The -f flag requests QEMU to copy the whole disk,
+                        so that the result does not need a backing file.
+                        The -c flag requests QEMU to compress backup data
+                        (if the target format supports it).
+
+drive_del device -- remove host block device
+drive_mirror [-n] [-f] device target [format] -- initiates live storage
+                        migration for a device. The device's contents are
+                        copied to the new image file, including data that
+                        is written after the command is started.
+                        The -n flag requests QEMU to reuse the image found
+                        in new-image-file, instead of recreating it from scratch.
+                        The -f flag requests QEMU to copy the whole disk,
+                        so that the result does not need a backing file.
+
+dump-guest-memory [-p] [-d] [-z|-l|-s|-w] filename [begin length] -- dump guest memory into file 'filename'.
+                        -p: do paging to get guest's memory mapping.
+                        -d: return immediately (do not wait for completion).
+                        -z: dump in kdump-compressed format, with zlib compression.
+                        -l: dump in kdump-compressed format, with lzo compression.
+                        -s: dump in kdump-compressed format, with snappy compression.
+                        -w: dump in Windows crashdump format (can be used instead of ELF-dump converting),
+                            for Windows x64 guests with vmcoreinfo driver only.
+                        begin: the starting physical address.
+                        length: the memory size, in bytes.
+eject [-f] device -- eject a removable medium (use -f to force it)
+exit_preconfig  -- exit the preconfig state
+expire_password protocol time -- set spice/vnc password expire-time
+gdbserver [device] -- start gdbserver on given device (default 'tcp::1234'), stop with 'none'
+getfd getfd name -- receive a file descriptor via SCM rights and assign it a name
+gpa2hpa addr -- print the host physical address corresponding to a guest physical address
+gpa2hva addr -- print the host virtual address corresponding to a guest physical address
+gva2gpa addr -- print the guest physical address corresponding to a guest virtual address
+help|? [cmd] -- show the help
+hostfwd_add [netdev_id] [tcp|udp]:[hostaddr]:hostport-[guestaddr]:guestport -- redirect TCP or UDP connections from host to guest (requires -net user)
+hostfwd_remove [netdev_id] [tcp|udp]:[hostaddr]:hostport -- remove host-to-guest TCP or UDP redirection
+i /fmt addr -- I/O port read
+info [subcommand] -- show various information about the system state
+loadvm tag -- restore a VM snapshot from its tag
+log item1[,...] -- activate logging of the specified items              <--- 似乎可以动态的触发某种打印log
+logfile filename -- output logs to 'filename'
+memsave addr size file -- save to disk virtual memory dump starting at 'addr' of size 'size'
+migrate [-d] [-b] [-i] [-r] uri -- migrate to URI (using -d to not wait for completion)
+                         -b for migration without shared storage with full copy of disk
+                         -i for migration without shared storage with incremental copy of disk (base image shared between src and destination)
+                         -r to resume a paused migration
+migrate_cancel  -- cancel the current VM migration
+migrate_continue state -- Continue migration from the given paused state
+migrate_incoming uri -- Continue an incoming migration from an -incoming defer
+migrate_pause  -- Pause an ongoing migration (postcopy-only)
+migrate_recover uri -- Continue a paused incoming postcopy migration
+migrate_set_capability capability state -- Enable/Disable the usage of a capability for migration
+migrate_set_parameter parameter value -- Set the parameter for migration
+migrate_start_postcopy  -- Followup to a migration command to switch the migration to postcopy mode. The postcopy-ram capability must be set on both source an
+d destination before the original migration command .
+mouse_button state -- change mouse button state (1=L, 2=M, 4=R)
+mouse_move dx dy [dz] -- send mouse move events
+mouse_set index -- set which mouse device receives events
+nbd_server_add nbd_server_add [-w] device [name] -- export a block device via NBD
+nbd_server_remove nbd_server_remove [-f] name -- remove an export previously exposed via NBD
+nbd_server_start nbd_server_start [-a] [-w] host:port -- serve block devices on the given host and port
+nbd_server_stop nbd_server_stop -- stop serving block devices using the NBD protocol
+netdev_add [user|tap|socket|vde|bridge|hubport|netmap|vhost-user],id=str[,prop=value][,...] -- add host network device
+netdev_del id -- remove host network device
+nmi  -- inject an NMI
+o /fmt addr value -- I/O port write
+object_add [qom-type=]type,id=str[,prop=value][,...] -- create QOM object
+object_del id -- destroy QOM object
+pcie_aer_inject_error [-a] [-c] id <error_status> [<tlp header> [<tlp header prefix>]] -- inject pcie aer error
+                         -a for advisory non fatal error
+                         -c for correctable error
+                        <id> = qdev device id
+                        <error_status> = error string or 32bit
+                        <tlp header> = 32bit x 4
+                        <tlp header prefix> = 32bit x 4
+pmemsave addr size file -- save to disk physical memory dump starting at 'addr' of size 'size'
+print|p /fmt expr -- print expression value (use $reg for CPU register access)
+qemu-io [-d] [device] "[command]" -- run a qemu-io command on a block device
+                        -d: [device] is a device ID rather than a drive ID or node name
+qom-get path property -- print QOM property
+qom-list path -- list QOM properties
+qom-set [-j] path property value -- set QOM property.
+                        -j: the value is specified in json format.
+quit|q  -- quit the emulator
+replay_break icount -- set breakpoint at the specified instruction count
+replay_delete_break  -- remove replay breakpoint
+replay_seek icount -- replay execution to the specified instruction count
+ringbuf_read device size -- Read from a ring buffer character device
+ringbuf_write device data -- Write to a ring buffer character device
+savevm tag -- save a VM snapshot. If no tag is provided, a new snapshot is created
+screendump filename [device [head]] -- save screen from head 'head' of display device 'device' into PPM image 'filename'
+sendkey keys [hold_ms] -- send keys to the VM (e.g. 'sendkey ctrl-alt-f1', default hold time=100 ms)
+set_link name on|off -- change the link status of a network adapter
+set_password protocol password action-if-connected -- set spice/vnc password
+singlestep [on|off] -- run emulation in singlestep mode or switch to normal mode      <--- 似乎还可以动态的进入和退出singlestep?
+snapshot_blkdev [-n] device [new-image-file] [format] -- initiates a live snapshot
+                        of device. If a new image file is specified, the
+                        new image file will become the new root image.
+                        If format is specified, the snapshot file will
+                        be created in that format.
+                        The default format is qcow2.  The -n flag requests QEMU
+                        to reuse the image found in new-image-file, instead of
+                        recreating it from scratch.
+snapshot_blkdev_internal device name -- take an internal snapshot of device.
+                        The format of the image used by device must
+                        support it, such as qcow2.
+
+snapshot_delete_blkdev_internal device name [id] -- delete an internal snapshot of device.
+                        If id is specified, qemu will try delete
+                        the snapshot matching both id and name.
+                        The format of the image used by device must
+                        support it, such as qcow2.
+
+stopcapture capture index -- stop capture
+stop|s  -- stop emulation
+sum addr size -- compute the checksum of a memory region
+sync-profile [on|off|reset] -- enable, disable or reset synchronization profiling. With no arguments, prints whether profiling is on or off.
+system_powerdown  -- send system power down event
+system_reset  -- reset the system
+system_wakeup  -- wakeup guest from suspend
+trace-event name on|off [vcpu] -- changes status of a specific trace event (vcpu: vCPU to set, default is all)
+watchdog_action [reset|shutdown|poweroff|pause|debug|none] -- change watchdog action
+wavcapture path audiodev [frequency [bits [channels]]] -- capture audio to a wave file (default frequency=44100 bits=16 channels=2)
+x /fmt addr -- virtual memory dump starting at 'addr'          <--- 打印虚拟地址上的数据
+x_colo_lost_heartbeat  -- Tell COLO that heartbeat is lost,
+                        a failover or takeover is needed.
+xp /fmt addr -- physical memory dump starting at 'addr'        <--- 打印物理地址上的数据
+```
+其中info命令还有自命令：
+```
+(qemu) info
+info balloon  -- show balloon information
+info block [-n] [-v] [device] -- show info of one block device or all block devices (-n: show named nodes; -v: show details)
+info block-jobs  -- show progress of ongoing block device operations
+info blockstats  -- show block device statistics
+info capture  -- show capture information
+info chardev  -- show the character devices
+info cpus  -- show infos for each CPU                          <--- 打印vCPU的线程id
+info dirty_rate  -- show dirty rate information
+info dump  -- Display the latest dump status
+info history  -- show the command line history
+info hotpluggable-cpus  -- Show information about hotpluggable CPUs
+info iothreads  -- show iothreads
+info irq  -- show the interrupts statistics (if available)
+info jit  -- show dynamic compiler info                        <--- 可以查看tcg的相关信息，比如平均TB的平均大小
+info kvm  -- show KVM information
+info mem  -- show the active virtual memory mappings           <--- dump出当前guest系统中所有虚拟地址到物理地址的映射(dump时刻的进程?)
+info memdev  -- show memory backends
+info memory-devices  -- show memory devices
+info memory_size_summary  -- show the amount of initially allocated and present hotpluggable (if enabled) memory in bytes.
+info mice  -- show which guest mouse is receiving events
+info migrate  -- show migration status
+info migrate_capabilities  -- show current migration capabilities
+info migrate_parameters  -- show current migration parameters
+info mtree [-f][-d][-o][-D] -- show memory tree (-f: dump flat view for address spaces;-d: dump dispatch tree, valid with -f only);-o: dump region owners/pare
+nts;-D: dump disabled regions
+info name  -- show the current VM name
+info network  -- show the network state
+info numa  -- show NUMA information
+info opcount  -- show dynamic compiler opcode counters
+info pci  -- show PCI info
+info pic  -- show PIC state
+info profile  -- show profiling information
+info qdm  -- show qdev device model list
+info qom-tree [path] -- show QOM composition tree
+info qtree  -- show device tree
+info ramblock  -- Display system ramblock information
+info rdma  -- show RDMA state
+info registers [-a] -- show the cpu registers (-a: all - show register info for all cpus)     <--- 打印CPU的寄存器值，多核的时候可以加上-a
+info replay  -- show record/replay information
+info rocker name -- Show rocker switch
+info rocker-of-dpa-flows name [tbl_id] -- Show rocker OF-DPA flow tables
+info rocker-of-dpa-groups name [type] -- Show rocker OF-DPA groups
+info rocker-ports name -- Show rocker ports
+info roms  -- show roms
+info snapshots  -- show the currently saved VM snapshots
+info status  -- show the current VM status (running|paused)
+info sync-profile [-m] [-n] [max] -- show synchronization profiling info, up to max entries (default: 10), sorted by total wait time. (-m: sort by mean wait t
+ime; -n: do not coalesce objects with the same call site)
+info tpm  -- show the TPM device
+info trace-events [name] [vcpu] -- show available trace-events & their state (name: event name pattern; vcpu: vCPU to query, default is any)
+info usb  -- show guest USB devices
+info usbhost  -- show host USB devices
+info usernet  -- show user network stack connection states
+info uuid  -- show the current VM UUID
+info version  -- show the version of QEMU
+info vm-generation-id  -- Show Virtual Machine Generation ID
+info vnc  -- show the vnc server status
+```
+需要注意的时候，运行如上命令的时候，qemu上的guest系统还处于活动的状态，可以使用
+stop|s暂停模拟，用cont｜c继续模拟。
+
+增加选项
+---------
+
+PMQ分析和使用
+--------------
+
+代码分析
+---------
+
+ qemu线程模型
