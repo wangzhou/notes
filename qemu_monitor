@@ -1,5 +1,6 @@
 -v0.1 2022.7.19 Sherlock init
 -v0.2 2022.7.20 Sherlock 增加代码分析，还没有分析清楚，QMP、增加子命令还没有完成。
+-v0.3 2022.7.22 Sherlock 基本完成代码分析，QMP、增加子命令还没有完成。
 
 简介：本文介绍qemu monitor的一些使用方法，使用qemu调试问题的时候可以参考。分析使用
       的qemu版本是6.2.0。
@@ -267,7 +268,31 @@ QMP分析和使用
 代码分析
 ---------
 
- qemu线程模型
+ ctrl + a + c可以进入monitor HMP的界面，这里对应的代码逻辑是怎么样的。要分析清楚
+ 这个就先要对qemu的线程模型有一定的了解。qemu为每个vCPU创建一个线程，qemu在主线程
+ 里处理IO，qemu还为其他的业务起了相关线程，比如，为虚拟机热迁移起了单独的线程。
+ 
+ qemu主线程里使用poll fd的方式监控IO，具体编码实现上qemu使用了glib库里提供的事件处理
+ 方式。所以，我们要找见monitor对应的fd是在哪里插入到qemu的事件监控里的。
+
+ qemu启动使用-nographic时，monitor HMP会使用标准输入输出作为用户界面的输入输出，
+ 具体上，把monitor fd插入到qemu事件监控里的代码路径如下：
+```
+ main
+   +-> qemu_init
+     +-> qemu_create_late_backends
+       +-> foreach_device_config
+         +-> serial_parse
+           +-> qemu_chr_new_mux_mon
+             +-> qemu_chr_new_permit_mux_mon
+               +-> qemu_chr_new_noreplay
+	         +-> monitor_init_hmp
+		   +-> qemu_char_fe_set_handlers  <--- 这里所谓的前端似乎只是抽象了一个统一的后端配置入口
+		     +-> qemu_char_fe_set_handlers_full
+		       +-> mux_chr_updata_read_handlers
+		         +-> qemu_char_fe_set_handlers_full
+		           +-> fd_chr_updata_read_handlers  <--- 最后在这里加入到事件监控
+```
 
  在qemu代码里的hmp_info_kvm的函数上打断点，使用gdb运行qemu，在断点处打印调用栈如下：
 ```
@@ -286,19 +311,7 @@ QMP分析和使用
 	                 +-> handle_hmp_command_exec
 	                   +-> hmp_info_kvm
 ```
- guest系统启动后，进入monitor，输出info kvm会触发如上这个断点。
+ 可以看出当monitor上有输入的时候，qemu主线程会poll到相关fd，然后以来glib的事件处理
+ 模型做事件分发处理，然后一路调用下来。
 
- qemu启动就会触发如下对monitor_init_hmp的断点。
-```
- main
-   +-> qemu_init
-     +-> qemu_create_late_backends
-       +-> foreach_device_config
-         +-> serial_parse
-           +-> qemu_chr_new_mux_mon
-             +-> qemu_chr_new_permit_mux_mon
-               +-> qemu_chr_new_noreplay
-	         +-> monitor_init_hmp
-```
- 搞不清楚整个逻辑是怎么组织的？似乎是把stdio也放到glib的事件循环里去监控，但是
- 这个和chardev的前后端又有什么关系？
+Note: chardev目录下的abstract class有chardev(char.c)、chardev-fd(char-fd.c)
