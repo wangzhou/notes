@@ -289,9 +289,10 @@ QMP分析和使用
 	         +-> monitor_init_hmp
 		   +-> qemu_char_fe_set_handlers  <--- 这里所谓的前端似乎只是抽象了一个统一的后端配置入口
 		     +-> qemu_char_fe_set_handlers_full
-		       +-> mux_chr_updata_read_handlers
+		       +-> mux_chr_update_read_handlers
 		         +-> qemu_char_fe_set_handlers_full
-		           +-> fd_chr_updata_read_handlers  <--- 最后在这里加入到事件监控
+		           +-> fd_chr_update_read_handlers
+			     +-> g_source_attach  <--- 最后在这里加入到事件监控
 ```
 
  在qemu代码里的hmp_info_kvm的函数上打断点，使用gdb运行qemu，在断点处打印调用栈如下：
