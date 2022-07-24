@@ -6,7 +6,8 @@ riscv entry.S
 -v0.3 2022.7.4  sherlock continue
 
 简介：本文分析Linux内核里riscv构架下的entry.S这个文件，内核代码使用的版本是5.12-rc8。
-      采用直接在代码里加注释的方式写分析的内容，注释用“n:”开头。
+      采用直接在代码里加注释的方式写分析的内容，注释用“n:”开头。目前只分析主流程，
+      一些相关的细节还需要持续更新。
 
 ```
 /* n: 在非抢占的情况下，下面两个符号等价 */
@@ -23,14 +24,14 @@ ENTRY(handle_exception)
 	 */
 	/*
 	 * n: 交换tp寄存器和scratch寄存器里的值。如果exception从用户态进来，tp和
-	 * scratch的值应该是相等的(下面在厉害内核的时候，会把用户进程的task_struct
+	 * scratch的值应该是相等的(下面在离开内核的时候，会把用户进程的task_struct
 	 * 指针赋给tp)，如果exception从内核态进来，tp应该是内核的task_struct
 	 * 指针，scratch应该是0。
 	 *
 	 * 所以，下面紧接着的处理中，如果从内核进来，要恢复下tp。
 	 */
 	csrrw tp, CSR_SCRATCH, tp
-	/* n: tp不为0，异常来自用户态，需要保存上下文 */
+	/* n: tp不为0，异常来自用户态，直接跳到上下文保存的地方 */
 	bnez tp, _save_context
 
 _restore_kernel_tpsp:
@@ -52,7 +53,10 @@ _save_context:
 	REG_S sp, TASK_TI_USER_SP(tp)
 	/* n: sp换成内核栈 */
 	REG_L sp, TASK_TI_KERNEL_SP(tp)
-	/* n: 扩大栈的范围，扩大的范围用来保存相关的寄存器。移动sp其实就相当于在栈上分配空间 */
+	/*
+	 * n: 扩大栈的范围，扩大的范围用来保存相关的寄存器。移动sp其实就相当于在栈上分配空间。
+	 *    sp移动之前的值是中断或者异常打断的上下文，也就是中断或异常处理完后要恢复的值。
+	 */
 	addi sp, sp, -(PT_SIZE_ON_STACK)
 	/*
 	 * n: 下面的一段代码把各个系统寄存器保存到栈上刚刚开辟出来的空间, 注意需要
@@ -192,13 +196,12 @@ skip_context_tracking:
 	call trace_hardirqs_on
 #endif
 	/*
-	 * n: csrs是csrrs x0, csr, rs, 意思是把csr的值存入x0, csr的旧值和rs或写入csr。
-	 * 这里是把S mode全局中断打开。注意，上面的逻辑是如果检测到是ebreak异常
-	 * 是直接跳过开中断的。
+	 * n: csrs是csrrs x0, csr, rs, 意思是把csr的值存入x0, csr的旧值和rs做或运算后写入csr。
+	 * 这里是把S mode全局中断打开。注意，上面的逻辑是如果检测到是ebreak异常是直接跳过开中断的。
 	 */
 	csrs CSR_STATUS, SR_IE
 
-	/* n: 开始处理异常，先配置返回地址。非ebreak，且之前是开中断的，异常处理开中断 */
+	/* n: 开始处理异常，先配置返回地址。非ebreak，且之前是开中断的，异常处理前开中断 */
 1:
 	la ra, ret_from_exception
 	/* Handle syscalls */
@@ -249,7 +252,7 @@ handle_syscall:
 	REG_L a7, PT_A7(sp)
 #endif
 	/* save the initial A0 value (needed in signal handlers) */
-	/* n: 把a0保存到栈的PT_ORIG_A0这个位置，a0为什么要存都这里？*/
+	/* n: 把a0保存到栈的PT_ORIG_A0这个位置，a0为什么要存都这里？(a0会作为系统调用的返回值，估计这里是为了做区分) */
 	REG_S a0, PT_ORIG_A0(sp)
 	/*
 	 * Advance SEPC to avoid executing the original
@@ -306,7 +309,7 @@ ret_from_syscall_rejected:
 ret_from_exception:
 	/* n: 把sstatus的值加载到s0里 */
 	REG_L s0, PT_STATUS(sp)
-	/* n: 关中断？处理异常的时候，除了ebreak异常，其他异常处理可能是开中断的 */
+	/* n: 关中断。处理异常的时候，除了ebreak异常，其他异常处理可能是开中断的 */
 	csrc CSR_STATUS, SR_IE
 #ifdef CONFIG_TRACE_IRQFLAGS
 	call trace_hardirqs_off
@@ -326,7 +329,7 @@ ret_from_exception:
 resume_userspace:
 	/* Interrupts must be disabled here so flags are checked atomically */
 	REG_L s0, TASK_TI_FLAGS(tp) /* current_thread_info->flags */
-	/* n: 哪里会配置这个值？定义在arch/riscv/include/asm/thread_info.h */
+	/* n: 哪里会配置这个值？(这个估计要结合调度看下) 定义在arch/riscv/include/asm/thread_info.h */
 	andi s1, s0, _TIF_WORK_MASK
 	bnez s1, work_pending
 

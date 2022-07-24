@@ -1,20 +1,6 @@
-1. lock使用笔记           xx
-2. 信号使用笔记 APUE10    xx
 3. APUE789 11 12 13
-4. perf flame             xx
-4. work queue分析 	  xx
-5. sva分析                xx
-6. dma engine子系统分析   xx
 7. dma buf子系统分析 
 8. android ion分析
-
-9. smmu series		  xx
-   1. smmu spec导读
-   2. smmu linux软件构架分析
-   3. smmu 细节专题
-
-10. socket series(CH11-CH13)  xx
-   1.读书笔记
 
 11. c库函数 series
    1. string
@@ -23,7 +9,6 @@
    4. memory
 
 12. cache MESI协议
-14. perf uncore event    xx
 15. binding cpu related: numactl --cpubind=0 --membind=0 
     taskset -c cpu, irq binding: irq_set_affinity_hint, pci_alloc_irq_vectors_affinity?
 16. spinlock实现分析
@@ -57,24 +42,14 @@ dh
 vscode ##
 linux dbus
 
-memory tools		  xx
-tailq                     xx
-hugepage		  xx
-pin kernel page		  xx
 bit map
 xarray
 open share lib problem
 share lib name
-github review code	  xx
-dpdk mempool		  xx
-openssl cmd		  xx
 如何写一个openssl engine
 如何用automake组织一个项目
 openssl 异步机制分析
 
-how to use ebpf   xx
-io-pgtable        xx
-linux thp分析             xx
 linux ksm分析
 linux swap分析
 numa balancing
@@ -122,27 +97,12 @@ qemu dynamic attribute #
 vim internal search vim /xx/ **/*.[ch] vim以文件为基础，vim直接保存到文件，从文件中load，vim ab代码缩写，makefile出错反向cfile到原文件，cn
 minifs outside repo build logic   #
 qemu smmu(add pasid logic) #
-pci pri  #
-dma need post #
 rv asid logic
 atc detail analysis #
 qemu build system  #
 priority q #
-qemu in qemu(include outtree qemu build)  #
 build rootfs modify 1. format, 2, devmmu的依赖的配置方式
 viommu构架分析
-makefile重新学习 拿一个例子分析下，用户态的pciutils库的Makefile #
-
-10.22:
-超标量处理器设计 8,9
-10.23:
-/dev/iommu patch, dma分析
-
-10.25: M1
-10.26:
-10.27:
-10.28:
-10.29:
 
 目录式缓存一致性的设计
 SIMD提高性能的原因
@@ -157,35 +117,26 @@ rcu使用和原理
 PLKA 4虚拟内存
 PLKA 内存回收
 qemu内存管理
-qemu tcg
-《大学》总结 #
+qemu tcg and exec              to post 7
 perf框架
-gdb学习 #
 rv指令分析：跳转指令
-tcg后端解码细节分析
-qemu user mode分析 #
-qemu tcg branch #
-qemu tcg atomci #
-qemu tcg load/store缺页         to post
-qemu模拟系统指令 #
-qemu tcg/kvm模型
+qemu tcg load/store缺页         to post 1
+qemu kvm模型
 qemu atomic互斥区
 qemu helper函数的实现
 qemu tb代码和cpu状态的关系
-global TCGv存在cpu里，TCGTemps存在TCGContext里，TCGContext是tb执行的时候动态
-生成的。atomic互斥区只锁了tb执行，没有锁翻译。chained TB有可能一直chained。
-goto_tb只能是固定地址，lookup可以是动态变的。
-riscv head.S代码分析  #
-riscv entry.S代码分析		 to post
-qemu irq      			 to do
-elf格式分析以及相关工具(程序员的自我修养)  #
+ global TCGv存在cpu里，TCGTemps存在TCGContext里，TCGContext是tb执行的时候动态
+ 生成的。atomic互斥区只锁了tb执行，没有锁翻译。chained TB有可能一直chained。
+ goto_tb只能是固定地址，lookup可以是动态变的。
+riscv entry.S代码分析		 to post 2
+qemu irq      			 to post 3
 中庸总结		         to do
-riscv系统构架总结(ecall) 	 to do
+riscv系统构架总结(ecall) 	 to post 4
 内核初始化阶段初始页表  #
 riscv多核启动
-riscv DEBUG实现/ebreak的使用     to do
+riscv DEBUG实现/ebreak的使用     to post 5
 riscv虚拟化			 to do
-qemu monitor			 to do
+qemu monitor			 to post 6
 qemu gpio
 gdb 看线程信息
 qemu 线程模型、怎么处理信号的
