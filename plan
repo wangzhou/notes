@@ -117,26 +117,27 @@ rcu使用和原理
 PLKA 4虚拟内存
 PLKA 内存回收
 qemu内存管理
-qemu tcg and exec              to post 7
+qemu tcg and exec               #
 perf框架
 rv指令分析：跳转指令
-qemu tcg load/store缺页         to post 1
+qemu tcg load/store缺页         #
 qemu kvm模型
 qemu atomic互斥区
 qemu helper函数的实现
-qemu tb代码和cpu状态的关系
+
  global TCGv存在cpu里，TCGTemps存在TCGContext里，TCGContext是tb执行的时候动态
  生成的。atomic互斥区只锁了tb执行，没有锁翻译。chained TB有可能一直chained。
  goto_tb只能是固定地址，lookup可以是动态变的。
-riscv entry.S代码分析		 to post 2
-qemu irq      			 to post 3
+
+riscv entry.S代码分析		 #
+qemu irq      			 #
 中庸总结		         to do
-riscv系统构架总结(ecall) 	 to post 4
-内核初始化阶段初始页表  #
-riscv多核启动
-riscv DEBUG实现/ebreak的使用     to post 5
+riscv系统构架总结(ecall) 	 #
+内核初始化阶段初始页表		 #
+riscv多核启动			 to do
+riscv DEBUG实现/ebreak的使用     #
 riscv虚拟化			 to do
-qemu monitor			 to post 6
+qemu monitor			 #
 qemu gpio
 gdb 看线程信息
 qemu 线程模型、怎么处理信号的
