@@ -1,0 +1,59 @@
+qemu riscv timer的基本逻辑
+
+-v0.1 2022.7.26 Sherlock init
+
+简介：本文梳理riscv上timer的基本软硬件逻辑，硬件模型基于qemu，使用的qemu版本是6.2.0，
+      内核代码分析使用的版本是v5.12-rc8。
+
+
+基础逻辑
+---------
+
+ riscv上有两个最基本的中断控制器aclint和plic，前者的全称是Advanced Core Local
+ Interruptor，是核内的中断控制器，主要是用来产生timer中断和software中断，后者的全称
+ 是Platform Level Interruptor Controller，主要用来收集外设的中断，plic通过外部中断
+ 向CPU报中断。
+
+ timer相关的寄存器以及寄存器域段有: mip/mie里和timer相关的域段，mtime以及mtimecmp。
+ mie里有控制timer中断使能的bit: MTIE/STIE，控制M mode和S mode timer interrupter是否
+ 使能，mip里有表示是否存在pending的timer中断的bit: MTIP/STIP。
+
+ mtime是一个可读可写的计数器，其中的数值以一定的时间间隔递增，计数器计满后会回绕，
+ mtimecmp寄存器里的数值用来和mtime做比较，当mtime的值大于等于mtimecmp的值，并且
+ MTIE使能时，M mode timer中断被触发。
+
+ 软件可以在timer中断处理函数里，更新mtime的值，从而维持一个固定周期的时钟中断，
+ 一般这个中断就是Linux内核的时钟中断。软件可以写STIP触发一个S mode timer中断。
+
+ NOTE: sstc
+
+qemu逻辑
+---------
+
+ qemu中的aclint和plic的代码路径分别在：hw/intc/riscv_aclint.c和hw/intc/sifive_plic.c。
+ 这里我们只关注和timer相关的部分，可以看到在riscv_aclint.c里只有M mode timer中断的
+ 触发代码。
+
+ 在qemu上跑内核的时候，发现总是一个M mode timer中断跟着一个S mode timer中断，然后
+ 再跟一个S mode ecall。qemu里并没有触发S mode timer的代码，可以猜测S mode timer中断
+ 是在opensbi里触发的。
+
+ 整个逻辑是：由于mtime大于等于mtimecmp触发一个M mode中断，opensbi里的中断处理逻辑
+ 会写STIP，由于S mode time中断已经被委托到S mode处理，在M mode返回S mode后，S mode
+ timer中断就会被触发。(todo: 确认)
+```
+ /* opensbi/lib/sbi/sbi_trap.c */
+ sbi_trap_handler
+   +-> sbi_trap_noaia/ais_irq
+     +-> sbi_timer_process
+           /* 如果没有SSTC特性，才这样处理 */ 
+       +-> csr_set(CSR_MIP, MIP_STIP)
+```
+ S mode timer中断处理函数里通过S mode ecall写mtime，为下一次M mode timer中断配置
+ 合理的数值。(todo: 误差)
+
+
+Linux内核逻辑
+--------------
+
+ 内核相关驱动的位置在：drivers/clocksource/timer-riscv.c
