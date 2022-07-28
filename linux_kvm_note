@@ -68,13 +68,25 @@ Linux KVM逻辑分析
  kvm_vm_ioctl_set_memory_region(kvm, &kvm_userspace_mem)
    +-> kvm_set_memory_region
      +-> __kvm_set_memory_region
+       +-> kvm_prepare_memory_region
+             /* arch/riscv/kvm/mmu.c */
+         +-> kvm_arch_prepare_memory_region
+	       /*
+	        * 虚拟机的物理地址是host的用户态分配的一段虚拟内存，这里面有三个
+		* 地址: 1. 这段虚拟地址的va；2. 这段虚拟地址对应的物理地址；3. 虚拟机
+		* 的物理地址(gpa)，这三个地址对应的实际内存是相同的，但是各自的数值
+		* 是不同的。实际上，第2级翻译是gpa->pa，但是host上申请到的va在host
+		* S mode上的翻译是va->pa(页表基地址是satp)，所以，我们就要把gpa->pa
+		* 的映射插到第2级翻译对应的页表里(hgatp)。
+		* 
+		* 整个第2级缺页的流程 (todo)
+	        */
+           +-> gstage_ioremap
+	         /* 配置第二级的页表 */
+	     +-> gstage_set_pte
+       +-> kvm_create_memslot
+       +-> kvm_commit_memory_region
 
-           /* arch/riscv/kvm/mmu.c */
-       +-> kvm_arch_prepare_memory_region
-
-         +-> gstage_ioremap
-	       /* 配置第二级的页表 */
-	   +-> gstage_set_pte
 ```
  
  vcpu run的逻辑：
