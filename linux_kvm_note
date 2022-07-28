@@ -1,0 +1,90 @@
+Linux KVM逻辑分析
+------------------
+
+-v0.1 2022.7.28 Sherlock init
+
+简介：本文分析Linux内核里KVM相关的逻辑，体系架构基于riscv。具体调试的时候，我们
+      使用了两层的qemu模型，第一层qemu使能了riscv的h扩展，第二层qemu使用kvm启动。
+
+
+基本框架
+---------
+
+ kvm的入口函数在体系构架相关的代码里，riscv在arch/riscv/kvm/main.c里，riscv_kvm_init
+ 直接调用到KVM的总入口函数kvm_init，kvm_init创建一个/dev/kvm的字符设备，随后所有
+ 的kvm相关的操作都依赖这个字符设备。
+
+ kvm_init的大概逻辑：
+```
+ kvm_init
+       /*
+        * 以riscv为例, 主要是做一些基本的硬件检测，比较重要的是gstage mode和vmid
+	* 的检测。riscv里的两级地址翻译，第一级叫VS stage，第二级叫G stage，这里
+        * 检测的gstage mode就是第二级翻译的配置。
+	*/
+   +-> kvm_arch_init
+   [...]
+       /* 注册/dev/kvm的字符设备 */
+   +-> misc_register
+   +-> kvm_preempt_ops.sched_in = kvm_sched_in;
+   +-> kvm_preempt_ops.sched_out = kvm_sched_out;
+```
+ /dev/kvm这个字符设备只定义了对应的ioctl，这个ioctl支持的最主要的功能是创建一个虚拟机。
+ 我们看下KVM_CREATE_VM的逻辑:
+```
+ kvm_dev_ioctl_create_vm
+   +-> kvm_create_vm
+         /* 分配gstage的pgd，vmid，guest的timer */
+     +-> kvm_arch_init_vm
+       /*
+        * 这个ioctl会创建一个匿名文件，ioctl返回值是文件的fd, 这个fd就代表新创建的虚拟机，
+	* 这个fd只实现了ioctl和release回调，release就是销毁虚拟机，ioctl用来配置虚拟机
+	* 的各种资源，比如创建虚拟机的CPU(KVM_CREATE_VCPU)、给虚拟机配置内存(KVM_SET_USER_MEMORY_REGION)?
+	* 等等。
+	*/
+   +-> file = anon_inode_getfile("kvm-vm", &kvm_vm_fops, kvm, O_RDWR)
+```
+ 创建虚拟机的CPU的基本逻辑：
+```
+ kvm_vm_ioctl_create_vcpu
+       /* arch/riscv/kvm/vcpu.c */
+   +-> kvm_arch_vcpu_create
+         /* 软件之前配置好的信息，在这个函数里写到硬件里 */
+     +-> kvm_arch_vcpu_load
+       +-> csr_write更新CSR寄存器
+       +-> kvm_riscv_gstage_update_hgatp  更新hgatp
+       +-> kvm_riscv_vcpu_timer_restore   更新htimedelta
+       /*
+        * 为每个vcpu创建一个匿名的fd，这个fd实现的回调函数有：release、ioctl和mmap，
+	* ioctl提供vcpu的控制接口：运行vcpu(KVM_RUN)等等。
+        */
+   +-> create_vcpu_fd
+```
+ 给虚拟机配置内存:
+```
+ /* kvm_userspace_mem是从用户态传进来的虚拟机内存的配置信息 */
+ struct kvm_userspace_memory_region kvm_userspace_mem;
+
+ kvm_vm_ioctl_set_memory_region(kvm, &kvm_userspace_mem)
+   +-> kvm_set_memory_region
+     +-> __kvm_set_memory_region
+
+           /* arch/riscv/kvm/mmu.c */
+       +-> kvm_arch_prepare_memory_region
+
+         +-> gstage_ioremap
+	       /* 配置第二级的页表 */
+	   +-> gstage_set_pte
+```
+ 
+ vcpu run的逻辑：
+```
+ kvm_vcpu_ioctl
+   +-> case KVM_RUN
+     +-> kvm_arch_vcpu_ioctl_run
+       +-> kvm_riscv_vcpu_enter_exit
+             /* arch/riscv/kvm/vcpu_switch.S (todo) */
+         +-> __kvm_riscv_switch_to
+```
+ (todo: 1. guest里的地址翻译？2. 虚拟机退出的逻辑)
+
