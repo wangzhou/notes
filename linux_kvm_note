@@ -2,13 +2,15 @@ Linux KVM逻辑分析
 ------------------
 
 -v0.1 2022.7.28 Sherlock init
+-v0.2 2022.7.29 Sherlock 增加第二级地址翻译分析, riscv硬件分析
+-v0.3 2022.7.30 Sherlock 增加第二级翻译异常的逻辑，qemu代码分析
 
 简介：本文分析Linux内核里KVM相关的逻辑，体系架构基于riscv。具体调试的时候，我们
       使用了两层的qemu模型，第一层qemu使能了riscv的h扩展，第二层qemu使用kvm启动。
 
 
-基本框架
----------
+内核kvm基本框架
+----------------
 
  kvm的入口函数在体系构架相关的代码里，riscv在arch/riscv/kvm/main.c里，riscv_kvm_init
  直接调用到KVM的总入口函数kvm_init，kvm_init创建一个/dev/kvm的字符设备，随后所有
@@ -79,7 +81,7 @@ Linux KVM逻辑分析
 		* S mode上的翻译是va->pa(页表基地址是satp)，所以，我们就要把gpa->pa
 		* 的映射插到第2级翻译对应的页表里(hgatp)。
 		* 
-		* 整个第2级缺页的流程 (todo)
+		* 我们自然会联想第2级翻译缺页在哪里处理，这个逻辑单独在下面看。
 	        */
            +-> gstage_ioremap
 	         /* 配置第二级的页表 */
@@ -95,8 +97,71 @@ Linux KVM逻辑分析
    +-> case KVM_RUN
      +-> kvm_arch_vcpu_ioctl_run
        +-> kvm_riscv_vcpu_enter_exit
-             /* arch/riscv/kvm/vcpu_switch.S (todo) */
+             /* arch/riscv/kvm/vcpu_switch.S */
          +-> __kvm_riscv_switch_to
 ```
- (todo: 1. guest里的地址翻译？2. 虚拟机退出的逻辑)
 
+第2级翻译缺页的逻辑可以从vcpu_switch.S里的__kvm_riscv_switch_to入手看，这个函数
+是vcpu运行的入口函数，再投入运行前，这个函数里把__kvm_switch_return这个函数的地址
+配置给了stvec，当vcpu运行出现异常时，就会跳到__kvm_switch_return继续执行，这样就会
+从上面的kvm_riscv_vcpu_enter_exit出来，继续执行kvm_riscv_vcpu_exit, 第2级缺页异常
+在这个函数里处理：
+```
+ kvm_riscv_vcpu_exit
+   +-> gstage_page_fault
+         /* 这个函数里会用host va(不是gpa)，判断是不是有合法的vma存在, 创建第2级map的时候使用gpa->pa */
+     +-> kvm_riscv_gstage_map
+       [...]
+```
+
+qemu riscv H扩展
+-----------------
+
+ qemu支持riscv H扩展的基本逻辑主要集中在中断和异常的处理逻辑，新增寄存器支持，以及
+ 新增虚拟化相关指令的支持。
+
+ (todo: ...)
+
+
+qemu kvm的基本逻辑
+-------------------
+
+ 《qemu tcg翻译执行核心逻辑分析里》已经介绍了虚拟机启动的相关逻辑，从qemu构架上看
+ kvm和tcg处于同一个层面上, 都是cpu模拟的一种加速器。
+
+ (todo: ...)
+
+ 
+riscv H扩展spec分析
+-------------------
+
+ riscv的H扩展增加了CPU的状态，增加了一个隐式的V状态，当V=0的时候，CPU的U/M状态还和
+ 之前是一样的，S状态处在HS状态，当V=1的时候，CPU原来的U/S状态变成了VU/VS状态。
+ V状态在中断或异常时由硬件改变，还有一个改变的地方是sret/mret指令。具体的变化逻辑
+ 是: 1. 当在V状态trap进HS时，硬件会把V配置成0; 2. CPU trap进入M状态，硬件会把V配置成0;
+ 3. sret返回时, 恢复到之前的V状态；4. mret返回时, 恢复到之前的V状态。
+
+ 增加了hypervisor和guest对应的两组寄存器，其中hypervisor对应的寄存器有: hstatus, hedeleg,
+ hideleg, hvip, hip, hie, hgeip, hgeie, henvcfg, henvcfgh, hounteren, htimedelta, htimedeltah,
+ htval, htinst, hgatp, guest对应的寄存器有：vsstatus, vsip, vsie, vstvec, vsscratch, vsepc,
+ vscause, vstval, vsatp。
+
+ 对于这些系统寄存器，我们可以大概分为两类，一类静态配置的，一类是系统运行时会改变的，
+ 比如，hedeleg/hideleg表示是否要把HS的中断继续委托到VS去处理，这个就会提前静态配置好，
+ 比如像hip/hie这种中断相关的寄存器，就可以灵活配置。这些寄存器具体使用的时候的行为
+ 比较有意思，VS在实际运行的时候会把配置的值copy到S mode的寄存器上，在退出V状态的时候
+ 再把S mode的寄存器上的值保存会VS状态的寄存器上，不过要让guest内核可以直接运行到KVM上，
+ 原来使用的寄存器名字也是不能改变的。当系统从V状态切到HS时，V被配置成0，同时把之前
+ 保存的S mode寄存器copy到S mode寄存器上，HS工作的时候使用S mode寄存器，同时使用hypervisor
+ 寄存器里的静态配置信息，当从HS离开的时候，硬件会把当前S mode寄存器里的值保存到硬件里。
+
+ 所以，从总体上看，不管是在HS还是VS，实际运行的时候使用的都是S mode的寄存器。当HS是处理
+ hypervisor的业务时，使用hypervisor相关寄存器里的定义。
+
+ (todo: 新增虚拟化相关的指令)
+
+运行情况跟踪
+-------------
+
+
+ (todo: 1. guest里的地址翻译？2. 虚拟机退出的逻辑; 3. V flag在哪里配置上的; 4. 第二级翻译异常后退出的逻辑?）
