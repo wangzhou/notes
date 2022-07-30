@@ -119,9 +119,39 @@ qemu riscv H扩展
 
  qemu支持riscv H扩展的基本逻辑主要集中在中断和异常的处理逻辑，新增寄存器支持，以及
  新增虚拟化相关指令的支持。
-
- (todo: ...)
-
+```
+ riscv_cpu_do_interrupt
+       /* 从V状态进入HS，会把sxxx寄存器保存到vsxxx，把xxx_hs推到sxxx里 */
+   +-> riscv_cpu_swap_hypervisor_regs(env)
+       /* 保存当前状态 */
+   +-> env->hstatus = set_field(env->hstatus, HSTATUS_SPVP, env->priv);
+       /* 保存当前V状态 */
+   +-> env->hstatus = set_field(env->hstatus, HSTATUS_SPV, riscv_cpu_virt_enabled(env));
+       /* 保存异常gpa地址 */
+   +-> htval = env->guest_phys_fault_addr;
+       /* 后面可以看到cause, 异常pc, tval都是靠S mode寄存器包给软件的, 最后把模式切到S mode */
+   +-> riscv_cpu_set_mode(env, PRV_S);
+```
+ 在sret/mret指令里会处理V状态以及寄存器的倒换：
+```
+ helper_sret
+     /* 在H扩展打开的分支里会有如下的硬件操作 */
+   +-> prev_priv = get_field(mstatus, MSTATUS_SPP);
+   +-> prev_virt = get_field(hstatus, HSTATUS_SPV);
+   +-> hstatus = set_field(hstatus, HSTATUS_SPV, 0);
+   +-> mstatus = set_field(mstatus, MSTATUS_SPP, 0);
+   +-> mstatus = set_field(mstatus, SSTATUS_SIE, get_field(mstatus, SSTATUS_SPIE));
+   +-> mstatus = set_field(mstatus, SSTATUS_SPIE, 1);
+   +-> env->mstatus = mstatus;
+   +-> env->hstatus = hstatus;
+       /* 如果之前是V状态使能的，这里要做寄存器的倒换: 把S mode寄存器保存到xxx_hs，把vsxxx寄存器存到S mode寄存器里 */
+   +-> riscv_cpu_swap_hypervisor_regs(env);
+       /* 使能V状态 */
+   +-> riscv_cpu_set_virt_enabled(env, prev_virt);
+```
+ 
+ 新增了vsxxx以及hxxx寄存器的访问代码。新增加的虚拟化相关的指令大概分两类，一类是
+ 和虚拟机相关的TLB指令，一类是虚拟机里的访存指令(todo)
 
 qemu kvm的基本逻辑
 -------------------
@@ -129,8 +159,35 @@ qemu kvm的基本逻辑
  《qemu tcg翻译执行核心逻辑分析里》已经介绍了虚拟机启动的相关逻辑，从qemu构架上看
  kvm和tcg处于同一个层面上, 都是cpu模拟的一种加速器。
 
- (todo: ...)
-
+ 虚拟机初始化逻辑:
+```
+ /* accel/kvm/kvm-all.c */
+ kvm_init
+   +-> qemu_open_old("/dev/kvm", O_RDWR)
+       /* 创建虚拟机 */
+   +-> kvm_ioctl(s, KVM_CREATE_VM, type);
+       /* 虚拟机内存配置入口 */
+   +-> kvm_memory_listener_register
+     +-> kvm_region_add
+       +-> kvm_set_phys_mem
+         +-> kvm_set_user_memory_region
+           +-> kvm_vm_ioctl(s, KVM_SET_USER_MEMORY_REGION, &mem)
+```
+ kvm vcpu线程启动的逻辑：
+```
+ riscv_cpu_realize
+   +-> qemu_init_vcpu(cs)
+         /* kvm对应的回调函数在：accel/kvm/kvm-accel-ops.c: kvm_vcpu_thread_fn */
+     +-> cpus_accel->create_vcpu_thread(cpu)
+         (kvm_vcpu_thread_fn)
+       +-> kvm_init_vcpu
+         +-> kvm_get_vcpu
+	       /* 创建vcpu */
+	   +-> kvm_vm_ioctl(s, KVM_CREATE_VCPU, (void *)vcpu_id)
+       +-> kvm_cpu_exec(cpu)
+             /* 运行vcpu */
+         +-> kvm_vcpu_ioctl(cpu, KVM_RUN, 0)
+```
  
 riscv H扩展spec分析
 -------------------
@@ -164,4 +221,4 @@ riscv H扩展spec分析
 -------------
 
 
- (todo: 1. guest里的地址翻译？2. 虚拟机退出的逻辑; 3. V flag在哪里配置上的; 4. 第二级翻译异常后退出的逻辑?）
+ (todo: 1. guest里的地址翻译？2. 虚拟机退出的逻辑; 3. V flag在哪里配置上的; 4. 第二级翻译异常后退出的逻辑? 5. qemu listener的机制）
