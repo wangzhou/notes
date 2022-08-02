@@ -119,10 +119,26 @@ Linux KVM逻辑分析
 如上是虚拟机进入以及运行的逻辑，在用户态看，就是进入一个ioctl，停在里面运行代码，
 直到运行不下去了，ioctl就返回了，返回值以及ioctl的输出参数携带退出的原因和参数。
 从kvm内部看，虚拟机退出是他执行指令的时候遇到了异常或者中断，异常或中断处理后从ioctl
-返回到qemu线程的用户态。触发虚拟机退出的源头有：todo, 对应代码
+返回到qemu线程的用户态。触发虚拟机退出的源头包括外设的MMIO访问，在构建虚拟机的地址空间
+时，没有对外设的MMIO gpa对第二级映射，这样第二级翻译的时候就会触发缺页异常，kvm的
+处理缺页的代码处理完缺页后就会退出虚拟机(vcpu run ioctl返回)。
+```
+ /* arch/riscv/kvm/vcpu.c */
+ kvm_arch_vcpu_ioctl_run
+       /* 这里一进来run vcpu就处理MMIO，可能是上次时MMIO原因退出的，这样当然要接着MMIO的上下文继续跑 */
+   +-> if (run->exit_reason == KVM_EXIT_MMIO)
+               kvm_riscv_vcpu_mmio_return(vcpu, vcpu->run)
+       /* 投入运行虚拟机, 异常后也从这里退出来 */
+   +-> kvm_riscv_vcpu_enter_exit
+       /* 处理异常*/
+   +-> kvm_riscv_vcpu_exit
+     +-> gstage_page_fault
+       +-> emulate_load
+             /* 在这里配置退出条件 */
+         +-> run->exit_reason = KVM_EXIT_MMIO
+```
 
 (todo: 随后独立考虑中断虚拟化)
-
 
 qemu riscv H扩展基本逻辑
 ------------------------
@@ -236,4 +252,7 @@ riscv H扩展spec分析
 运行情况跟踪
 -------------
 
- (todo: 1. 第二级翻译异常后退出的逻辑? 2. qemu listener的机制? 3. 一个MMIO的退出流程）
+ 1. 在第二层qemu的启动命令里加--trace "kvm_*"跟踪第二层qemu中kvm相关的配置，主要是
+    一些kvm相关的ioctl。
+
+ (todo: 1. 第二级翻译异常后退出的逻辑? 2. qemu listener的机制? 3. 串口的MMIO的退出流程）
