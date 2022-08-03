@@ -121,7 +121,8 @@ Linux KVM逻辑分析
 从kvm内部看，虚拟机退出是他执行指令的时候遇到了异常或者中断，异常或中断处理后从ioctl
 返回到qemu线程的用户态。触发虚拟机退出的源头包括外设的MMIO访问，在构建虚拟机的地址空间
 时，没有对外设的MMIO gpa对第二级映射，这样第二级翻译的时候就会触发缺页异常，kvm的
-处理缺页的代码处理完缺页后就会退出虚拟机(vcpu run ioctl返回)。
+处理缺页的代码处理完缺页后就会退出虚拟机(vcpu run ioctl返回)。发生异常的指令的PC
+保存在sepc里，qemu会再次通过vcpu run ioctl进来，然后通过sret从sepc处继续运行。
 ```
  /* arch/riscv/kvm/vcpu.c */
  kvm_arch_vcpu_ioctl_run
@@ -254,5 +255,7 @@ riscv H扩展spec分析
 
  1. 在第二层qemu的启动命令里加--trace "kvm_*"跟踪第二层qemu中kvm相关的配置，主要是
     一些kvm相关的ioctl。
+ 
+ 2. 在第一层qemu的启动命令里加-d int，观察host内核上虚拟化相关的各种异常。
 
  (todo: 1. 第二级翻译异常后退出的逻辑? 2. qemu listener的机制? 3. 串口的MMIO的退出流程）
