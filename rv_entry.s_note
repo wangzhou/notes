@@ -4,6 +4,7 @@ riscv entry.S
 -v0.1 2022.5.12 sherlock init
 -v0.2 2022.6.28 sherlock continue
 -v0.3 2022.7.4  sherlock continue
+-v0.4 2022.8.9  sherlock fix a bug about tp
 
 简介：本文分析Linux内核里riscv构架下的entry.S这个文件，内核代码使用的版本是5.12-rc8。
       采用直接在代码里加注释的方式写分析的内容，注释用“n:”开头。目前只分析主流程，
@@ -25,7 +26,7 @@ ENTRY(handle_exception)
 	/*
 	 * n: 交换tp寄存器和scratch寄存器里的值。如果exception从用户态进来，tp和
 	 * scratch的值应该是相等的(下面在离开内核的时候，会把用户进程的task_struct
-	 * 指针赋给tp)，如果exception从内核态进来，tp应该是内核的task_struct
+	 * 指针赋给tp)，如果exception从内核态进来，tp应该是当前线程的task_struct
 	 * 指针，scratch应该是0。
 	 *
 	 * 所以，下面紧接着的处理中，如果从内核进来，要恢复下tp。
