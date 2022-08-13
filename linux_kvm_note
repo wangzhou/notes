@@ -60,7 +60,7 @@ Linux KVM逻辑分析
        +-> kvm_riscv_vcpu_timer_restore   更新htimedelta
        /*
         * 为每个vcpu创建一个匿名的fd，这个fd实现的回调函数有：release、ioctl和mmap，
-	* ioctl提供vcpu的控制接口：运行vcpu(KVM_RUN)等等。
+	* ioctl提供vcpu的控制接口，比如，运行vcpu(KVM_RUN)等等。
         */
    +-> create_vcpu_fd
 ```
@@ -93,7 +93,7 @@ Linux KVM逻辑分析
 
 ```
  
- vcpu run的逻辑：
+ 我们先看下vcpu run的逻辑：
 ```
  kvm_vcpu_ioctl
    +-> case KVM_RUN
@@ -102,6 +102,7 @@ Linux KVM逻辑分析
              /* arch/riscv/kvm/vcpu_switch.S */
          +-> __kvm_riscv_switch_to
 ```
+ (todo: 补说明)
 
 第2级翻译缺页的逻辑可以从vcpu_switch.S里的__kvm_riscv_switch_to入手看，这个函数
 是vcpu运行的入口函数，再投入运行前，这个函数里把__kvm_switch_return这个函数的地址
@@ -111,7 +112,11 @@ Linux KVM逻辑分析
 ```
  kvm_riscv_vcpu_exit
    +-> gstage_page_fault
-         /* 这个函数里会用host va(不是gpa)，判断是不是有合法的vma存在, 创建第2级map的时候使用gpa->pa */
+         /*
+	  * 这个函数里会用host va(不是gpa)，判断是不是有合法的vma存在，如果有合法
+	  * 的vma存在，就可以分配内存，并且创建第二级页表，创建第2级map的时候使用
+	  * gpa->pa
+	  */
      +-> kvm_riscv_gstage_map
        [...]
 ```
@@ -156,7 +161,7 @@ qemu riscv H扩展基本逻辑
    +-> env->hstatus = set_field(env->hstatus, HSTATUS_SPV, riscv_cpu_virt_enabled(env));
        /* 保存异常gpa地址 */
    +-> htval = env->guest_phys_fault_addr;
-       /* 后面可以看到cause, 异常pc, tval都是靠S mode寄存器包给软件的, 最后把模式切到S mode */
+       /* 后面可以看到cause, 异常pc, tval都是靠S mode寄存器报给软件的, 最后把模式切到S mode */
    +-> riscv_cpu_set_mode(env, PRV_S);
 ```
  在sret/mret指令里会处理V状态以及寄存器的倒换：
@@ -179,8 +184,8 @@ qemu riscv H扩展基本逻辑
  
  新增了vsxxx以及hxxx寄存器的访问代码。新增加的虚拟化相关的指令大概分两类，一类是
  和虚拟化相关的TLB指令，一类是虚拟化相关的访存指令，可以直接查看他们的qemu实现,
- TLB相关的指令依然是全部刷，访存相关的指令和普通访存指令的实现基本一样，不同的是
- 在mem_idx上增加了TB_FLAGS_PRIV_HYP_ACCESS_MASK，表示要做两级地址翻译。
+ TLB相关的指令依然是刷新全部TLB，访存相关的指令和普通访存指令的实现基本一样，不同
+ 的是在mem_idx上增加了TB_FLAGS_PRIV_HYP_ACCESS_MASK，表示要做两级地址翻译。
 
 qemu kvm的基本逻辑
 -------------------
@@ -258,4 +263,4 @@ riscv H扩展spec分析
  
  2. 在第一层qemu的启动命令里加-d int，观察host内核上虚拟化相关的各种异常。
 
- (todo: 1. 第二级翻译异常后退出的逻辑? 2. qemu listener的机制? 3. 串口的MMIO的退出流程）
+ (todo: 1. qemu listener的机制? 2. 串口的MMIO的退出流程）

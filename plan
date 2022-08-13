@@ -145,3 +145,4 @@ qemu riscv timer		 to post
 riscv两层qemu			 to do
 linux kvm/riscv spec		 to do
 qemu listener			 to do
+linux scheduler			 to do
