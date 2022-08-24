@@ -5,6 +5,7 @@ riscv entry.S
 -v0.2 2022.6.28 sherlock continue
 -v0.3 2022.7.4  sherlock continue
 -v0.4 2022.8.9  sherlock fix a bug about tp
+-v0.5 2022.8.23 sherlock add preempt part
 
 简介：本文分析Linux内核里riscv构架下的entry.S这个文件，内核代码使用的版本是5.12-rc8。
       采用直接在代码里加注释的方式写分析的内容，注释用“n:”开头。目前只分析主流程，
@@ -330,7 +331,7 @@ ret_from_exception:
 resume_userspace:
 	/* Interrupts must be disabled here so flags are checked atomically */
 	REG_L s0, TASK_TI_FLAGS(tp) /* current_thread_info->flags */
-	/* n: 哪里会配置这个值？(这个估计要结合调度看下) 定义在arch/riscv/include/asm/thread_info.h */
+	/* n: todo: 哪里会配置这个值？(这个估计要结合调度看下) 定义在arch/riscv/include/asm/thread_info.h */
 	andi s1, s0, _TIF_WORK_MASK
 	bnez s1, work_pending
 
@@ -432,6 +433,13 @@ restore_all:
 /* n: 开抢占的时候，在恢复上下文之前要先处理下抢占 */
 #if IS_ENABLED(CONFIG_PREEMPTION)
 resume_kernel:
+	/*
+	 * n: 取thread_info里的preempt_count, 如果是非0，那么是禁止抢占的, 就直接
+	 *    跳到restore_all, 不做后面的调度, 否则就继续往下走，查看是否需要调度，
+	 *    需要做调度，就执行下调度。
+	 *
+	 *    todo: 内核在哪里配置抢占和调度。
+	 */
 	REG_L s0, TASK_TI_PREEMPT_COUNT(tp)
 	bnez s0, restore_all
 	REG_L s0, TASK_TI_FLAGS(tp)
