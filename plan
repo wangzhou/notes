@@ -119,7 +119,7 @@ PLKA 内存回收
 qemu内存管理
 qemu tcg and exec               #
 perf框架
-rv指令分析：跳转指令
+rv指令分析：跳转指令		#
 qemu tcg load/store缺页         #
 qemu kvm模型
 qemu atomic互斥区
@@ -144,9 +144,11 @@ qemu 线程模型、怎么处理信号的
 qemu riscv timer		 #
 riscv两层qemu			 to do
 linux kvm/riscv spec		 to post
-qemu listener			 to do
 
+qemu listener			 to do
 linux scheduler			 to do
-linux 软中断/不可屏蔽中断	 to do
 qemu 跳转/temp和local temp	 to do
-linux 软中断			 to do
+linux 软中断			 to post
+kvm irq的逻辑			 to do
+qemu bb以及temp和local temp	 to do
+linux 不可屏蔽中断		 to do	
