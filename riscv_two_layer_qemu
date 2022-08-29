@@ -5,7 +5,7 @@
 简介：可以构建一个两层qemu的环境来调试问题，第一层qemu启动的时候打开qemu的虚拟化
       扩展，这个可以作为一个支持虚拟化扩展的riscv硬件平台，第二层qemu启动的时候
       打开kvm支持。用这样的方式，我们可以去学习kvm虚拟化相关的东西。本文记录这个
-      环境搭建的过程。
+      环境搭建的过程，使用的环境是ubuntu 20.04 arm64版本。
 
 第一层qemu
 -----------
@@ -74,3 +74,29 @@ guest内核
 运行脚本
 ---------
 
+启动第一层qemu:
+```
+#!/bin/sh
+
+qemu-system-riscv64 \
+	-smp 1 -m 1024m \
+	-nographic \
+	-machine virt -cpu 'rv64,x-h=true' \
+	-kernel ~/repos/linux/arch/riscv/boot/Image \
+	-append "console=ttyS0 root=/dev/ram rdinit=/init" \
+	-initrd ~/repos/buildroot/output/images/rootfs.cpio.gz \
+ 	-device virtio-9p-pci,fsdev=p9fs,mount_tag=p9,bus=pcie.0 \
+	-fsdev local,id=p9fs,path=/home/sherlock/p9root,security_model=mapped
+```
+启动第二层qemu:
+```
+#!/bin/sh
+
+qemu-system-riscv64 \
+	-smp 1 -m 256m \
+	-nographic \
+	-machine virt --enable-kvm \
+	-kernel ./Image \
+	-append "console=ttyS0 root=/dev/ram rdinit=/init" \
+	-initrd ./rootfs.cpio.gz
+```
