@@ -1,0 +1,76 @@
+构建riscv两层qemu的步骤
+
+-v0.1 2022.8.29 Sherlock init
+
+简介：可以构建一个两层qemu的环境来调试问题，第一层qemu启动的时候打开qemu的虚拟化
+      扩展，这个可以作为一个支持虚拟化扩展的riscv硬件平台，第二层qemu启动的时候
+      打开kvm支持。用这样的方式，我们可以去学习kvm虚拟化相关的东西。本文记录这个
+      环境搭建的过程。
+
+第一层qemu
+-----------
+
+ 我们这里用qemu主线的当前最新版本，v7.0.0, 正常编译就好。
+
+host内核
+---------
+
+ 我们这里用v5.19主线内核，使用riscv的defconfig编译, 注意要加上KVM的编译选项。
+
+第二层qemu
+-----------
+
+ 这个qemu的编译比较有意思，因为qemu编译需要依赖很多动态库，我用的都是交叉编译编译
+ riscv的程序，所以，需要先交叉编译qemu依赖的动态库，然后再交叉编译qemu，太麻烦了。
+ 我们这里用编译buildroot的方式一同编译小文件系统里的qemu, buildroot编译qemu的时候
+ 就会一同编译qemu依赖的各种库, 这样编译出的host文件系统里就带了qemu。
+
+ 下载buildroot的源码：git clone git://git.buildroot.net/buildroot
+
+ 这个时间点下载的buildroot的源码的commit id是934788d1，这个版本的buildroot需要
+ hack下，使riscv构架下可以编译qemu和cmake:
+```
+diff --git a/package/qemu/Config.in b/package/qemu/Config.in
+index e960a062cb..715d6571d9 100644
+--- a/package/qemu/Config.in
++++ b/package/qemu/Config.in
+@@ -9,6 +9,7 @@ config BR2_PACKAGE_QEMU_ARCH_SUPPORTS_TARGET
+        default y if BR2_powerpc64
+        default y if BR2_powerpc64le
+        default y if BR2_x86_64
++       default y if BR2_riscv
+
+diff --git a/package/cmake/Config.in b/package/cmake/Config.in
+index 3c47fdcb49..4ef5612b57 100644
+--- a/package/cmake/Config.in
++++ b/package/cmake/Config.in
+@@ -6,7 +6,7 @@ config BR2_PACKAGE_CMAKE_ARCH_SUPPORTS
+                BR2_mipsel    || BR2_mips64el    || BR2_powerpc  || \
+                BR2_powerpc64 || BR2_powerpc64le || BR2_sparc    || \
+                BR2_i386      || BR2_x86_64      || BR2_xtensa   || \
+-               BR2_s390x
++               BR2_s390x     || BR2_riscv
+```
+
+ 先选用这个defconfig: make qemu_riscv64_virt_defconfig, 然后我们用make menuconfig
+ 打开buildroot的图形配置界面，选上：
+```
+BR2_TOOLCHAIN_BUILDROOT_GLIBC=y
+BR2_USE_WCHAR=y
+BR2_PACKAGE_QEMU=y
+BR2_PACKAGE_QEMU_CUSTOM_TARGETS=riscv64-softmmu
+
+BR2_TARGET_ROOTFS_CPIO=y
+BR2_TARGET_ROOTFS_CPIO_GZIP=y
+```
+ 然后make -j编译，生成的小文件系统在buildroot/output/images下。
+
+guest内核
+----------
+
+ guest内核可以和上面的host内核用同一个。
+
+
+运行脚本
+---------
+
