@@ -146,8 +146,11 @@ riscv两层qemu			 to post
 linux kvm/riscv spec		 to post
 
 qemu listener			 to do
-linux scheduler			 to do
+linux scheduler			 to do/补充riscv entry.S中有关调度的解释，repost riscv entry.S
 linux 软中断			 to post
 kvm irq的逻辑			 to do
 qemu bb以及temp和local temp	 to post/还有代码分析没有写
-linux 不可屏蔽中断		 to do	
+linux 不可屏蔽中断		 to do
+opensbi代码分析			 to do
+riscv pmu逻辑分析		 to do
+

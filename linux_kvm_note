@@ -62,15 +62,18 @@ Linux KVM逻辑分析
 	* 跳到虚拟机启动的第一条指令。这里描述的是虚拟机最开始启动时候的逻辑。
         */
    +-> kvm_arch_vcpu_create
-         /* 软件之前配置好的信息，在这个函数里写到硬件里 */
-     +-> kvm_arch_vcpu_load
-       +-> csr_write更新CSR寄存器
-       +-> kvm_riscv_gstage_update_hgatp  更新hgatp
-       +-> kvm_riscv_vcpu_timer_restore   更新htimedelta
-       /*
-        * 为每个vcpu创建一个匿名的fd，这个fd实现的回调函数有：release、ioctl和mmap，
-	* ioctl提供vcpu的控制接口，比如，运行vcpu(KVM_RUN)等等。
-        */
+         /* 配置vcpu的timer，实现为配置一个hrtimer，在定时到时，注入时钟中断 */
+     +-> kvm_riscv_vcpu_timer_init
+     +-> kvm_riscv_rest_vcpu
+           /* 软件之前配置好的信息，在这个函数里写到硬件里 */
+       +-> kvm_arch_vcpu_load
+         +-> csr_write更新CSR寄存器
+         +-> kvm_riscv_gstage_update_hgatp  更新hgatp
+         +-> kvm_riscv_vcpu_timer_restore   更新htimedelta
+         /*
+          * 为每个vcpu创建一个匿名的fd，这个fd实现的回调函数有：release、ioctl和mmap，
+          * ioctl提供vcpu的控制接口，比如，运行vcpu(KVM_RUN)等等。
+          */
    +-> create_vcpu_fd
 ```
  给虚拟机配置内存:
