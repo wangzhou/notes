@@ -1,4 +1,4 @@
-Linux KVM逻辑分析
+riscv KVM逻辑分析
 ------------------
 
 -v0.1 2022.7.28 Sherlock init
@@ -25,9 +25,9 @@ Linux KVM逻辑分析
  kvm_init
        /*
         * 以riscv为例, 主要是做一些基本的硬件检测，比较重要的是gstage mode和vmid
-	* 的检测。riscv里的两级地址翻译，第一级叫VS stage，第二级叫G stage，这里
+        * 的检测。riscv里的两级地址翻译，第一级叫VS stage，第二级叫G stage，这里
         * 检测的gstage mode就是第二级翻译的配置。
-	*/
+        */
    +-> kvm_arch_init
    [...]
        /* 注册/dev/kvm的字符设备 */
@@ -44,10 +44,10 @@ Linux KVM逻辑分析
      +-> kvm_arch_init_vm
        /*
         * 这个ioctl会创建一个匿名文件，ioctl返回值是文件的fd, 这个fd就代表新创建的虚拟机，
-	* 这个fd只实现了ioctl和release回调，release就是销毁虚拟机，ioctl用来配置虚拟机
-	* 的各种资源，比如创建虚拟机的CPU(KVM_CREATE_VCPU)、给虚拟机配置内存(KVM_SET_USER_MEMORY_REGION)?
-	* 等等。
-	*/
+        * 这个fd只实现了ioctl和release回调，release就是销毁虚拟机，ioctl用来配置虚拟机
+        * 的各种资源，比如创建虚拟机的CPU(KVM_CREATE_VCPU)、给虚拟机配置内存(KVM_SET_USER_MEMORY_REGION)
+        * 等等。
+        */
    +-> file = anon_inode_getfile("kvm-vm", &kvm_vm_fops, kvm, O_RDWR)
 ```
  创建虚拟机的CPU的基本逻辑：
@@ -56,10 +56,10 @@ Linux KVM逻辑分析
        /*
         * riscv的实现在arch/riscv/kvm/vcpu.c
         * 把HSTAUS_SPV, HSTATUS_SPVP, HSTATUS_VTW配置到虚拟机vcpu的软件结构里，
-	* 这里SPV比较有意思，虚拟机启动的时候，会先根据如上软件结构里的HSTATUS
-	* 更新hstatus寄存器，然后sret跳转到虚拟机启动的第一条指令，sret会根据SPV
-	* 寄存器的值配置机器的V状态，这里SPV是1，sret指令会先把V状态配置成1，然后
-	* 跳到虚拟机启动的第一条指令。这里描述的是虚拟机最开始启动时候的逻辑。
+        * 这里SPV比较有意思，虚拟机启动的时候，会先根据如上软件结构里的HSTATUS
+        * 更新hstatus寄存器，然后sret跳转到虚拟机启动的第一条指令，sret会根据SPV
+        * 寄存器的值配置机器的V状态，这里SPV是1，sret指令会先把V状态配置成1，然后
+        * 跳到虚拟机启动的第一条指令。这里描述的是虚拟机最开始启动时候的逻辑。
         */
    +-> kvm_arch_vcpu_create
          /* 配置vcpu的timer，实现为配置一个hrtimer，在定时到时，注入时钟中断 */
@@ -87,19 +87,19 @@ Linux KVM逻辑分析
        +-> kvm_prepare_memory_region
              /* arch/riscv/kvm/mmu.c */
          +-> kvm_arch_prepare_memory_region
-	       /*
-	        * 虚拟机的物理地址是host的用户态分配的一段虚拟内存，这里面有三个
-		* 地址: 1. 这段虚拟地址的va；2. 这段虚拟地址对应的物理地址；3. 虚拟机
-		* 的物理地址(gpa)，这三个地址对应的实际内存是相同的，但是各自的数值
-		* 是不同的。实际上，第2级翻译是gpa->pa，但是host上申请到的va在host
-		* S mode上的翻译是va->pa(页表基地址是satp)，所以，我们就要把gpa->pa
-		* 的映射插到第2级翻译对应的页表里(hgatp)。
-		* 
-		* 我们自然会联想第2级翻译缺页在哪里处理，这个逻辑单独在下面看。
-	        */
+               /*
+                * 虚拟机的物理地址是host的用户态分配的一段虚拟内存，这里面有三个
+                * 地址: 1. 这段虚拟地址的va；2. 这段虚拟地址对应的物理地址；3. 虚拟机
+                * 的物理地址(gpa)，这三个地址对应的实际内存是相同的，但是各自的数值
+                * 是不同的。实际上，第2级翻译是gpa->pa，但是host上申请到的va在host
+                * S mode上的翻译是va->pa(页表基地址是satp)，所以，我们就要把gpa->pa
+                * 的映射插到第2级翻译对应的页表里(hgatp)。
+                * 
+                * 我们自然会联想第2级翻译缺页在哪里处理，这个逻辑单独在下面看。
+                */
            +-> gstage_ioremap
-	         /* 配置第二级的页表 */
-	     +-> gstage_set_pte
+                 /* 配置第二级的页表 */
+             +-> gstage_set_pte
        +-> kvm_create_memslot
        +-> kvm_commit_memory_region
 
@@ -120,7 +120,7 @@ Linux KVM逻辑分析
  通过这里的__kvm_riscv_switch_to配置到硬件CSR寄存器。
 
 第2级翻译缺页的逻辑可以从vcpu_switch.S里的__kvm_riscv_switch_to入手看，这个函数
-是vcpu运行的入口函数，再投入运行前，这个函数里把__kvm_switch_return这个函数的地址
+是vcpu运行的入口函数，在投入运行前，这个函数里把__kvm_switch_return这个函数的地址
 配置给了stvec，当vcpu运行出现异常时，就会跳到__kvm_switch_return继续执行，这样就会
 从上面的kvm_riscv_vcpu_enter_exit出来，继续执行kvm_riscv_vcpu_exit, 第2级缺页异常
 在这个函数里处理：
@@ -128,10 +128,10 @@ Linux KVM逻辑分析
  kvm_riscv_vcpu_exit
    +-> gstage_page_fault
          /*
-	  * 这个函数里会用host va(不是gpa)，判断是不是有合法的vma存在，如果有合法
-	  * 的vma存在，就可以分配内存，并且创建第二级页表，创建第2级map的时候使用
-	  * gpa->pa
-	  */
+          * 这个函数里会用host va(不是gpa)，判断是不是有合法的vma存在，如果有合法
+          * 的vma存在，就可以分配内存，并且创建第二级页表，创建第2级map的时候使用
+          * gpa->pa
+          */
      +-> kvm_riscv_gstage_map
        [...]
 ```
@@ -231,8 +231,8 @@ qemu kvm的基本逻辑
          (kvm_vcpu_thread_fn)
        +-> kvm_init_vcpu
          +-> kvm_get_vcpu
-	       /* 创建vcpu */
-	   +-> kvm_vm_ioctl(s, KVM_CREATE_VCPU, (void *)vcpu_id)
+               /* 创建vcpu */
+           +-> kvm_vm_ioctl(s, KVM_CREATE_VCPU, (void *)vcpu_id)
        +-> kvm_cpu_exec(cpu)
              /* 运行vcpu */
          +-> kvm_vcpu_ioctl(cpu, KVM_RUN, 0)
