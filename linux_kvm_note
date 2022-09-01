@@ -205,7 +205,7 @@ qemu riscv H扩展基本逻辑
 qemu kvm的基本逻辑
 -------------------
 
- 《qemu tcg翻译执行核心逻辑分析里》已经介绍了虚拟机启动的相关逻辑，从qemu构架上看
+ [qemu tcg翻译执行核心逻辑分析](https://wangzhou.github.io/qemu-tcg翻译执行核心逻辑分析/)已经介绍了虚拟机启动的相关逻辑，从qemu构架上看
  kvm和tcg处于同一个层面上, 都是cpu模拟的一种加速器。
 
  虚拟机初始化逻辑:
