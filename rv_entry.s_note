@@ -6,6 +6,7 @@ riscv entry.S
 -v0.3 2022.7.4  sherlock continue
 -v0.4 2022.8.9  sherlock fix a bug about tp
 -v0.5 2022.8.23 sherlock add preempt part
+-v0.6 2022.9.6  sherlock continue to add preempt
 
 简介：本文分析Linux内核里riscv构架下的entry.S这个文件，内核代码使用的版本是5.12-rc8。
       采用直接在代码里加注释的方式写分析的内容，注释用“n:”开头。目前只分析主流程，
@@ -438,7 +439,14 @@ resume_kernel:
 	 *    跳到restore_all, 不做后面的调度, 否则就继续往下走，查看是否需要调度，
 	 *    需要做调度，就执行下调度。
 	 *
-	 *    todo: 内核在哪里配置抢占和调度。
+	 *    所谓抢占就是一个线程执行被被动的中断，然后CPU上换另一个线程的上下文
+	 *    执行，所以，一个线程主动放弃CPU，换另一个线程上CPU执行肯定不是抢占，
+	 *    所以，抢占具体实施的点就是像在中断或异常的时候，处理完中断或异常，
+	 *    然后调度一下，这个时候就可能调度其他的线程到CPU上跑。
+	 *
+	 *    内核里又加了一个禁止抢占的标记，就是上面preempt_count这个变量，当
+	 *    这个变量是0的时候，是可以抢占的，当这个变量大于0，是不能抢占的。
+	 *    这样，就有可能出现，中断处理完但是不能抢占的情况。
 	 */
 	REG_L s0, TASK_TI_PREEMPT_COUNT(tp)
 	bnez s0, restore_all

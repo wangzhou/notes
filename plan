@@ -136,17 +136,16 @@ riscv系统构架总结(ecall) 	 #
 内核初始化阶段初始页表		 #
 riscv多核启动			 to do
 riscv DEBUG实现/ebreak的使用     #
-riscv虚拟化			 to do
 qemu monitor			 #
 qemu gpio
 gdb 看线程信息
 qemu 线程模型、怎么处理信号的
 qemu riscv timer		 #
-riscv两层qemu			 to post
-linux kvm/riscv spec		 to post
+riscv两层qemu			 #
+linux kvm/riscv spec		 #
 
 qemu listener			 to do
-linux scheduler			 to do/补充riscv entry.S中有关调度的解释，repost riscv entry.S
+linux scheduler			 to do
 linux 软中断			 to post
 kvm irq的逻辑			 to post/中断直通、以及一些细节
 qemu bb以及temp和local temp	 to post/还有代码分析没有写
