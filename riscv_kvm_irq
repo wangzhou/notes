@@ -4,6 +4,7 @@ riscv kvm中断虚拟化的基本逻辑
 -v0.1 2022.8.30 Sherlock init
 
 简介：本文分析riscv kvm中断虚拟化的相关逻辑，分析基于qemu v7.0.0，Linux内核基于v5.19。
+      中断直通没有分析。
 
 
 基本逻辑
@@ -52,9 +53,9 @@ riscv kvm中断虚拟化的基本逻辑
      [...]
            /*
             * 这里只看下timer寄存器的配置接口, 如下的函数里就涵盖了
-	    * frequency/time/compare/timer启动的配置，其中timer启动的实现就是启动
-	    * 上面提到的高精度定时器
-	    */
+            * frequency/time/compare/timer启动的配置，其中timer启动的实现就是启动
+            * 上面提到的高精度定时器
+            */
        +-> kvm_riscv_vcpu_set_reg_timer
 ```
  
@@ -98,4 +99,4 @@ riscv kvm中断虚拟化的基本逻辑
 中断直通
 ---------
 
- (todo: ...)
+ riscv现在还没有中断直通，ARM的GICv4支持了这个功能，太复杂了，再独立的文章中分析吧。

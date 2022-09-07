@@ -43,7 +43,7 @@ QEMU中basic block以及tcg中各种变量的基本逻辑
 	[...]
 ```
  这里的decr就要是一个local temporary，因为这个变量在brcon_i32的前后都要使用，已经
- 跨越了两个BB。
+ 跨越了两个BB，这里的decr换成temporary变量就会出错。
 
 QEMU代码分析
 ------------

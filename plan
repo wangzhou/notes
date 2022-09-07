@@ -129,7 +129,7 @@ qemu helper函数的实现
  生成的。atomic互斥区只锁了tb执行，没有锁翻译。chained TB有可能一直chained。
  goto_tb只能是固定地址，lookup可以是动态变的。
 
-riscv entry.S代码分析		 #         fix to post again
+riscv entry.S代码分析		 #
 qemu irq      			 #
 中庸总结		         to do
 riscv系统构架总结(ecall) 	 #
@@ -146,10 +146,9 @@ linux kvm/riscv spec		 #
 
 qemu listener			 to do
 linux scheduler			 to do
-linux 软中断			 to post
-kvm irq的逻辑			 to post/中断直通、以及一些细节
+linux 软中断			 #
+kvm irq的逻辑			 #中断直通没有写
 qemu bb以及temp和local temp	 to post/还有代码分析没有写
 linux 不可屏蔽中断		 to do
 opensbi代码分析			 to do
 riscv pmu逻辑分析		 to do
-
