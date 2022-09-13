@@ -81,13 +81,16 @@ guest内核
 qemu-system-riscv64 \
 	-smp 1 -m 1024m \
 	-nographic \
-	-machine virt -cpu 'rv64,x-h=true' \
+	-machine virt -cpu 'rv64,h=true' \
 	-kernel ~/repos/linux/arch/riscv/boot/Image \
 	-append "console=ttyS0 root=/dev/ram rdinit=/init" \
 	-initrd ~/repos/buildroot/output/images/rootfs.cpio.gz \
  	-device virtio-9p-pci,fsdev=p9fs,mount_tag=p9,bus=pcie.0 \
 	-fsdev local,id=p9fs,path=/home/sherlock/p9root,security_model=mapped
 ```
+注意，qemu之前的中间版本可能使用-cpu rv64,x-h=true使能H扩展，在qemu v7,0.0以及之后
+的版本都用-cpu rv64,h=true使能H扩展。
+
 启动第二层qemu:
 ```
 #!/bin/sh

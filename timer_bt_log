@@ -1,0 +1,16 @@
+
+0xffffffff8008c102 in tick_setup_periodic (dev=<error reading variable: dwarf2_find_location_expression: Corrupted DWARF expression.>, 
+0xffffffff8008c1e8 in tick_setup_device (newdev=<error reading variable: dwarf2_find_location_expression: Corrupted DWARF expression.>, 
+0xffffffff8008c45a in tick_check_new_device (newdev=<error reading variable: dwarf2_find_location_expression: Corrupted DWARF expression.>)
+0xffffffff8008b610 in clockevents_register_device (dev=<error reading variable: dwarf2_find_location_expression: Corrupted DWARF expression.>)
+0xffffffff8008b72a in clockevents_config_and_register (dev=<error reading variable: dwarf2_find_location_expression: Corrupted DWARF expression.>, 
+0xffffffff804f3926 in riscv_timer_starting_cpu (cpu=<error reading variable: dwarf2_find_location_expression: Corrupted DWARF expression.>)
+0xffffffff8001a11e in cpuhp_invoke_callback (cpu=<error reading variable: dwarf2_find_location_expression: Corrupted DWARF expression.>, 
+0xffffffff8001a9a2 in cpuhp_issue_call (cpu=<error reading variable: dwarf2_find_location_expression: Corrupted DWARF expression.>, 
+0xffffffff8001ab34 in __cpuhp_setup_state_cpuslocked (state=<error reading variable: dwarf2_find_location_expression: Corrupted DWARF expression.>, 
+0xffffffff8001b62a in __cpuhp_setup_state (state=<error reading variable: dwarf2_find_location_expression: Corrupted DWARF expression.>, 
+0xffffffff80824a0c in cpuhp_setup_state (teardown=<optimized out>, startup=<optimized out>, 
+0xffffffff808247ba in timer_probe () at drivers/clocksource/timer-probe.c:30
+0xffffffff80803652 in time_init () at arch/riscv/kernel/time.c:31
+0xffffffff80800b62 in start_kernel () at init/main.c:1038
+0xffffffff80001150 in _start_kernel () at arch/riscv/kernel/head.S:326

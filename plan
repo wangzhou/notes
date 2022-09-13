@@ -141,7 +141,7 @@ qemu gpio
 gdb 看线程信息
 qemu 线程模型、怎么处理信号的
 qemu riscv timer		 #
-riscv两层qemu			 #
+riscv两层qemu			 #  fix to repost
 linux kvm/riscv spec		 #
 
 qemu listener			 to do
@@ -152,3 +152,4 @@ qemu bb以及temp和local temp	 to post/还有代码分析没有写
 linux 不可屏蔽中断		 to do
 opensbi代码分析			 to do
 riscv pmu逻辑分析		 to do
+riscv vector			 to do
