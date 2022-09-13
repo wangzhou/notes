@@ -26,7 +26,7 @@ tcg/riscv/tcg-target.c.inc里的tcg_out_qemu_ld_slow_path。
       -> tcg_out_qemu_ld
            /* 有MMU的情况，似乎tlb_load这个函数检测是否tlb可以直接命中，如果命中，直接就load数据了(todo: 继续分析) */
         -> tcg_out_tlb_load
-	   /* tlb hit时，直接load完，为啥还要做下面add_qemu_ldst_label? */
+          /* tlb hit时，直接load完，为啥还要做下面add_qemu_ldst_label? */
         -> tcg_out_qemu_ld_direct
         -> add_qemu_ldst_label
            /* 没有有MMU的情况, 计算地址后直接用tcg_out_qemu_ld_direct */
@@ -49,6 +49,6 @@ tcg/riscv/tcg-target.c.inc里的tcg_out_qemu_ld_slow_path。
        /* target/riscv/cpu.c */
     -> cc->tcg_ops_tlb_fill risv下是riscv_cpu_tlb_fill
          /* 先做page walk，翻译成功自然可以，翻译失败报缺页异常 */
-	 /* todo: 两级翻译 */
+         /* todo: 两级翻译 */
       -> riscv_raise_exception
 ```
