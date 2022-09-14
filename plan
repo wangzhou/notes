@@ -117,7 +117,7 @@ qemu内存管理
 qemu tcg and exec               #
 perf框架
 rv指令分析：跳转指令		#
-qemu tcg load/store缺页         #  fix to post
+qemu tcg load/store缺页         #  need to do
 qemu kvm模型
 qemu atomic互斥区
 qemu helper函数的实现
