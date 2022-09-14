@@ -14,7 +14,6 @@
 16. spinlock实现分析
 17. autotools, Makefile.am, vim terminal, 编译连接库
 
-18. KAE  xx
 20. pthread
 
 1. perf
@@ -32,7 +31,6 @@ uprobe
 uml note                  xx
 rsa aead digest (aes-ccm, aes-gcm, cbc(aes128)-hmac(sha256)), sm2 256bit key, dh(公钥生成，和生成共享秘钥) x25519/x448
 getopt_long  1
-lock test 		  xx 
 
 /proc/irq/irq_id/xxx
 /proc/pid/xxx/
@@ -113,14 +111,13 @@ CPU微架构使用store buffer的原因，除了store的时候不等invalid ack�
 cmake #
 mock  #
 iommu reserv region/MSI
-rcu使用和原理
 PLKA 4虚拟内存
 PLKA 内存回收
 qemu内存管理
 qemu tcg and exec               #
 perf框架
 rv指令分析：跳转指令		#
-qemu tcg load/store缺页         #
+qemu tcg load/store缺页         #  fix to post
 qemu kvm模型
 qemu atomic互斥区
 qemu helper函数的实现
@@ -141,7 +138,7 @@ qemu gpio
 gdb 看线程信息
 qemu 线程模型、怎么处理信号的
 qemu riscv timer		 #
-riscv两层qemu			 #  fix to repost
+riscv两层qemu			 #
 linux kvm/riscv spec		 #
 
 qemu listener			 to do
@@ -153,3 +150,5 @@ linux 不可屏蔽中断		 to do
 opensbi代码分析			 to do
 riscv pmu逻辑分析		 to do
 riscv vector			 to do
+rcu使用和原理			 to do
+riscv vdso			 to do
