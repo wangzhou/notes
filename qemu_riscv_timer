@@ -2,6 +2,7 @@ qemu riscv timer的基本逻辑
 
 -v0.1 2022.7.26 Sherlock init
 -v0.2 2022.8.11 Sherlock 增加如何避免timer误差的逻辑, 是否和真是时间一致
+-v0.3 2022.9.15 Sherlock 增加event_handler的初始化逻辑
 
 简介：本文梳理riscv上timer的基本软硬件逻辑，硬件模型基于qemu，使用的qemu版本是6.2.0，
       内核代码分析使用的版本是v5.12-rc8。
@@ -74,3 +75,30 @@ Linux内核逻辑
 
  内核timer初始化在：arch/riscv/kernel/time.c, time_init
  内核相关驱动的位置在：drivers/clocksource/timer-riscv.c
+
+ 如上的timer驱动里会注册timer中断的处理函数riscv_timer_interrupt, 这个函数会进一步
+ 调用clock_event_device里的event_handler回调函数，但是这个回调函数并不是在驱动里
+ 直接提供的。
+
+ event_handler的注册逻辑是通过这个驱动里注册的cpu hotplu回调函数riscv_timer_starting_cpu
+ 完成的，大概的调用逻辑如下：
+```
+start_kernel
+  +-> time_init
+    +-> timer_probe
+      +-> cpuhp_setup_state
+        +-> __cpuhp_setup_state
+          +-> __cpuhp_setup_state_cpuslocked
+            +-> cpuhp_issue_call
+              +-> cpuhp_invoke_callback
+                +-> riscv_timer_starting_cpu
+                  +-> clockevents_config_and_register
+                    +-> clockevents_register_device
+                      +-> tick_check_new_device
+                        +-> tick_setup_device
+                          +-> tick_setup_periodic
+			        /* event_handler回调 */
+			    +-> tick_handle_periodic
+```
+ tick_handle_periodic就是每次时钟中断时要运行的逻辑，相关逻辑已经和调度有关系，
+ 在另外讲调度的文章里独立分析吧。
