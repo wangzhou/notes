@@ -1,0 +1,29 @@
+riscv alint逻辑分析
+--------------------
+
+-v0.1 2022.9.20 Sherlock init
+
+简介：本文主要分析riscv alint的定义和内核实现。aclint使用https://github.com/riscv/riscv-aclint
+      上发布的版本，内核使用v5.19-rc8，qemu使用7.1.50。
+
+
+基本逻辑
+---------
+
+ alint是riscv上的核内中断本地中断控制器, 协议已经发布，内核和qemu中均已经做了支持。
+ 它的功能比较简单，就是提供了时钟中断和核间中断的功能。实现上，所有功能都是通过
+ MMIO寄存器控制的，协议上抽象出了Machine-level Timer Device, Machine-level Software
+ Interrupt Device以及Supervisor-level Software Interrupt Device三个设备。
+
+Machine-level Timer Device
+---------------------------
+
+ Timer的基本逻辑我们在[riscv timer的基本逻辑](https://wangzhou.github.io/riscv-timer的基本逻辑/)里已经介绍。
+
+Software Interrupt
+-------------------
+
+ 本文重点看看软件中断这部分。 
+
+
+
