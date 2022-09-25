@@ -20,8 +20,8 @@ riscv aclint逻辑分析
  独立的协议, clint发布在前，aclint兼容clint，发布在后。
 
  qemu 7.1.50已经支持了aclint，但是如果想要打开，要在qemu启动命令行里加上-machine virt,aclint=on。
- qemu启动加不加aclint=on，对于qemu monitor里用info qtree查看设备, 会发现mtimer没有
- 变化，swi在aclint=0的时候，多了一个，两个swi设备其中一个是clint的mswi, 一个是aclint
+ qemu启动加不加aclint=on，在qemu monitor里用info qtree查看设备, 会发现mtimer没有
+ 变化，但是swi在aclint=1的时候，多了一个，两个swi设备其中一个是clint的mswi, 一个是aclint
  的sswi。对应的在dts上，aclint没有开的时候，只是一个riscv,clint0节点，aclint打开之后
  变成了，mtimer/sswi/mswi三个节点, compatible分别是：riscv,aclint-mtimer/riscv,aclint-sswi/riscv,aclint-mswi。
 
@@ -50,7 +50,7 @@ Software Interrupt
 
  读写接口的实现和aclint协议是对应的，读接口上，是sswi时，返回0，是mswi时，返回MIP
  寄存器MIP_MSIP bit的值，写接口上，当写入值是1时，sswi和mswi都触发一个高电平中断
- (协议上说是边沿中断)，当写如值是0时，mswi把中断线拉低，sswi没有动作。
+ (协议上说是边沿中断)，当写入值是0时，mswi把中断线拉低，sswi没有动作。
 
  因为，aclint还没有在内核主线，内核目前使用msip的方式触发IPI，会看到内核会调用
  S mode的ecall把触发IPI的请求交给BIOS处理，我们看到opensbi目前的实现，在处理IPT

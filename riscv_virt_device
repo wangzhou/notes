@@ -23,9 +23,12 @@ riscv qemu virt平台外设分析
    +-> riscv_aclint_swi_create/riscv_aclint_mtimer_create
        /* 创建外设中断控制器 */
    +-> virt_create_plic
-       /* 创建内核和启动会用到的rom */
+       /* 创建内存和启动会用到的rom */
    +-> memory_region_add_subregion/memory_region_init_rom
-       /* 创建reboot和poweroff用的qemu设备 */
+       /*
+        * 创建reboot和poweroff用的qemu设备，这个设备的逻辑比较简单，对外只呈现一个
+	* 写接口，poweroff请求就是exit qemu进程，reboot就是调用qemu reset相关函数
+        */
    +-> sifive_test_create
        /* 创建virtio-mmio设备 */
    +-> sysbus_create_simple("virtio-mmio", ...)
@@ -42,7 +45,7 @@ riscv qemu virt平台外设分析
 ```
  我们看看怎么快速找见上面外设的qemu实现和Linux内核驱动。由于device tree描述的平台
  设备驱动和设备绑定是通过compatible字段的，只要在内核里搜compatible字段的名字就好。
- compatible的名字可以在create_fdt代码里得到，qemu也只是dump device tree，具体的
+ compatible的名字可以在create_fdt代码里得到，qemu支持只dump device tree，具体的
  命令是：
 ```
  qemu-system-riscv64 -machine virt -machine dumpdtb=rv.dtb
@@ -77,7 +80,7 @@ riscv qemu virt平台外设分析
 逐个设备分析
 -------------
 
- qemu v7.0.0中，riscv virt平台上的设备有：fw_cfg_mem, cfi.pflash01, goldfish_rtc,
+ qemu v7.1.50中，riscv virt平台上的设备有：fw_cfg_mem, cfi.pflash01, goldfish_rtc,
  serial-mm, pci相关, virtio-mmio, riscv.sifive.test, riscv.sifive.plic, riscv.aclint.mtimer,
  riscv.aclint.swi, riscv.hart_array。
 
@@ -92,7 +95,7 @@ riscv qemu virt平台外设分析
 
  - cfi.pflash01
 
-   系统里有两个该类型的flash
+   系统里有两个该类型的flash。
 
  - goldfish_rtc
 
@@ -132,6 +135,9 @@ riscv qemu virt平台外设分析
    核内software interrupt的设备，是一组核上的寄存器抽象出的设备，每个核都有一组
    对应的寄存器，向相关寄存器写入数据触发其他核上的software interrupt，所以，Linux
    内核里用这个接口触发IPI。
+
+   qemu 7.1.50上有两个这样的设备, 名字都叫riscv.aclint.swi，其中一个是sswi，另一个
+   是mswi。
 
  - riscv.hart_array 
    
