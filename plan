@@ -153,7 +153,7 @@ riscv vector			 to do
 rcu使用和原理			 to do
 riscv vdso			 to do
 cpuhp逻辑分析			 to do
-riscv virt外设分析		 to do    1
-riscv aclint swi		 to do    2
+riscv virt外设分析		 #
+riscv aclint swi		 #
 riscv plic			 to do    3
 riscv aia			 to do
