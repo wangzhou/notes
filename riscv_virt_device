@@ -27,7 +27,7 @@ riscv qemu virt平台外设分析
    +-> memory_region_add_subregion/memory_region_init_rom
        /*
         * 创建reboot和poweroff用的qemu设备，这个设备的逻辑比较简单，对外只呈现一个
-	* 写接口，poweroff请求就是exit qemu进程，reboot就是调用qemu reset相关函数
+        * 写接口，poweroff请求就是exit qemu进程，reboot就是调用qemu reset相关函数
         */
    +-> sifive_test_create
        /* 创建virtio-mmio设备 */
