@@ -147,13 +147,14 @@ linux 软中断			 #
 kvm irq的逻辑			 #
 qemu bb以及temp和local temp	 to post/还有代码分析没有写
 linux 不可屏蔽中断		 to do
-opensbi代码分析			 to do
-riscv pmu逻辑分析		 to do    4
+opensbi代码分析			 to do 1
+riscv pmu逻辑分析		 to do
 riscv vector			 to do
 rcu使用和原理			 to do
 riscv vdso			 to do
 cpuhp逻辑分析			 to do
 riscv virt外设分析		 #
 riscv aclint swi		 #
-riscv plic			 to do    3
-riscv aia			 to do
+riscv plic			 to do 2
+riscv aia			 to do 3
+link script			 to do

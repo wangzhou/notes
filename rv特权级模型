@@ -110,7 +110,7 @@ S mode寄存器
 
  以Linux内核为例，riscv的中断异常处理流程，先保存中断或异常发生时的寄存器上下文，
  然后根据scause的信息找见具体的中断或异常处理函数执行。具体的软件流程分析可以参考
- riscv entry.S分析(todo: add link)。
+ [Linux内核riscv entry.S分析](https://wangzhou.github.io/Linux内核riscv-entry-S分析/)
 
  当异常或中断需要返回时，软件可以使用sret指令，sret指令在执行的时候会把sepc寄存器
  里保存的地址作为返回地址，使用SPP寄存器里的值作为CPU的mode，把SPIE的值写入SIE，

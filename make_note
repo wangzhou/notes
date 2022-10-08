@@ -4,7 +4,7 @@ Makefile再学习
 -v0.1 2021.9.12 Sherlock init
 
 简介：本文是《跟我一起学Makefile》的一个学习笔记，N年前看过这个材料，现在再回头
-      看下，温故而知新。然后在那pciutils里手写的Makefile逐行对照着看下。本文也用于
+      看下，温故而知新。然后在拿pciutils里手写的Makefile逐行对照着看下。本文也用于
       后面持续收集make相关的用法。
 
 
@@ -169,7 +169,7 @@ export
 # make加一个依赖，只编译出其中的一个target。
 all: lib/$(PCILIB) lspci setpci example lspci.8 setpci.8 pcilib.7 pci.ids.5 update-pciids update-pciids.8 $(PCI_IDS)
 
-# 这里的定义是，如果头文件有变动，那么重新编译lib。似乎也有到里，头文件不动的话，
+# 这里的定义是，如果头文件有变动，那么重新编译lib。似乎也有道理，头文件不动的话，
 # 依然可以正常link，如果头文件都变动了，link一定会错。至于，头文件不同，lib的实现
 # 变动了的情况，上面也只是单独编译lib。
 #
