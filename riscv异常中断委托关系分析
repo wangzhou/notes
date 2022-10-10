@@ -12,7 +12,8 @@
  medeleg/mideleg在opensbi里配置，代码在：opensbi/lib/sbi/sbi_hart.c: delegate_traps
 
  hedeleg/hideleg在内核的KVM代码里配置，路径是：linux/arch/riscv/kvm/main.c: kvm_arch_hardware_enable
- 在vcpu start的时候，会调用如上函数，配置hedeleg/hideleg。
+ 在vcpu start的时候，会调用如上函数，配置hedeleg/hideleg，在vcpu disable的时候，
+ 把hedeleg/hideleg清0。
  
 medeleg/mideleg的逻辑
 ---------------------
@@ -34,7 +35,11 @@ medeleg/mideleg的逻辑
    STORE_PAGE_FAULT
 ```
  上面是没有H扩展的情况，如果平台支持H扩展，再把如下的异常委托到S mode处理。可以
- 看出，有和第二级地址翻译相关的异常以及从VS发起的ECALL，这些本来就应该在HS处理。
+ 看出，这些都是CPU运行在VS时的异常，有和第二级地址翻译相关的异常以及从VS发起的ECALL，
+ 这些本来就应该在HS处理，比如在只有host的情况，没有错误的情况下，访问一个物理地址
+ 是一定会成功的，但是，在虚拟机的内核里，访问虚拟机物理地址(IPA)的时候还要进过IPA到PA
+ 的地址翻译，如果没有分配PA，就会陷入HS的缺页异常里处理缺页，同时VS模式下也可以发
+ 出ECALL，这个ECALL需要到HS下去处理。
 
  如果有H扩展，如下的异常和上面的异常都被委托到HS模式处理。但是，如果CPU运行在VS，
  显然vcpu也是需要上面的异常支持的，这里的逻辑在内核KVM里处理。
