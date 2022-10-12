@@ -62,10 +62,39 @@ S mode寄存器
  sstatus是机器相关的全局状态寄存器。riscv上，虽然各个mode的status寄存器是独立，但是
  各个mode的status的各个域段是正交的，基本上是每个域段在每个mode上都有一份。
 
-  SIE   SPIE   SPP
+  SIE   SPIE   SPP   SXL   UXL   MBE   SBE   UBE   MPRV   MXR   SUM   TVM   TW   TSR   FS   VS   XS   SD
 
- SIE表示全局中断的使能情况，SPIE表示特权级切换之前全局中断的使能情况，SPP表示特权级
- 切换之前CPU所处在的mode。其他的域段，后续遇见具体使用场景可以补充上来。
+ SIE表示全局中断的使能情况，SPIE表示特权级切换之前S mode全局中断的使能情况，SPP
+ 表示特权级切换之前CPU所处在的mode。其他的域段，后续遇见具体使用场景可以补充上来。
+
+ 在中断或异常导致处理器切到S mode的，硬件会把SIE清0，这个就是关S mode的全局中断，
+ 这样SIE的原始信息就需要被另外保存到SPIE这个寄存器里，只有这样才不会丢信息。SPIE
+ 也用来提供sret返回时，用来恢复SIE的值，硬件在执行sret的时候会把SPIE的值写入SIE,
+ 同时把SPIE写1。
+
+ SPP的作用也是类似的，从哪个mode切到目前的mode也是一个重要信息，需要提供给软件。
+ 同样，SPP也用来给sret提供返回mode，硬件取SPP的值作为返回mode，同时更新SPP为系统
+ 支持的最低优先级。
+
+ 可以看到SPIE和SPP的语意只在切换进S mode时是有固定一个意义的，比如，sret返回新模式，
+ SPP会写为最低优先级，这个显然不能指示新模式的之前模式是最低优先级。
+
+ SXL/UXL描述的是S mode/U mode的寄存器宽度，riscv上这个可以是WARL也可以实现成只读，
+ riscv上搞的太灵活，但是实现的时候，搞成只读就好。
+
+ MBE/SBE/UBE是配置M mode、S mode以及U mode的大小端。
+
+ MPRV(modify privilege)改变特定特权级下load/store的行为，当MPRV是0时，当前特权级
+ load/store内存的规则不变，当MPRV是1时，使用MPP是值作为load/store内存的特权级，
+ sret/mret返回到非M mode是，顺带把MPRV清0。看起来MPRV只在M mode改变load/store的
+ 行为，难道从S mode陷入M mode(这时MPP是S mode)，如果把MPRV配置成1，M mode就可以用
+ S mode定义的页表去访问？查了下opensbi的代码，在处理misaligned load/store的时候
+ 还真有这样用的，貌似是从内核读引起misaligned load/store的对应指令到opensbi。
+
+ MXR   SUM   TVM   TW   TSR   FS   VS   XS   SD
+
+
+ ...
 
  sie是riscv上定义的各种具体中断的使能状态，每种中断一个bit。riscv定义的中断可以
  参考riscv的spec。
