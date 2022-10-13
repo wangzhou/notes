@@ -1,6 +1,7 @@
--v0.1 2022.6.28 Sherlock init
--v0.2 2022.7.11 Sherlock 增加寄存器说明
--v0.3 2022.7.11 Sherlock 增加s mode说明
+-v0.1 2022.6.28  Sherlock init
+-v0.2 2022.7.11  Sherlock 增加寄存器说明
+-v0.3 2022.7.11  Sherlock 增加s mode说明
+-v0.4 2022.10.13 Sherlock 增加mstatus的细节说明
 
 简介：本文分析riscv特权级spec，尝试依照spec总结下riscv的特权级模型。有时直接看
       spec，可能过于分散，本文分析的时候结合qemu tcg riscv的代码。基于riscv的spec
@@ -51,21 +52,20 @@ M mode寄存器
 
  时间管理相关的寄存器：mtime，mtimecmp。CPU内时钟相关的寄存器。
 
-S mode寄存器
--------------
+ 我们依次看看这些寄存器的具体定义，在看的时候，尽可能发掘一下这下寄存器定义背后的
+ 逻辑。
 
- S mode存在和中断异常以及内存相关的寄存器。我们主要从S mode出发来整理梳理下。
+ - mstatus
 
- 中断异常相关的寄存器有：sstatus, sepc, stvec, stval, sie, sip，scratch，scause。
- 内存管理相关的寄存器有: satp
+ status是机器相关的全局状态寄存器。riscv上，虽然各个mode的status寄存器是独立，但是
+ 各个mode的status的各个域段是正交的，基本上是每个域段在每个mode上都有一份。如下是
+ mstatus各个域段的说明：
 
- sstatus是机器相关的全局状态寄存器。riscv上，虽然各个mode的status寄存器是独立，但是
- 各个mode的status的各个域段是正交的，基本上是每个域段在每个mode上都有一份。
+  MIE   MPIE   MPP   SIE   SPIE   SPP   SXL   UXL   MBE   SBE   UBE   MPRV   MXR   SUM   TVM   TW   TSR   FS   VS   XS   SD
 
-  SIE   SPIE   SPP   SXL   UXL   MBE   SBE   UBE   MPRV   MXR   SUM   TVM   TW   TSR   FS   VS   XS   SD
-
- SIE表示全局中断的使能情况，SPIE表示特权级切换之前S mode全局中断的使能情况，SPP
- 表示特权级切换之前CPU所处在的mode。其他的域段，后续遇见具体使用场景可以补充上来。
+ MIE/MPIE/MPP/SIE/SPIE/SPP在spec里是一起描述的。xIE表示全局中断的使能情况，xPIE
+ 表示特权级切换之前x mode全局中断的使能情况，xPP表示特权级切换到x mode之前CPU所处
+ 在的mode。下面具体讲下SIE/SPIE/SPP，MIE/MPIE/MPP的逻辑是一样的。
 
  在中断或异常导致处理器切到S mode的，硬件会把SIE清0，这个就是关S mode的全局中断，
  这样SIE的原始信息就需要被另外保存到SPIE这个寄存器里，只有这样才不会丢信息。SPIE
@@ -82,7 +82,9 @@ S mode寄存器
  SXL/UXL描述的是S mode/U mode的寄存器宽度，riscv上这个可以是WARL也可以实现成只读，
  riscv上搞的太灵活，但是实现的时候，搞成只读就好。
 
- MBE/SBE/UBE是配置M mode、S mode以及U mode的大小端。
+ MBE/SBE/UBE是配置M mode、S mode以及U mode下数据load/store的大小端，指令总是小端的。
+ CPU对内存还有隐式的访问，比如page walk的时候访问页表，对于这种访问，CPU怎么理解
+ 对应数据的大小端，S mode页表的大小端也是SBE定义。
 
  MPRV(modify privilege)改变特定特权级下load/store的行为，当MPRV是0时，当前特权级
  load/store内存的规则不变，当MPRV是1时，使用MPP是值作为load/store内存的特权级，
@@ -90,11 +92,98 @@ S mode寄存器
  行为，难道从S mode陷入M mode(这时MPP是S mode)，如果把MPRV配置成1，M mode就可以用
  S mode定义的页表去访问？查了下opensbi的代码，在处理misaligned load/store的时候
  还真有这样用的，貌似是从内核读引起misaligned load/store的对应指令到opensbi。
+ (相关代码在opensbi的lib/sbi/sbi_unpriv.c里)
 
- MXR   SUM   TVM   TW   TSR   FS   VS   XS   SD
+ MXR(Make executable readable)本质上用来抑制某些异常的产生，MXR是0 load操作只可以
+ 操作readable的地址，MXR是1，把这个约束放松到load操作也可以作用readable和executable
+ 的地址，这个就允许load text段的指令，这个配置在opensbi里是配合上面的MPRV一起用的，
+ 可以看到要在opensbi里load misaligned的load/store指令，就需要有这个配置。
 
+ MPRV/MXR是在基本逻辑上，对访存操作的一些限制做放松，从而方便一些M mode的操作。
+ 这个在riscv的spec里有明确的提及，其实就是我们上面举的例子，比如，没有MPRV，M mode
+ 也可以通过软件做page talk得到PA，有了MPRV硬件就可以帮助做这个工作。
 
- ...
+ SUM(permit supervisor user memory access)，控制S mode对U mode内存的访问。默认情况(SUM=0)
+ 不容许内核态直接访问用户态，SUM=1时，去掉这个限制。对于MPRV=1/MPP=S mode的情况，
+ SUM同样是适用的，MPRV实际上是在原来的隔离机制上打了洞，不过由于MPP只能是更低的
+ 特权级，本来高特权级就可以访问低特权级的资源，MRPV是实现的一个优化，但是，作为
+ 协议设计，只要开了这样的口，以后每个特性与之相关的时候，就都要考虑一下。
+
+ TVM(trap virtual memory)控制S mode的satp访问以及sfence.vma/sinval.vma指令是否有效。
+ 默认(TVM=0)是有效的，TVM=1可以关掉S mode如上的功能。没看懂spec上的对应说明？？？
+
+ TW(timeout wait)控制wfi指令的行为，默认(TW=0)情况，wfi可能一直等在当前指令运行
+ 的特权级，当TW=1时，wfi如果超时，会直接触发非法指令异常，如果这个超时时间是0，
+ 那么wfi立马就触发一个非法指令异常。spec上说，wfi的这个特性可以用在虚拟化上，貌似
+ 是用wfi陷入异常，然后可以换一个新的guest进来？？？
+
+ 另外，目前的定义是，如果U mode的wfi超时，会有非法指令异常被触发。
+
+ TSR(trap sret)控制sret的行为，默认(TSR=0)下，S mode的sret指令是正常执行的，但是
+ 在TSR=1时，S mode执行sret会触发非法指令异常。spec的解释是，sret触发非法指令异常
+ 是为了在不支持H扩展的机器上模拟H扩展？？？
+ 
+ FS/VS/XS/SD给是软件优化的hint，FS/VS/XS每个都是2bit，描述的是浮点扩展/向量扩展/
+ 所有扩展的状态，因为扩展有可能涉及到系统寄存器，那么在CPU上下文切换的时候就要做
+ 相关寄存器的保存和恢复，FS/VS/XS的状态有off/init/clean/dirty，这样增加了更多的
+ 状态，软件就可以依次做更加精细的管理和优化，SD只有一个bit，表示FS/VS/XS有没有
+ dirty。riscv的spec给出了这些状态的详细定义，这些不是关键特性，以后用的时候再看吧。
+
+ - mtvec
+
+ mtvec用来存放中断异常时，PC的跳转地址。mtvec的最低两个bit用来描述不同的跳转方式，
+ 目前有两个，一个是直接跳转到mtvec base，一个是跳转到base + 中断号 * 4的地址，后面
+ 这种只是对中断起作用。
+
+ - medeleg/mideleg
+
+ medeleg/mideleg可以把特定的异常和中断委托到S mode处理。riscv spec里提到，如果把
+ 一个异常委托到S mode，那么发生异常时，要更新的是mstatus里的SPIE/SIE/SPP，但是，
+ 异常在S mode模式处理，也看不到mstatus里的SPIE/SIE/SPP啊？从qemu的实现上看，mstatus
+ 和sstatus其实内部实现就是一个寄存器，只不过结合权限控制对外表现成两个寄存器，那么
+ 这里写mstatus的SPIE/SIE/SPP，在S mode读sstatus的SPIE/SIE/SPP，其实读写的都是相同
+ 的地方。
+
+ 软件可以把相应的位置写1，然后再读相关的位置，以此查看相关中断或者异常的代理寄存器
+ 有没有支持，medeleg/mideleg的域段属性是WARL，这个就是说，可以随便写入，但是总是
+ 返回合法值，当对应域段没有实现时，1是无法写入的，所以得到的还是0，反之读到的是1。
+
+ medeleg/mideleg不存在默认代理值，不能有只读1的bit存在。
+
+ 不能高特权级向低特权级做trap，比如，已经把非法指令异常委托到S mode了，但是在M mode
+ 的时候出现指令异常，那还是在M mode响应这个异常。同级trap是可以的。
+
+ 中断一旦被代理就必须在代理mode处理。从这里看中断还是和特权级关系比较近的，在定义
+ 中断的时候，其实已经明确定义了是哪个特权级处理的中断，所以这里的中断委托感觉还是
+ 还是比较假 :)
+
+ - mip/mie
+
+ mip.MEIP/mip.MTIP是只读，由外部中断控制器或者timer配置和清除。mip.MSIP也是只读，
+ 一个核核写寄存器触发另外核的mip.MSIP。
+
+ mip.SEIP/mip.STIP可以通过外接中断控制器或者timer写1，也可以在M mode对他们写1，
+ 以次触发S mode的外部中断和timer中断。riscv spec提到mip.SSIP也可以由平台相关的中断
+ 控制器触发。这里又出现了和status寄存器一样的问题，mip的SEIP/STIP/SSIP域段的位置
+ 和sip域段上SEIP/STIP/SSIP的位置是一样的，所以，riscv spec有提到，如果中断被委托到
+ S mode, sip/sie和mip里对应域段的值是一样的。
+
+ 中断的优先级是，先从mode划分，M mode的最高，在同一级中从高到低依次是：external interrupt，
+ software interrupt, timer interrupt。
+
+ - mepc/mcause/mtval/mscratch
+
+ 这些寄存器的功能相对比较简单，具体的描述在下面S mode里介绍。
+
+S mode寄存器
+-------------
+
+ S mode存在和中断异常以及内存相关的寄存器。我们主要从S mode出发来整理梳理下。
+
+ 中断异常相关的寄存器有：sstatus, sepc, stvec, stval, sie, sip，scratch，scause。
+ 内存管理相关的寄存器有: satp
+
+ sstatus是S mode的status寄存器。
 
  sie是riscv上定义的各种具体中断的使能状态，每种中断一个bit。riscv定义的中断可以
  参考riscv的spec。

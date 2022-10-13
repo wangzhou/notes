@@ -90,7 +90,7 @@ M mode处理的异常和中断
  就应该在M mode处理的异常。
 ```
 MISALIGNED_FETCH	0x0
-FETCH_ACCESS		0x1      <--- 读入指令异常，没有对齐
+FETCH_ACCESS		0x1      <--- 取指令异常，没有对齐
 ILLEGAL_INSTRUCTION	0x2	 <--- 非法指令异常
 BREAKPOINT		0x3
 MISALIGNED_LOAD		0x4      <--- 读地址不对齐
