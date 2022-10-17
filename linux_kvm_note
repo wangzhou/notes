@@ -1,11 +1,12 @@
 riscv KVM逻辑分析
 ------------------
 
--v0.1 2022.7.28 Sherlock init
--v0.2 2022.7.29 Sherlock 增加第二级地址翻译分析, riscv硬件分析
--v0.3 2022.7.30 Sherlock 增加第二级翻译异常的逻辑，qemu代码分析
--v0.4 2022.8.02 Sherlock 增加虚拟化相关指令，虚拟机退出逻辑
--v0.5 2022.8.13 Sherlock 增加虚拟机启动是V状态置位的逻辑
+-v0.1 2022.7.28  Sherlock init
+-v0.2 2022.7.29  Sherlock 增加第二级地址翻译分析, riscv硬件分析
+-v0.3 2022.7.30  Sherlock 增加第二级翻译异常的逻辑，qemu代码分析
+-v0.4 2022.8.02  Sherlock 增加虚拟化相关指令，虚拟机退出逻辑
+-v0.5 2022.8.13  Sherlock 增加虚拟机启动是V状态置位的逻辑
+-v0.5 2022.10.17 Sherlock 重新整理riscv硬件虚拟化的逻辑
 
 简介：本文分析Linux内核里KVM相关的逻辑，体系架构基于riscv。具体调试的时候，我们
       使用了两层的qemu模型，第一层qemu使能了riscv的h扩展，第二层qemu使用kvm启动。
@@ -178,6 +179,200 @@ qemu riscv H扩展基本逻辑
    +-> htval = env->guest_phys_fault_addr;
        /* 后面可以看到cause, 异常pc, tval都是靠S mode寄存器报给软件的, 最后把模式切到S mode */
    +-> riscv_cpu_set_mode(env, PRV_S);
+
+void riscv_cpu_do_interrupt(CPUState *cs)
+{
+#if !defined(CONFIG_USER_ONLY)
+
+    RISCVCPU *cpu = RISCV_CPU(cs);
+    CPURISCVState *env = &cpu->env;
+    bool write_gva = false;
+    uint64_t s;
+
+    /* cs->exception is 32-bits wide unlike mcause which is XLEN-bits wide
+     * so we mask off the MSB and separate into trap type and cause.
+     */
+    bool async = !!(cs->exception_index & RISCV_EXCP_INT_FLAG);
+    target_ulong cause = cs->exception_index & RISCV_EXCP_INT_MASK;
+    uint64_t deleg = async ? env->mideleg : env->medeleg;
+    target_ulong tval = 0;
+    target_ulong tinst = 0;
+    target_ulong htval = 0;
+    target_ulong mtval2 = 0;
+
+    if  (cause == RISCV_EXCP_SEMIHOST) {
+        do_common_semihosting(cs);
+        env->pc += 4;
+        return;
+    }
+
+    if (!async) {
+        /* set tval to badaddr for traps with address information */
+        switch (cause) {
+        case RISCV_EXCP_LOAD_GUEST_ACCESS_FAULT:
+        case RISCV_EXCP_STORE_GUEST_AMO_ACCESS_FAULT:
+        case RISCV_EXCP_LOAD_ADDR_MIS:
+        case RISCV_EXCP_STORE_AMO_ADDR_MIS:
+        case RISCV_EXCP_LOAD_ACCESS_FAULT:
+        case RISCV_EXCP_STORE_AMO_ACCESS_FAULT:
+        case RISCV_EXCP_LOAD_PAGE_FAULT:
+        case RISCV_EXCP_STORE_PAGE_FAULT:
+            write_gva = env->two_stage_lookup;
+            tval = env->badaddr;
+            if (env->two_stage_indirect_lookup) {
+                /*
+                 * special pseudoinstruction for G-stage fault taken while
+                 * doing VS-stage page table walk.
+                 */
+                tinst = (riscv_cpu_xlen(env) == 32) ? 0x00002000 : 0x00003000;
+            } else {
+                /*
+                 * The "Addr. Offset" field in transformed instruction is
+                 * non-zero only for misaligned access.
+                 */
+                tinst = riscv_transformed_insn(env, env->bins, tval);
+            }
+            break;
+        case RISCV_EXCP_INST_GUEST_PAGE_FAULT:
+        case RISCV_EXCP_INST_ADDR_MIS:
+        case RISCV_EXCP_INST_ACCESS_FAULT:
+        case RISCV_EXCP_INST_PAGE_FAULT:
+            write_gva = env->two_stage_lookup;
+            tval = env->badaddr;
+            if (env->two_stage_indirect_lookup) {
+                /*
+                 * special pseudoinstruction for G-stage fault taken while
+                 * doing VS-stage page table walk.
+                 */
+                tinst = (riscv_cpu_xlen(env) == 32) ? 0x00002000 : 0x00003000;
+            }
+            break;
+        case RISCV_EXCP_ILLEGAL_INST:
+        case RISCV_EXCP_VIRT_INSTRUCTION_FAULT:
+            tval = env->bins;
+            break;
+        default:
+            break;
+        }
+        /* ecall is dispatched as one cause so translate based on mode */
+        if (cause == RISCV_EXCP_U_ECALL) {
+            assert(env->priv <= 3);
+
+            if (env->priv == PRV_M) {
+                cause = RISCV_EXCP_M_ECALL;
+            } else if (env->priv == PRV_S && riscv_cpu_virt_enabled(env)) {
+                cause = RISCV_EXCP_VS_ECALL;
+            } else if (env->priv == PRV_S && !riscv_cpu_virt_enabled(env)) {
+                cause = RISCV_EXCP_S_ECALL;
+            } else if (env->priv == PRV_U) {
+                cause = RISCV_EXCP_U_ECALL;
+            }
+        }
+    }
+
+    trace_riscv_trap(env->mhartid, async, cause, env->pc, tval,
+                     riscv_cpu_get_trap_name(cause, async));
+
+    qemu_log_mask(CPU_LOG_INT,
+                  "%s: hart:"TARGET_FMT_ld", async:%d, cause:"TARGET_FMT_lx", "
+                  "epc:0x"TARGET_FMT_lx", tval:0x"TARGET_FMT_lx", desc=%s\n",
+                  __func__, env->mhartid, async, cause, env->pc, tval,
+                  riscv_cpu_get_trap_name(cause, async));
+
+    if (env->priv <= PRV_S &&
+            cause < TARGET_LONG_BITS && ((deleg >> cause) & 1)) {
+        /* handle the trap in S-mode */
+        if (riscv_has_ext(env, RVH)) {
+            uint64_t hdeleg = async ? env->hideleg : env->hedeleg;
+
+            if (riscv_cpu_virt_enabled(env) && ((hdeleg >> cause) & 1)) {
+                /* Trap to VS mode */
+                /*
+                 * See if we need to adjust cause. Yes if its VS mode interrupt
+                 * no if hypervisor has delegated one of hs mode's interrupt
+                 */
+                if (cause == IRQ_VS_TIMER || cause == IRQ_VS_SOFT ||
+                    cause == IRQ_VS_EXT) {
+                    cause = cause - 1;
+                }
+                write_gva = false;
+            } else if (riscv_cpu_virt_enabled(env)) {
+                /* Trap into HS mode, from virt */
+                riscv_cpu_swap_hypervisor_regs(env);
+                env->hstatus = set_field(env->hstatus, HSTATUS_SPVP,
+                                         env->priv);
+                env->hstatus = set_field(env->hstatus, HSTATUS_SPV,
+                                         riscv_cpu_virt_enabled(env));
+
+
+                htval = env->guest_phys_fault_addr;
+
+                riscv_cpu_set_virt_enabled(env, 0);
+            } else {
+                /* Trap into HS mode */
+                env->hstatus = set_field(env->hstatus, HSTATUS_SPV, false);
+                htval = env->guest_phys_fault_addr;
+            }
+            env->hstatus = set_field(env->hstatus, HSTATUS_GVA, write_gva);
+        }
+
+        s = env->mstatus;
+        s = set_field(s, MSTATUS_SPIE, get_field(s, MSTATUS_SIE));
+        s = set_field(s, MSTATUS_SPP, env->priv);
+        s = set_field(s, MSTATUS_SIE, 0);
+        env->mstatus = s;
+        env->scause = cause | ((target_ulong)async << (TARGET_LONG_BITS - 1));
+        env->sepc = env->pc;
+        env->stval = tval;
+        env->htval = htval;
+        env->htinst = tinst;
+        env->pc = (env->stvec >> 2 << 2) +
+            ((async && (env->stvec & 3) == 1) ? cause * 4 : 0);
+        riscv_cpu_set_mode(env, PRV_S);
+    } else {
+        /* handle the trap in M-mode */
+        if (riscv_has_ext(env, RVH)) {
+            if (riscv_cpu_virt_enabled(env)) {
+                riscv_cpu_swap_hypervisor_regs(env);
+            }
+            env->mstatus = set_field(env->mstatus, MSTATUS_MPV,
+                                     riscv_cpu_virt_enabled(env));
+            if (riscv_cpu_virt_enabled(env) && tval) {
+                env->mstatus = set_field(env->mstatus, MSTATUS_GVA, 1);
+            }
+
+            mtval2 = env->guest_phys_fault_addr;
+
+            /* Trapping to M mode, virt is disabled */
+            riscv_cpu_set_virt_enabled(env, 0);
+        }
+
+        s = env->mstatus;
+        s = set_field(s, MSTATUS_MPIE, get_field(s, MSTATUS_MIE));
+        s = set_field(s, MSTATUS_MPP, env->priv);
+        s = set_field(s, MSTATUS_MIE, 0);
+        env->mstatus = s;
+        env->mcause = cause | ~(((target_ulong)-1) >> async);
+        env->mepc = env->pc;
+        env->mtval = tval;
+        env->mtval2 = mtval2;
+        env->mtinst = tinst;
+        env->pc = (env->mtvec >> 2 << 2) +
+            ((async && (env->mtvec & 3) == 1) ? cause * 4 : 0);
+        riscv_cpu_set_mode(env, PRV_M);
+    }
+
+    /* NOTE: it is not necessary to yield load reservations here. It is only
+     * necessary for an SC from "another hart" to cause a load reservation
+     * to be yielded. Refer to the memory consistency model section of the
+     * RISC-V ISA Specification.
+     */
+
+    env->two_stage_lookup = false;
+    env->two_stage_indirect_lookup = false;
+#endif
+    cs->exception_index = RISCV_EXCP_NONE; /* mark handled to qemu */
+}
 ```
  在sret/mret指令里会处理V状态以及寄存器的倒换：
 ```
@@ -240,6 +435,27 @@ qemu kvm的基本逻辑
  
 riscv H扩展spec分析
 -------------------
+
+ riscv H扩展的目的是在硬件层面创建出一个虚拟的机器出来，基于此可以支持各种类型的
+ 虚拟化，比如，可以在linux上支持KVM。先不考虑中断和外设，我们看看要创建一个虚拟机
+ 我们需要些什么，我们需要GPR寄存器、系统寄存器以及一个“物理”地址空间，在这个虚拟机
+ 里运行的程序认为这就是他们的全部世界。我们可以把host的GPR和host的系统寄存器给虚拟
+ 机里的程序用，对于每个虚拟机和host，当他们需要运行的时候，由一个更底层的程序把他们
+ 的GRP值和系统寄存器值换到物理GPR和系统寄存器上，这样每次虚拟机和虚拟机切换、虚拟机
+ 和host切换都要切全部寄存器。不同虚拟机不能直接使用host物理地址作为他们的“物理”地址
+ 空间，如果这样，就好小心划分host物理地址，避免虚拟机物理地址之间相互影响，我们会
+ 再加一个层翻译，这层翻译把虚拟机物理地址翻异成host物理地址，虚拟机自身看不到这层
+ 翻译，虚拟机正常做load/store访问(先假设load/store访问的是虚拟机物理地址)，load/store
+ 执行的时候会查tlb，可能做page walk，还可能报缺页异常，这些在虚拟机的世界里都不感知，
+ 查tlb和做page talk是硬件自己搞定的，处理缺页是更加底层的程序搞定的(hypvisor)。
+ 为了支持这层翻译以及相关的异常，就需要在给硬件加相关的寄存器，可以想象，我们要增加
+ 这层翻译对应的页表的基地址寄存器，还要增加对应的异常上下文寄存器，这些寄存器在虚拟
+ 机切换的时候都要切换成对应虚拟机的。
+
+ 只有host的时候，只要一层翻译就好，但是如果是运行在虚拟机里的系统，就需要两级翻译，
+ 运行在虚拟机里的系统自己不感知是运行在虚拟机上的，但是，硬件需要知道某个时刻是运行
+ 的是guest还是host的系统，这样硬件需要有一个状态表示，当前运行的是guest还是host的
+ 系统。
 
  riscv的H扩展增加了CPU的状态，增加了一个隐式的V状态，当V=0的时候，CPU的U/M状态还和
  之前是一样的，S状态处在HS状态，当V=1的时候，CPU原来的U/S状态变成了VU/VS状态。
