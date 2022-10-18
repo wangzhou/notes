@@ -495,7 +495,8 @@ riscv H扩展spec分析
  hgeip/hgeie是SGEI的pending和enable控制，hip里的SGEIP是只读域段，只有在hgeip/hgeie
  各个域段相与结果非零hip的SGEIP才是0，所以hip里的SGEIP看起来是一个指示位。如果hgeip/hgeie
  是一个64bit的寄存器，那么它的1-63bit可以表示1-63个vcpu的SGEI pending/enable bit。
- todo: 直通中断的逻辑分析？
+ vcpu怎么响应这个直通的中断？首先硬件必须感知当前运行的是不是V mode，在是V mode
+ 的时候感知是不是hgeip/hgeie中指定的vcpu。todo: 直通中断的逻辑分析？
  
  htval/htinst是HS异常时的参数寄存器。htval用来存放guest page fault的IPA，其他情况
  暂时时0，留给以后扩展。todo: 两级地址翻译时的各种异常和处理流程分析。
