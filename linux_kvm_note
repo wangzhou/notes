@@ -471,15 +471,81 @@ riscv H扩展spec分析
  htval, htinst, hgatp, guest对应的寄存器有：vsstatus, vsip, vsie, vstvec, vsscratch, vsepc,
  vscause, vstval, vsatp。
 
- 对于这些系统寄存器，我们可以大概分为两类，一类静态配置的，一类是系统运行时会改变的，
- 比如，hedeleg/hideleg表示是否要把HS的中断继续委托到VS去处理，这个就会提前静态配置好，
- 比如像hip/hie这种中断相关的寄存器，就可以灵活配置。这些寄存器具体使用的时候的行为
- 比较有意思，VS在实际运行的时候会把配置的值copy到S mode的寄存器上，在退出V状态的时候
- 再把S mode的寄存器上的值保存会VS状态的寄存器上，不过要让guest内核可以直接运行到KVM上，
- 原来使用的寄存器名字也是不能改变的。当系统从V状态切到HS时，V被配置成0，同时把之前
- 保存的S mode寄存器copy到S mode寄存器上，HS工作的时候使用S mode寄存器，同时使用hypervisor
- 寄存器里的静态配置信息，当从HS离开的时候，硬件会把当前S mode寄存器里的值保存到硬件里。
+ 对于这些系统寄存器，我们可以大概分为两类，一类是配置hypvisor的行为的，一类是VS/VU
+ 的映射寄存器。我们一个一个寄存器看下。VS/VU的映射寄存器就是CPU在运行在V状态时使用
+ 的寄存器，这些寄存器基本上是S mode寄存器的翻版，riscv spec提到，当系统运行在V状态
+ 时，硬件的控制逻辑依赖这组vs开头的寄存器，这时对S mode相同寄存器的读写被映射到vs
+ 开头的这组寄存器上。
 
+ hedeleg/hideleg表示是否要把HS的中断继续委托到VS去处理，在进入V模式前，如果需要，
+ 就要提前配置好。(todo: 具体的委托情况)
+
+ hgatp是第二级页表的基地址寄存器。
+
+ hvip用于给虚拟机VS mode注入中断，写VSEIP/VSTIP/VSSIP域段，会给VS mode注入相关中断，
+ riscv spec里没有说，注入的中断在什么状态下会的到响应？
+
+ hip/hie是hypvisor下中断相关的pending和enable控制。hip/hie包含hvip的各个域段，除了
+ 如上的域段，还有一个SGEIP域段。hip/hie和sip/sie有什么区别？
+
+ 罗列出riscv上所有的中断类型，S mode/M mode/VS mode的外部中断/时钟中断/软件中断
+ 这些一共下来就是9种中断类型，再加上supervisor guest external interrupt。
+ VSEI和SGEI有什么区别？
+
+ hgeip/hgeie是SGEI的pending和enable控制，hip里的SGEIP是只读域段，只有在hgeip/hgeie
+ 各个域段相与结果非零hip的SGEIP才是0，所以hip里的SGEIP看起来是一个指示位。如果hgeip/hgeie
+ 是一个64bit的寄存器，那么它的1-63bit可以表示1-63个vcpu的SGEI pending/enable bit。
+ todo: 直通中断的逻辑分析？
+ 
+ htval/htinst是HS异常时的参数寄存器。htval用来存放guest page fault的IPA，其他情况
+ 暂时时0，留给以后扩展。todo: 两级地址翻译时的各种异常和处理流程分析。
+
+ 这些寄存器的qemu实现比较有意思，VS在实际运行的时候会把vs开头寄存器中配置的值copy
+ 到S mode的寄存器上，把HS mode的寄存器中原来的值，存在硬件里。
+
+ 在退出V状态的时候再把S mode的寄存器上的值保存会VS状态的寄存器上，同时把之前保存
+ 在硬件里的HS mode的寄存器的值写入S mode寄存器。要让guest内核可以直接运行到KVM上，
+ 原来使用的寄存器名字也是不能改变的。HS工作的时候使用S mode寄存器，同时使用hypervisor
+ 寄存器里的配置信息。
+
+ 实际硬件的物理实现可能只需要做一个映射就好，并不需要qemu中类似的拷贝。
+
+ 虚拟机开始运行，HS切入VS的示意：
+```
+
+1. 配置vsxxx寄存器 |
+                   |
+                   |
+                   v
+ +-- vsstatus vsip ... vsatp ---- status  sip  ...  satp ---------+ <---- 寄存器接口
+ |                                ^     \                         |
+ |                               /       \                        |
+ |    3. vsxxx寄存器被拷贝      /         \     2. HS mode寄存器  |
+ |       到HS mode寄存器或     /           \       被保存到硬件或 |
+ |       是映射到HS mode寄    /             \      是停止映射     |
+ |       存器                /               \                    |
+ |                          /                 v                   | <---- 硬件
+ |   vsstatus vsip ... vsatp      status_hs  sip_hs ...  satp_hs  |
+ |                                                                |
+ +----------------------------------------------------------------+
+ sret的硬件逻辑完成步骤2和步骤3。
+```
+
+ 虚拟机停止运行，VS/VU切入HS：(初始状态是虚拟机跑在S mode寄存器上)
+```
+ +-- vsstatus vsip ... vsatp ---- status  sip  ...  satp ---------+ <---- 寄存器接口
+ |                                /     ^                         |
+ |                               /       \                        |
+ |    1. HS mode寄存器被拷贝    /         \     2. 把保存的HS mode|
+ |       到vsxxx寄存器或是停   /           \       寄存器拷贝到HS |
+ |       止映射               /             \      寄存器或者把   |
+ |                           /               \     xxx_hs映射出去 |
+ |                          v                 \                   | <---- 硬件
+ |   vsstatus vsip ... vsatp      status_hs  sip_hs ...  satp_hs  |
+ |                                                                |
+ +----------------------------------------------------------------+
+ 中断或者异常的硬件处理逻辑完成步骤1和步骤2。
+```
  所以，从总体上看，不管是在HS还是VS，实际运行的时候使用的都是S mode的寄存器。当HS是处理
  hypervisor的业务时，使用hypervisor相关寄存器里的定义。
 
