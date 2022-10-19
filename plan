@@ -161,3 +161,6 @@ link script			 to do
 
 riscv qemu地址翻译		 to do		3
 riscv 异常委托具体分析		 to do		5
+riscv reset逻辑分析		 to do
+riscv RWO逻辑分析		 to do
+riscv 虚拟化中断只通		 to do
