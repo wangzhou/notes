@@ -110,18 +110,19 @@ M mode寄存器
  协议设计，只要开了这样的口，以后每个特性与之相关的时候，就都要考虑一下。
 
  TVM(trap virtual memory)控制S mode的satp访问以及sfence.vma/sinval.vma指令是否有效。
- 默认(TVM=0)是有效的，TVM=1可以关掉S mode如上的功能。没看懂spec上的对应说明？？？
+ 默认(TVM=0)是有效的，TVM=1可以关掉S mode如上的功能。目前，还没有看到opensbi里有
+ 使用这个bit。
 
  TW(timeout wait)控制wfi指令的行为，默认(TW=0)情况，wfi可能一直等在当前指令运行
  的特权级，当TW=1时，wfi如果超时，会直接触发非法指令异常，如果这个超时时间是0，
- 那么wfi立马就触发一个非法指令异常。spec上说，wfi的这个特性可以用在虚拟化上，貌似
- 是用wfi陷入异常，然后可以换一个新的guest进来？？？
+ 那么wfi立马就触发一个非法指令异常。spec上说，wfi的这个特性可以用在虚拟化上，看起来
+ 是用wfi陷入异常，然后可以换一个新的guest进来。目前，还没有看到opensbi里有使用这个bit。
 
  另外，目前的定义是，如果U mode的wfi超时，会有非法指令异常被触发。
 
  TSR(trap sret)控制sret的行为，默认(TSR=0)下，S mode的sret指令是正常执行的，但是
  在TSR=1时，S mode执行sret会触发非法指令异常。spec的解释是，sret触发非法指令异常
- 是为了在不支持H扩展的机器上模拟H扩展？？？
+ 是为了在不支持H扩展的机器上模拟H扩展。目前，还没有看到opensbi里有使用这个bit。
  
  FS/VS/XS/SD给是软件优化的hint，FS/VS/XS每个都是2bit，描述的是浮点扩展/向量扩展/
  所有扩展的状态，因为扩展有可能涉及到系统寄存器，那么在CPU上下文切换的时候就要做

@@ -129,7 +129,7 @@ qemu helper函数的实现
 riscv entry.S代码分析		 #
 qemu irq      			 #
 中庸总结		         to do
-riscv系统构架总结(ecall) 	 #
+riscv系统构架总结 	 	 #        repost     2
 内核初始化阶段初始页表		 #
 riscv多核启动			 to do
 riscv DEBUG实现/ebreak的使用     #
@@ -139,7 +139,7 @@ gdb 看线程信息
 qemu 线程模型、怎么处理信号的
 qemu riscv timer		 # 补充tick timer初始化的部分
 riscv两层qemu			 #
-linux kvm/riscv spec		 #
+linux kvm/riscv spec		 #        repost     1
 
 qemu listener			 to do
 linux scheduler			 to do
@@ -147,7 +147,7 @@ linux 软中断			 #
 kvm irq的逻辑			 #
 qemu bb以及temp和local temp	 to post/还有代码分析没有写
 linux 不可屏蔽中断		 to do
-opensbi代码分析			 to do 1
+opensbi代码分析			 to do          4
 riscv pmu逻辑分析		 to do
 riscv vector			 to do
 rcu使用和原理			 to do
@@ -158,3 +158,6 @@ riscv aclint swi		 #
 riscv plic			 to do 2
 riscv aia			 to do 3
 link script			 to do
+
+riscv qemu地址翻译		 to do		3
+riscv 异常委托具体分析		 to do		5
