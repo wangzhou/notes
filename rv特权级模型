@@ -32,6 +32,17 @@
  一般指令可以访问通用寄存器，但是只有特殊的指令才能访问系统寄存器，在riscv上，有
  一堆这样的csr指令。这些指令以csrxxx的方式命名，通过寄存器编号做各种读写操作。
 
+ 对于CSR的域段，riscv spec上定义了三个标准的读写属性，分别是：WPRI/WLRL/WARL，其中
+ W是write，R是read，P是preserve，I是ignore，L是legal。所以，每个域段含义是，WPRI
+ 对于写来说，不改变值，如果WPRI是reserve的域段，需要接死成0，软件读出这个字段需要
+ 忽略掉；对于WLRL的域段，必须写入一个合法的值，否则可能报非法指令异常，如果上一次
+ 写是一个合法值，那么下次读就是这个合法值，如果上一次写是一个非法值，那么下次读返回
+ 一个随机值，但是这个随机值和写入的非法值和写入非法值之前的值有关系；对于WARL，
+ 可以写入任何值，但是，读出的总是一个合法值，这个性质可以用来做特性检测，比如misa
+ 的extension域段，它表示extension的使能情况，软件是可以写这个bit把特性的特性关掉的，
+ 当一个特性被关掉时，我们可以尝试写相关的bit，看看能否写入，如果可以写入，那么这个
+ 特性是存在的，只是被关掉，如果写入不了，那么平台本来就不支持这个特性。
+
 M mode寄存器
 -------------
 
@@ -184,12 +195,12 @@ S mode寄存器
  中断异常相关的寄存器有：sstatus, sepc, stvec, stval, sie, sip，scratch，scause。
  内存管理相关的寄存器有: satp
 
- sstatus是S mode的status寄存器。
+ sstatus是S mode的status寄存器，具体的域段有SD/UXL/MXR/SUM/XS/FS/SPP/SPIE/UPIE/SIE/UIE，
+ 其中很多都在mstatus寄存器中已经有介绍。之前没有涉及到的，UIE/UPIE和用户态中断相关。
 
- sie是riscv上定义的各种具体中断的使能状态，每种中断一个bit。riscv定义的中断可以
- 参考riscv的spec。
-
- sip是对应各种中断的pending状态，每种中断一个bit。
+ sie是riscv上定义的各种具体中断的使能状态，每种中断一个bit。sip是对应各种中断的
+ pending状态，每种中断一个bit。基本逻辑和M mode的是一样的，只不过控制的是S mode和
+ U mode的逻辑。
 
  stvec是存放中断异常的跳转地址，当中断或异常发生时，硬件在做相应状态的改动后，就
  直接跳到stvec保存的地址，从这里取指令执行。基于这样的定义，软件可以把中断异常向量表

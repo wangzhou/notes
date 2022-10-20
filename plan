@@ -160,7 +160,8 @@ riscv aia			 to do 3
 link script			 to do
 
 riscv qemu地址翻译		 to do		3
-riscv 异常委托具体分析		 to do		5
+riscv 异常委托具体分析		 to post		5
 riscv reset逻辑分析		 to do
 riscv RWO逻辑分析		 to do
-riscv 虚拟化中断只通		 to do
+riscv 虚拟化中断直通		 to do
+riscv 内存模型(重要)  	  	 to do          6
