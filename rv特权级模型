@@ -39,7 +39,7 @@
  写是一个合法值，那么下次读就是这个合法值，如果上一次写是一个非法值，那么下次读返回
  一个随机值，但是这个随机值和写入的非法值和写入非法值之前的值有关系；对于WARL，
  可以写入任何值，但是，读出的总是一个合法值，这个性质可以用来做特性检测，比如misa
- 的extension域段，它表示extension的使能情况，软件是可以写这个bit把特性的特性关掉的，
+ 的extension域段，它表示extension的使能情况，软件是可以写这个bit把相关的特性关掉的，
  当一个特性被关掉时，我们可以尝试写相关的bit，看看能否写入，如果可以写入，那么这个
  特性是存在的，只是被关掉，如果写入不了，那么平台本来就不支持这个特性。
 
@@ -98,14 +98,14 @@ M mode寄存器
  对应数据的大小端，S mode页表的大小端也是SBE定义。
 
  MPRV(modify privilege)改变特定特权级下load/store的行为，当MPRV是0时，当前特权级
- load/store内存的规则不变，当MPRV是1时，使用MPP是值作为load/store内存的特权级，
+ load/store内存的规则不变，当MPRV是1时，使用MPP的值作为load/store内存的特权级，
  sret/mret返回到非M mode是，顺带把MPRV清0。看起来MPRV只在M mode改变load/store的
  行为，难道从S mode陷入M mode(这时MPP是S mode)，如果把MPRV配置成1，M mode就可以用
  S mode定义的页表去访问？查了下opensbi的代码，在处理misaligned load/store的时候
  还真有这样用的，貌似是从内核读引起misaligned load/store的对应指令到opensbi。
  (相关代码在opensbi的lib/sbi/sbi_unpriv.c里)
 
- MXR(Make executable readable)本质上用来抑制某些异常的产生，MXR是0 load操作只可以
+ MXR(Make executable readable)本质上用来抑制某些异常的产生，MXR是0时load操作只可以
  操作readable的地址，MXR是1，把这个约束放松到load操作也可以作用readable和executable
  的地址，这个就允许load text段的指令，这个配置在opensbi里是配合上面的MPRV一起用的，
  可以看到要在opensbi里load misaligned的load/store指令，就需要有这个配置。
@@ -128,7 +128,6 @@ M mode寄存器
  的特权级，当TW=1时，wfi如果超时，会直接触发非法指令异常，如果这个超时时间是0，
  那么wfi立马就触发一个非法指令异常。spec上说，wfi的这个特性可以用在虚拟化上，看起来
  是用wfi陷入异常，然后可以换一个新的guest进来。目前，还没有看到opensbi里有使用这个bit。
-
  另外，目前的定义是，如果U mode的wfi超时，会有非法指令异常被触发。
 
  TSR(trap sret)控制sret的行为，默认(TSR=0)下，S mode的sret指令是正常执行的，但是
@@ -175,7 +174,7 @@ M mode寄存器
  一个核核写寄存器触发另外核的mip.MSIP。
 
  mip.SEIP/mip.STIP可以通过外接中断控制器或者timer写1，也可以在M mode对他们写1，
- 以次触发S mode的外部中断和timer中断。riscv spec提到mip.SSIP也可以由平台相关的中断
+ 以此触发S mode的外部中断和timer中断。riscv spec提到mip.SSIP也可以由平台相关的中断
  控制器触发。这里又出现了和status寄存器一样的问题，mip的SEIP/STIP/SSIP域段的位置
  和sip域段上SEIP/STIP/SSIP的位置是一样的，所以，riscv spec有提到，如果中断被委托到
  S mode, sip/sie和mip里对应域段的值是一样的。
