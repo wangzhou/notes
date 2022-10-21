@@ -147,7 +147,7 @@ linux 软中断			 #
 kvm irq的逻辑			 #
 qemu bb以及temp和local temp	 to post/还有代码分析没有写
 linux 不可屏蔽中断		 to do
-opensbi代码分析			 to do          4
+opensbi代码分析			 #
 riscv pmu逻辑分析		 to do
 riscv vector			 to do
 rcu使用和原理			 to do
@@ -155,13 +155,13 @@ riscv vdso			 to do
 cpuhp逻辑分析			 to do
 riscv virt外设分析		 #
 riscv aclint swi		 #
-riscv plic			 to do 2
-riscv aia			 to do 3
+riscv plic			 to do
+riscv aia			 to do
 link script			 to do
 
-riscv qemu地址翻译		 to do		3
+riscv qemu地址翻译		 to do
 riscv 异常委托具体分析		 #
 riscv reset逻辑分析		 to do
 riscv RWO逻辑分析		 to do
 riscv 虚拟化中断直通		 to do
-riscv 内存模型(重要)  	  	 to do          6
+riscv 内存模型(重要)  	  	 to do
