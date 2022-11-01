@@ -17,7 +17,6 @@
            /*
             * kernel_init是1号进程对应的函数，这个函数有点特殊，这个函数除了最终
 	    * 拉起第一个用户态进程外，还做了一堆初始化操作。
-	    *
             */
        |
      --+-> user_mode_thread(kernel_init, NULL, CLONE_FS)
@@ -56,5 +55,8 @@
  initramfs的解压缩是被放到内核线程里去跑的，1号线程会异步的等initramfs解压缩完后
  再继续跑。
 
- workqueue中运行任务是在关中断上下文里，所以，如果这个解压缩的时间太长，会有task
- hung up的报警出现?
+ 1号线程等解压完成在wait_for_initramfs里，这个函数用了wait_event，这个函数wait
+ 在D状态(TASK_UNINTERRUPTIBLE)，这个状态的线程只能被特定事件唤醒，内核里会定时检查
+ D状态的线程，如果超过一定事件没有被唤醒(一般是120s)，就会报异常。所以，如果解压
+ 过程超过120s，会导致等待时间超过120s，进而报异常(linux/kernel/hung_task.c)。
+
