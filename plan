@@ -165,6 +165,7 @@ riscv 虚拟化中断直通		 to do 3
 riscv 内存模型(重要)  	  	 to do
 riscv wfi			 to do
 riscv多核启动			 to do
-linux initramfs分析		 to do
-linux/kernel/hung_task.c
+linux initramfs分析		 to post
+linux/kernel/hung_task.c	 to do
       kernel/watchdog.c
+my bios				 to do

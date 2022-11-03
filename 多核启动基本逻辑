@@ -1,0 +1,95 @@
+-v0.1 2022.11.2 Sherlock init
+
+简介：本文分析CPU多核启动的基本逻辑，我们分析基于riscv的qemu虚拟机，固件基于opensbi,
+      内核采用Linux。各个分析内容的版本是：qemu v7.1.50, opensbi v1.0, Linux v6.0。
+
+
+基本逻辑
+---------
+
+ 计算机系统有多个核的时候，多个核之间启动的时候要遵守一定的逻辑关系。虽然，多核系统
+ 上每个核都可以独立的运行程序，但是总会有多个核共享的资源，对于这些资源配置和访问
+ 需要串行，比如，固件或者内核的BSS段，再比如固件的重定位，这些都只需要搞一次就好，
+ 一般就用一个核搞定就好，其他核后续可以再此基础上继续做各自核的初始化。
+
+ 本文分析多核启动中的这种逻辑关系。
+
+硬件逻辑
+---------
+
+ 我们从qemu启动多核看看硬件是怎么看待多核启动的。qemu里每个vcpu用一个线程模拟，
+ 多核的启动流程大概是:
+```
+ device_set_realized
+   +-> riscv_cpu_realize
+     +-> qemu_init_vcpu
+       [...]
+           /* 如下是vcpu模拟要执行的线程函数，代码在qemu/accel/tcg/tcg-accel-ops-mttcg.c */
+       +-> mttcg_cpu_thread_fn
+     +-> cpu_reset
+       +-> device_cold_reset
+         +-> resettable_reset
+           +-> resettable_assert_reset
+             +-> resettable_phase_hold
+	           /* CPU复位函数，CPU的初始状态在这里配置 */
+	       +-> riscv_cpu_reset
+     +-> mcc->parent_realize (cpu_common_realizefn)
+       +-> cpu_resume
+```
+ 其中我们要搞清楚CPU复位配置初始状态和CPU开始运行是怎么衔接起来的。如上，在qemu_init_vcpu
+ 里会拉起模拟vcpu的线程，该线程的主体逻辑就是在一个大循环里反复做取指令，翻译和执行，
+ 但是，CPU复位是在后面的cpu_reset里面才执行的。vcpu做取指令，翻译和执行之前会先
+ 判断CPU的状态，如果CPU在停止状态，就一直等待，qemu_init_vcpu一进来就会配置CPU在
+ stopped状态，这样vcpu的模拟线程起来也是在等待的状态。riscv_cpu_realize最后会调用
+ 父类的realize函数，也就是CPUClass的realize函数，这个里面会调用cpu_resume把CPU设置
+ 到可以运行的状态。(to check)
+
+ 总结下，从qemu的角度看，多核启动就是多个核独立开始执行指令，这个设计其实把多核启动
+ 的控制逻辑给到了随后的固件和内核。
+
+ qemu和后续固件的接口(todo)，a0存当前core id，a1是dts基地址，a2是qemu和固件传递信息
+ 的一片内存的地址。
+
+固件逻辑
+---------
+
+ 我们直接看opensbi中的多核启动逻辑，具体opensbi的代码分析可以看[这里](https://wangzhou.github.io/opensbi逻辑分析/)。
+
+ 总体上看，opensbi大概分为汇编部分和C代码部分，在这两部分，多核启动的逻辑也是不同
+ 的。针对opensbi中可能的三种固件类型，基本上都是用所谓lottery算法做多核启动的，
+ 只有fw_dynamic_version_1用的是指定核启动，所以，我们重点看下lottery的多核启动。
+
+ lottery算法的逻辑很直白，就是多个核去抢做主启动核，主核就一个人去做公共资源的初始化，
+ 其它核(从核)就等着，直到主核把公共资源初始化完，从核继续做每个核各自的初始化内容。
+
+ 具体上看，opensbi的汇编和C语言部分各自都采用了lottery算法，C语言把主核启动叫做
+ coldboot，从核启动叫做warmboot，warmboot还包括CPU运行中被挂起，然后继续运行的情况，
+ 我们这里先不考虑这个逻辑。所以，从qemu和opensbi的角度看，硬件的初始状态都是一样的，
+ 所谓多核启动，不过opensbi怎么初始化多核环境下的公有和私有软件资源。
+```
+汇编部分:
+               core0     core1  ...  coreN      <--- 这里core0抢到了
+                 |
+                 |       +->-+       +->-+
+                 |       ^   v       ^   v
+                 |       +-<-+       +-<-+
+                 |         |           |
+                 |         |           |
+              sbi_init  sbi_init     sbi_init   <--- 这里core1抢到了coldboot
+C部分:           |         |           |
+               +->-+       |         +->-+
+               ^   v       |         ^   v  <------- warmboot先等coldboot完成
+               +-<-+       |         +-<-+
+                 |         |           |
+                mret      mret       mret       <--- 各个核通过mret跳进内核执行 
+```
+
+内核逻辑
+---------
+
+ 内核多核启动的逻辑和上面的逻辑类似，只不过内核里公共的资源更多，从核启动的时候，
+ 在各个核之间做同步的时候注意的问题会更多，比如，内核页表在各个核之间的同步问题。
+ Linux内核riscv下启动汇编的分析可以[这里](https://wangzhou.github.io/Linux内核riscv-head-S分析/)。
+ 
+ 完整的多核启动逻辑 todo
+
