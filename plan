@@ -136,7 +136,7 @@ qemu monitor			 #
 qemu gpio
 gdb 看线程信息
 qemu 线程模型、怎么处理信号的
-qemu riscv timer		 # 补充tick timer初始化的部分
+qemu riscv timer		 # 补充tick timer初始化的部分 repost <------- #
 riscv两层qemu			 #
 linux kvm/riscv spec		 #
 
@@ -169,3 +169,4 @@ linux initramfs分析		 to post
 linux/kernel/hung_task.c	 to do
       kernel/watchdog.c
 my bios				 to do
+riscv 内存相关指令	         to do

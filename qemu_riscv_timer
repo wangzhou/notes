@@ -26,6 +26,7 @@ qemu riscv timer的基本逻辑
  软件可以在timer中断处理函数里，更新mtimecmp的值，从而维持一个固定周期的时钟中断，
  一般这个中断就是Linux内核的时钟中断。软件可以写STIP触发一个S mode timer中断。
 
+ 多核上M mode寄存
  NOTE: sstc
 
 qemu逻辑
