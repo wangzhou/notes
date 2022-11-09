@@ -64,7 +64,6 @@ TLB无效化指令
    保证叫所有核看见页表的修改，然后发IPI给其它核，其他核上的IPI处理函数执行sfence.vma，
    做完后通知修改页表的核。RV协议上叫这个过程是：模拟TLB shutdown。
 
-
  - sinval.vma
 
    sinval.vma和sfence.vmao功能类似，区别在于sinval.vma不带barrier。
