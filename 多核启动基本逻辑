@@ -1,4 +1,5 @@
--v0.1 2022.11.2 Sherlock init
+-v0.1 2022.11.2  Sherlock init
+-v0.2 2022.11.10 Sherlock 补充内核多核启动的逻辑
 
 简介：本文分析CPU多核启动的基本逻辑，我们分析基于riscv的qemu虚拟机，固件基于opensbi,
       内核采用Linux。各个分析内容的版本是：qemu v7.1.50, opensbi v1.0, Linux v6.0。
@@ -91,5 +92,37 @@ C部分:           |         |           |
  在各个核之间做同步的时候注意的问题会更多，比如，内核页表在各个核之间的同步问题。
  Linux内核riscv下启动汇编的分析可以[这里](https://wangzhou.github.io/Linux内核riscv-head-S分析/)。
  
- 完整的多核启动逻辑 todo
+ riscv的多核启动有两种实现，一种是基于spinwait的，在这种启动模拟下，多核均直接进入
+ 内核，内核使用lottery算法选出一个主核，其它核spinwait，riscv内核Kconfig里提示，
+ 这种方式不支持CPU hotplug和sparse hartid，这种方式只用在只支持M mode或者是BIOS
+ 不支持SBI HSM扩展的情况。另一种是ordered booting，这种方式要依赖HSM扩展，我们下面
+ 重点看下ordered booting。
 
+ riscv ordered booting的基本逻辑： 
+```
+ start_kernel
+       /* arch/riscv/kernel/setup.c */
+   +-> setup_arch
+     +-> setup_smp
+           /* 根据内核的配置方式，挂接sbi或者是spinwait的回调函数 */
+       +-> struct cpu_operations cpu_ops[cpuid] = &cpu_ops_sbi
+```
+ 如上是cpu_ops的配置逻辑，根据是否支持SBI，决定是挂接spinwait还是SBI的回调。
+
+```
+ /* linux/init/main.c，kernel_init会拉起一号进程，在这之前会在smp_init里拉起从核 */
+ kernel_init
+   +-> smp_init
+         /* 在一个循环里一个接一个的拉起从核 */
+     +-> bringup_noboot_cpus
+           /* 拉起一个core的函数 */
+       +-> cpu_up
+         +-> _cpu_up
+	   [...]
+	   /* 最终会一路调到riscv的实现函数(linux/arch/riscv/kernel/smpboot.c) */
+           +-> __cpu_up
+             +-> start_secondary_cpu
+               +-> cpu_ops[cpu]->cpu_start
+```
+ 目前的opensbi代码里，只会叫cold root的核先进入内核，但是，warm boot的核是停在哪里
+ 等待呢？
