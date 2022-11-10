@@ -48,8 +48,54 @@
  总结下，从qemu的角度看，多核启动就是多个核独立开始执行指令，这个设计其实把多核启动
  的控制逻辑给到了随后的固件和内核。
 
- qemu和后续固件的接口(todo)，a0存当前core id，a1是dts基地址，a2是qemu和固件传递信息
- 的一片内存的地址。
+ qemu和opensbi的接口比较有意思，我们具体看下这里的实现。qemu在启动BIOS(opensbi)
+ 之前，会运行一小段rom上的指令，这段指令core id配置到a0，dts基地址配置到a1，qemu和
+ opensbi传递信息的一片内存的地址配置到a2。下面我们逐行来看看这段代码：
+```
+ /* hw/riscv/virt.c, 有"n:"前缀是本文新加的注释 */
+ riscv_setup_rom_reset_vec
+   [...]
+   uint32_t reset_vec[10] = {
+       /*
+        * n: 需要注意的是，这里汇编语意和二进制语意是不一样的。从汇编语意上看，这
+	*    句的意思是，%pcrel_hi(fw_dyn)表示计算fw_dyn这个符号相对于当前PC的偏移
+	*    的高20bit，而auipc t0, imm表示把imm和当前PC相加，结果保存到t0。所以，
+	*    这条指令整体上的结果是加载fw_dyn地址的高20bit到t0。
+	*
+	*    t0这里实际上是当前PC的值。
+	*
+	*    从汇编上看这条指令和下面一条指令一起完成计算fw_dyn地址的功能。下面
+	*    一条指令的意思是，找见位置是label 1b的指令，计算pcrel_hi修饰的
+	*    符号和auipc这条指令的偏差的低12bit, 这个就是%pcrel_lo(1b)的值。
+	*    然后"addi a2, t0，imm"把fw_dyn这个符号的低12bit补上，写到a2里，所以
+	*    这里a2就是fw_dyn的地址。
+	*/
+       0x00000297,                  /* 1:  auipc  t0, %pcrel_hi(fw_dyn) */
+       0x02828613,                  /*     addi   a2, t0, %pcrel_lo(1b) */
+       /* n: a0是当前核的id */
+       0xf1402573,                  /*     csrr   a0, mhartid  */
+       0,
+       0,
+       /* n: 如下，t0是opensbi的地址，这里就直接跳到opensbi了 */
+       0x00028067,                  /*     jr     t0 */
+       /* n: 下个bootloader的地址，一般rv上就是opensbi的加载地址 */
+       start_addr,                  /* start: .dword */
+       start_addr_hi32,
+       /* n: dts的基地址 */
+       fdt_load_addr,               /* fdt_laddr: .dword */
+       fdt_load_addr_hi32,
+                                    /* fw_dyn: */
+   };
+   if (riscv_is_32bit(harts)) {
+       reset_vec[3] = 0x0202a583;   /*     lw     a1, 32(t0) */
+       reset_vec[4] = 0x0182a283;   /*     lw     t0, 24(t0) */
+   } else {
+       /* n: a1存放的是dts的基地址 */
+       reset_vec[3] = 0x0202b583;   /*     ld     a1, 32(t0) */
+       /* n: t0存放的是下一跳的地址，就是opensbi的加载地址 */
+       reset_vec[4] = 0x0182b283;   /*     ld     t0, 24(t0) */
+   }
+```
 
 固件逻辑
 ---------
