@@ -4,7 +4,6 @@
 简介：本文分析CPU多核启动的基本逻辑，我们分析基于riscv的qemu虚拟机，固件基于opensbi,
       内核采用Linux。各个分析内容的版本是：qemu v7.1.50, opensbi v1.0, Linux v6.0。
 
-
 基本逻辑
 ---------
 
@@ -32,8 +31,8 @@
          +-> resettable_reset
            +-> resettable_assert_reset
              +-> resettable_phase_hold
-	           /* CPU复位函数，CPU的初始状态在这里配置 */
-	       +-> riscv_cpu_reset
+                   /* CPU复位函数，CPU的初始状态在这里配置 */
+               +-> riscv_cpu_reset
      +-> mcc->parent_realize (cpu_common_realizefn)
        +-> cpu_resume
 ```
@@ -58,18 +57,18 @@
    uint32_t reset_vec[10] = {
        /*
         * n: 需要注意的是，这里汇编语意和二进制语意是不一样的。从汇编语意上看，这
-	*    句的意思是，%pcrel_hi(fw_dyn)表示计算fw_dyn这个符号相对于当前PC的偏移
-	*    的高20bit，而auipc t0, imm表示把imm和当前PC相加，结果保存到t0。所以，
-	*    这条指令整体上的结果是加载fw_dyn地址的高20bit到t0。
-	*
-	*    t0这里实际上是当前PC的值。
-	*
-	*    从汇编上看这条指令和下面一条指令一起完成计算fw_dyn地址的功能。下面
-	*    一条指令的意思是，找见位置是label 1b的指令，计算pcrel_hi修饰的
-	*    符号和auipc这条指令的偏差的低12bit, 这个就是%pcrel_lo(1b)的值。
-	*    然后"addi a2, t0，imm"把fw_dyn这个符号的低12bit补上，写到a2里，所以
-	*    这里a2就是fw_dyn的地址。
-	*/
+        *    句的意思是，%pcrel_hi(fw_dyn)表示计算fw_dyn这个符号相对于当前PC的偏移
+        *    的高20bit，而auipc t0, imm表示把imm和当前PC相加，结果保存到t0。所以，
+        *    这条指令整体上的结果是加载fw_dyn地址的高20bit到t0。
+        *
+        *    t0这里实际上是当前PC的值。
+        *
+        *    从汇编上看这条指令和下面一条指令一起完成计算fw_dyn地址的功能。下面
+        *    一条指令的意思是，找见位置是label 1b的指令，计算pcrel_hi修饰的
+        *    符号和auipc这条指令的偏差的低12bit, 这个就是%pcrel_lo(1b)的值。
+        *    然后"addi a2, t0，imm"把fw_dyn这个符号的低12bit补上，写到a2里，所以
+        *    这里a2就是fw_dyn的地址。
+        */
        0x00000297,                  /* 1:  auipc  t0, %pcrel_hi(fw_dyn) */
        0x02828613,                  /*     addi   a2, t0, %pcrel_lo(1b) */
        /* n: a0是当前核的id */
@@ -123,7 +122,7 @@
                  |         |           |
                  |         |           |
               sbi_init  sbi_init     sbi_init   <--- 这里core1抢到了coldboot
-C部分:           |         |           |
+C :              |         |           |
                +->-+       |         +->-+
                ^   v       |         ^   v  <------- warmboot先等coldboot完成
                +-<-+       |         +-<-+
@@ -164,8 +163,8 @@ C部分:           |         |           |
            /* 拉起一个core的函数 */
        +-> cpu_up
          +-> _cpu_up
-	   [...]
-	   /* 最终会一路调到riscv的实现函数(linux/arch/riscv/kernel/smpboot.c) */
+           [...]
+           /* 最终会一路调到riscv的实现函数(linux/arch/riscv/kernel/smpboot.c) */
            +-> __cpu_up
              +-> start_secondary_cpu
                +-> cpu_ops[cpu]->cpu_start

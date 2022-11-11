@@ -10,14 +10,14 @@
 ----------
 ```
 +-------------+-------------------+----------------------------+
-|内存序：     | fence fence.i     |                            |
+|memory order:| fence fence.i     |                            |
 |	      | sfence.w.inval    |                            |
 |             | sfence.inval.ir   |                            |
 +-------------+-------------------+----------------------------+
-|TLB无效化:   | sfence.vma        |    hfence.vvma hfence.gvma |
+|TLB invalid: | sfence.vma        |    hfence.vvma hfence.gvma |
 |             | sinval.vma        |                            |
 +-------------+-------------------+----------------------------+
-|cache      : | CMO扩展                                        |
+|cache      : | CMO extension                                  |
 +-------------+-------------------+----------------------------+
 ```
 如上是rv里和内存管理相关的指令一个总结，虚拟化相关的放在了右边，cache无效化相关
@@ -52,13 +52,13 @@
  flush_icache_all
        /*
         * 如果有SBI的只是，那么走这个分支，其中会发S mode ecall把remote fence.i
-	* 发到opensbi处理。下面的remote sfence.vma也是一样的处理方式，我们在下面
-	* 展开说明opensbi里的处理方式。
+        * 发到opensbi处理。下面的remote sfence.vma也是一样的处理方式，我们在下面
+        * 展开说明opensbi里的处理方式。
         */
    +-> sbi_remote_fence_i
        /*
         * 如果不支持SBI，在kernel(S mode)就可以直接发IPI，触发其它核执行fence.i,
-	* 内核的IPI机制细节待分析。
+        * 内核的IPI机制细节待分析。
         */
    +-> on_each_cpu(ipi_remote_fence_i, NULL, 1)
 ```
@@ -93,9 +93,9 @@ TLB无效化指令
    +-> sbi_remote_sfence_vma
      +-> __sbi_rfence(SBI_EXT_RFENCE_REMOTE_SFENCE_VMA, cpu_mask, start, size, 0, 0)
            /*
-	    * sbi的协议这里改过，前一个是v0.1的版本，最新的基于v0.2的版本，这里就是
-	    * 内核和BIOS的接口，接口表现为一个S mode的ecall请求。
-	    */
+            * sbi的协议这里改过，前一个是v0.1的版本，最新的基于v0.2的版本，这里就是
+            * 内核和BIOS的接口，接口表现为一个S mode的ecall请求。
+            */
        +-> __sbi_rfence_v02
 ```
    下面是opensbi里的实现：
@@ -106,9 +106,9 @@ TLB无效化指令
          /* lib/sbi/sbi_tlb.c */
      +-> sbi_ipi_init
          /*
-	  * 初始化一个核上处理tlb的相关资源，主要包括一个fifo队列，以及发送、处理
-	  * 和同步要用的回调函数。
-	  */
+          * 初始化一个核上处理tlb的相关资源，主要包括一个fifo队列，以及发送、处理
+          * 和同步要用的回调函数。
+          */
      +-> sbi_tlb_init
 
  /*
@@ -119,10 +119,10 @@ TLB无效化指令
        /* lib/sbi/sbi_trap.c */
    +-> sbi_trap_handler
          /*
-	  * M mode中断处理入口，这里是处理remote sfence.vma的入口，发送remote
-	  * sfence.vma的核走的是下面sbi_ecall_handler的流程。最下面我们用一个图
-	  * 说明下整个逻辑。
-	  */
+          * M mode中断处理入口，这里是处理remote sfence.vma的入口，发送remote
+          * sfence.vma的核走的是下面sbi_ecall_handler的流程。最下面我们用一个图
+          * 说明下整个逻辑。
+          */
      +-> sbi_trap_noaia_irq
        +-> sbi_ipi_process
          +-> ipi_ops->process          <---- tlb_process
@@ -132,12 +132,12 @@ TLB无效化指令
        +-> ext->handler  <---- sbi_ecall_rfence_handler
              /* 如上的函数处理SBI里定义的全部RFENCE请求，我们这里只看sfence.vma */
          +-> sbi_tlb_request
-	   +-> sbi_ipi_send_many
-	     +-> sbi_ipi_send
-	           /* 使用上面sbi_init流程里注册的回调函数 */
-	       +-> ipi_ops->update      <---- tlb_update
-	       +-> ipi_ops->send	<---- mswi_ipi_send 
-	       +-> ipi_ops->sync	<---- tlb_sync
+           +-> sbi_ipi_send_many
+             +-> sbi_ipi_send
+                   /* 使用上面sbi_init流程里注册的回调函数 */
+               +-> ipi_ops->update      <---- tlb_update
+               +-> ipi_ops->send	<---- mswi_ipi_send 
+               +-> ipi_ops->sync	<---- tlb_sync
 ```
    我们画一个示意图说明问题：
 ```
@@ -154,7 +154,7 @@ TLB无效化指令
             |  v  update/send  -------->  _trap_handler
             |                             |
             |                             v
-	    |     sync         <--------     process(sfenc.vma and update flag)
+            |     sync         <--------     process(sfenc.vma and update flag)
             |      |
             +------+
 ```

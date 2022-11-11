@@ -174,3 +174,4 @@ riscv pmp		   	 to do        #
 riscv cache(CMO)		 to do
 qemu tlb广播的模拟		 to do
 修改head.S里多核启动的分析，lottery只用在spinwait boot上
+opensbi里关于HSM的补充分析
