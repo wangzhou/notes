@@ -18,14 +18,15 @@
 medeleg/mideleg的逻辑
 ---------------------
 
- 如果没有S mode，没有必要做委托相关的配置了，直接返回。S mode的几种中断被委托到S mode:
+ 如果没有S mode，没有必要做委托相关的配置了，直接返回。如果S mode存在，S mode的
+ 几种中断被委托到S mode:
 ```
    MIP_SSIP
    MIP_STIP
    MIP_SEIP
    MIP_LCOFIP (如果支持PMU中断)
 ```
- 如下异常委托到S mode处理:
+ opensbi把如下异常委托到S mode处理: 
 ```
    MISALIGNED_FETCH
    BREAKPOINT
@@ -34,15 +35,7 @@ medeleg/mideleg的逻辑
    LOAD_PAGE_FAULT
    STORE_PAGE_FAULT
 ```
- 上面是没有H扩展的情况，如果平台支持H扩展，再把如下的异常委托到S mode处理。可以
- 看出，这些都是CPU运行在VS时的异常，有和第二级地址翻译相关的异常以及从VS发起的ECALL，
- 这些本来就应该在HS处理，比如在只有host的情况，没有错误的情况下，访问一个物理地址
- 是一定会成功的，但是，在虚拟机的内核里，访问虚拟机物理地址(IPA)的时候还要进过IPA到PA
- 的地址翻译，如果没有分配PA，就会陷入HS的缺页异常里处理缺页，同时VS模式下也可以发
- 出ECALL，这个ECALL需要到HS下去处理。
-
- 如果有H扩展，如下的异常和上面的异常都被委托到HS模式处理。但是，如果CPU运行在VS，
- 显然vcpu也是需要上面的异常支持的，这里的逻辑在内核KVM里处理。
+ 上面是没有H扩展的情况，如果平台支持H扩展，再把如下的异常委托到S mode处理:
 ```
    VIRTUAL_SUPERVISOR_ECALL
    FETCH_GUEST_PAGE_FAULT
@@ -50,6 +43,26 @@ medeleg/mideleg的逻辑
    VIRTUAL_INST_FAULT
    STORE_GUEST_PAGE_FAULT
 ```
+ 为了方便描述，我们把上面第一组异常叫做A组，把上面第二组异常叫做B组。
+
+ 在没有H扩展的时候，把A组异常委托到S mode已经满足需求。
+
+ 我们考虑有H扩展的场景，这个时候又分虚拟化被使用和没有被使用的情况，没有使用虚拟化
+ 和没有H扩展的场景是一样的，无非是B组异常被委托到S mode，但是没有使用而已。
+
+ 在使用虚拟机的场景，虚拟机拉起之前，会进一步把A组异常委托到虚拟机的S mode，就是VS，
+ 这组异常在VS里处理，不必退出虚拟机。
+
+ 在使用虚拟机的场景里，B组异常的委托关系不变，依然在host S mode处理，就是HS。
+ 可以看出，B组异常都是CPU运行在VU/VS时的异常，而且在虚拟机里已经处理不了这些异常，
+ 比如，第二级地址翻译相关的异常以及从VS发起的ECALL，VS已经hold不住这些异常，这些
+ 异常需要在hypvisor里处理。比如，在只有host的情况，没有错误的情况下，访问一个物理
+ 地址是一定会成功的，但是，在虚拟机的内核里，访问虚拟机物理地址(IPA)的时候还要通过
+ IPA到PA的地址翻译，如果没有分配PA，就会陷入HS的缺页异常里处理缺页，同时VS模式下
+ 也可以发出ECALL，这个ECALL需要到HS下去处理。
+
+ 退出虚拟机会停止委托A组异常到VS，这时系统进入有H扩展但是没有使用虚拟机的场景，
+ 因为之前A组异常已经被委托到HS，这时系统也是可以正常工作的。
 
 hedeleg/hideleg的逻辑
 ---------------------
@@ -75,6 +88,7 @@ hedeleg/hideleg的逻辑
    VS_TIMER
    VS_EXT
 ```
+ 可以看到，如上的异常就是上面说的A组异常。
 
  我们可以从具体一个异常的角度再看看，比如一个user mode ECALL异常，当没有H扩展时，
  异常的处理使用S mode的那组CSR寄存器，当有H扩展时，在虚拟机里，用户态触发的ECALL
