@@ -1,0 +1,108 @@
+riscv AIA基本逻辑分析
+======================
+
+-v0.1 2022.11.26 Shelock init
+
+简介: 本文分析riscv AIA的基本逻辑。目前，相关的代码还在社区review，分析使用的代码为，
+      qemu使用v7.1.50主线代码，kvmtool使用https://github.com/avpatel/kvmtool riscvv_aia_v1分支，
+      内核使用https://github.com/avpatel/linux riscv_kvm_aia_v1分支。
+
+
+硬件逻辑
+---------
+
+QEMU模拟逻辑
+-------------
+
+/* target/riscv/cpu.c */
+riscv_cpu_init
+      /* 这里是虚拟机外部中断的硬件信号的输入口 */
+  +-> qdev_init_gpio_in(..., riscv_cpu_set_irq, ...)
+
+/* 可以先看下核对虚拟机中断的处理 */
+riscv_cpu_set_irq
+      /* 配置hgeip */
+  +-> env->hgeip &= ~((target_ulong)1 << irq);
+  +-> env->hgeip |= (target_ulong)1 << irq;
+      /* 配置mip.SGEIP，并触发中断 */
+  +-> riscv_cpu_update_mip
+
+AIA中断控制器的出口和core的中断入口相接, 这个在AIA的qemu驱动里：
+/* hw/intc/riscv_imsic.c */
+riscv_imsic_create
+  +-> qdev_init_gpio_out_named(...)
+
+给每个core创建imsic：
+/* hw/riscv/virt.c */
+virt_create_aia
+  +-> riscv_imsic_create
+
+
+Linux KVM的相关逻辑
+--------------------
+
+/* linux/arch/riscv/kvm/vcpu.c */
+kvm_arch_vcpu_create
+      /* 没有做什么 */
+  +-> kvm_riscv_vcpu_aia_init 
+
+/* linux/arch/riscv/kvm/main.c */
+kvm_arch_init
+      /* 初始化AIA以及中断虚拟化的一些全局参数 */
+  +-> kvm_riscv_aia_init
+    +-> csr_write CSR_HGEIE 的到hgeie的bit？
+        /*
+	 * 每个物理CPU上维护一个aia_hgei_control的结构，在kvm这个层面管理这个物理
+	 * CPU上vCPU的外部中断。
+	 * 
+	 * 把IRQ_SEXT作为入参，调用irq_create_mapping得到一个hgei_parent_irq的中断号，
+	 * 再给这个中断挂上中断处理函数。这里没有看懂?
+	 * 
+	 * 似乎这个中断是直接报给kvm的，中断处理函数里通过CSR_HGEIE/CSR_HGEIP的到
+	 * 中断发给哪个vCPU，对相应的vCPU做下kvm_vcpu_kick，这里没有看懂?
+	 */
+    +-> aia_hgei_init
+        /*
+	 * 把AIA device注册一下，这样用户态下发ioctl创建AIA device直接在kvm公共
+	 * 代码里调用AIA的回调函数就好。
+	 */
+    +-> kvm_register_device_ops(&kvm_riscv_aia_device_ops, KVM_DEV_TYPE_RISCV_AIA)
+
+
+那么qemu是怎么和kvm配合给虚拟机创建起一个AIA设备的？目前社区的验证是基于kvmtool的，
+我们从kvmtool入手看下。
+
+创建AIA设备，以及配置AIA设备:
+/* kvmtool/riscv/aia.c */
+aia__create
+  +-> ioctl(..., KVM_CREATE_DEVICE, ...)
+
+/* kvmtool/riscv/aia.c */
+aia__init
+  +-> 使用一组ioctl获取或者设置AIA device的属性。
+       /*
+        * 其中重要的一步是给AIA这个设备配置MMIO空间，可以想象，要叫guest的内核可以
+	* 直接访问这个MMIO空间，kvm里是需要给这个MMIO做stage 2的页表映射的。
+	*
+	* 我们从KVM_DEV_RISCV_AIA_GRP_ADDR这个kvm ioctl接口跟进去，会看到AIA的MMIO
+	* 地址被保存在了vcpu_aia->imsic_addr域段，查imsic_addr，可以发现它是在
+	* kvm_riscv_vcpu_aia_imsic_update里被更新到硬件，也就是把imsic_addr到实际
+	* 物理MMIO的映射加到stage2页表里。
+	* 
+	* 可以看到这个映射是在vcpu投入运行之前加上的，调用逻辑是:
+	* kvm_arch_vcpu_ioctl_run
+	*   +-> kvm_riscv_vcpu_aia_update
+	*     +-> kvm_riscv_vcpu_aia_imsic_update
+	*
+	* 不过为啥要每次拉起虚拟机都做一次？
+	*/
+  +-> ioctl(aia_fd, KVM_SET_DEVICE_ATTR, &aia_addr_attr)
+
+kvmtool需要根据需要生成guest的dtb，其中就包括AIA的dtb，这个dtb里描述的AIA和上面
+硬件定义的AIA匹配，guest内核用这个dtb的到AIA的信息，然后驱动上面配置好的AIA设备。
+
+(全部靠kvm给圆过去)
+
+
+
+

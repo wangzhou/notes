@@ -244,24 +244,34 @@ riscv H扩展spec分析
 
  hedeleg/hideleg表示是否要把HS的中断继续委托到VS去处理，在进入V模式前，如果需要，
  就要提前配置好。具体的委托情况可以参考[这里](https://wangzhou.github.io/riscv中断异常委托关系分析/)
+ 这里需要注意的是，RV协议上提到，当H扩展实现时，VS的几个中断的mideleg对应域段硬件
+ 直接就配置成1了，也就是说默认被代理到HS处理。如果GEILEN非零，也就是有SGEI，那么
+ SGEI也会直接硬件默认代理到HS处理。
 
  hgatp是第二级页表的基地址寄存器。
 
  hvip用于给虚拟机VS mode注入中断，写VSEIP/VSTIP/VSSIP域段，会给VS mode注入相关中断，
- riscv spec里没有说，注入的中断在什么状态下会的到响应？
+ riscv spec里没有说，注入的中断在什么状态下会的到响应？如果有多个VM实例，中断注入
+ 了哪个实例里?
 
  hip/hie是hypvisor下中断相关的pending和enable控制。hip/hie包含hvip的各个域段，除了
- 如上的域段，还有一个SGEIP域段。hip/hie和sip/sie有什么区别？
+ 如上的域段，还有一个SGEIP域段。协议上这里写的比较绕，先是总述了hip/hie里各个域段
+ 在不同读写属性下对应的逻辑是怎么样的，然后分开bit去描述。细节的逻辑是，hip.SGEIP
+ 是只读的，只有在hgeip/hgeie表示的vCPU里有中断可以处理时才是1，所以这个域段表示这个
+ 物理CPU上的vCPU是否有外部中断需要处理; hip.VSEIP也是只读的，在hvip.VSEIP是1或者
+ hgeip有pending bit时，hip.VSEIP为1。
+
+ hgeip/hgeie是SGEI的pending和enable控制，如果hgeip/hgeie是一个64bit的寄存器，那么
+ 它的1-63bit可以表示1-63个vcpu的SGEI pending/enable bit，每个bit描述直通到该vCPU
+ 上的中断，所以，协议上说要配合中断控制器使用。hgeip是一个只读寄存器。
+
+ 所以，VSEIP是一个SEIP的对照中断，而SGEI更像一个直通中断的汇集信号。
+
+ vcpu怎么响应这个直通的中断？首先硬件必须感知当前运行的是不是V mode，在是V mode
+ 的时候感知是不是hgeip/hgeie中指定的vcpu。todo: 直通中断的逻辑分析？
 
  罗列出riscv上所有的中断类型，S mode/M mode/VS mode的外部中断/时钟中断/软件中断
  这些一共下来就是9种中断类型，再加上supervisor guest external interrupt。
- VSEI和SGEI有什么区别？
-
- hgeip/hgeie是SGEI的pending和enable控制，hip里的SGEIP是只读域段，只有在hgeip/hgeie
- 各个域段相与结果非零hip的SGEIP才是0，所以hip里的SGEIP看起来是一个指示位。如果hgeip/hgeie
- 是一个64bit的寄存器，那么它的1-63bit可以表示1-63个vcpu的SGEI pending/enable bit。
- vcpu怎么响应这个直通的中断？首先硬件必须感知当前运行的是不是V mode，在是V mode
- 的时候感知是不是hgeip/hgeie中指定的vcpu。todo: 直通中断的逻辑分析？
  
  htval/htinst是HS异常时的参数寄存器。htval用来存放guest page fault的IPA，其他情况
  暂时时0，留给以后扩展。两级翻译的具体流程在独立的文档中描述。

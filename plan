@@ -164,7 +164,7 @@ riscv reset逻辑分析		 to do 2
 riscv 虚拟化中断直通		 to do 3
 riscv 内存模型(重要)  	  	 to do
 riscv wfi			 to do
-riscv多核启动			 #
+riscv多核启动			 #  增加从核wait的地方
 linux initramfs分析		 #
 linux/kernel/hung_task.c	 to do
       kernel/watchdog.c
@@ -176,3 +176,7 @@ qemu tlb广播的模拟		 to do
 修改head.S里多核启动的分析，lottery只用在spinwait boot上
 opensbi里关于HSM的补充分析
 virtio				 to do
+cpu初始化, online/offline	 to do
+ecall srst的分析		 to do
+
+hsm stop和cpu stop的同步行为	 to do

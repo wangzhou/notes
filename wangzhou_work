@@ -3,7 +3,7 @@ Linux kernel/driver engineer in HiSilicon
 
 - Redhat on-site engineer(2015.11 ~ 2018.9): Enable KunPeng916/920 in RHEL/CentOS 7.x/8.x
 
-- Maintainer of several Linux kernel driver:
+- Maintainer of several Linux kernel driver in mainline:
 
   1. KunPeng916 PCIe controller driver.
 
@@ -17,3 +17,7 @@ Linux kernel/driver engineer in HiSilicon
   together with UACCE. It is a general user space accelerator libraries.
 
   https://github.com/Linaro/UADK
+
+- Have done some develpments about IOMMU/SMMU driver.
+
+- Have done QEMU develpments about RISCV, familiar with RISCV spec/kernel/qemu/opensbi.
