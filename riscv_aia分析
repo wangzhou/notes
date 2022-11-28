@@ -7,6 +7,65 @@ riscv AIA基本逻辑分析
       qemu使用v7.1.50主线代码，kvmtool使用https://github.com/avpatel/kvmtool riscvv_aia_v1分支，
       内核使用https://github.com/avpatel/linux riscv_kvm_aia_v1分支。
 
+基本逻辑
+---------
+
+ 先看看要完成虚拟机中断，我们可以怎么做。一个直白的考虑是，所有的虚拟机中断都由
+ hypvisor也就是kvm来注入，这样注入中断需要qemu发kvm的ioctl，虚拟机里收到中断也处理
+ 不了，因为没有给虚拟机模拟guest内核可以看见的中断控制器，还要退出到qemu里处理中断。
+ 整个逻辑可以参考[https://wangzhou.github.io/riscv-kvm中断虚拟化的基本逻辑](https://wangzhou.github.io/riscv-kvm中断虚拟化的基本逻辑/)
+
+ 如上的方式，中断注入和处理都需要qemu的参与，性能比较低。我们考虑怎么可以直接把
+ 中断送到虚拟机里，并且在虚拟机里就可以处理相关的中断。
+
+ 先看第二个问题，只需要叫guest内核可以直接访问到中断控制器的接口就好，直观的理解，
+ 就是在hypvisor(kvm)里给guest机器模拟一个中断控制器就好，实现上, 一方面要把中断
+ 控制器的信息在dtb里描述，这样guest内核才能获取中断控制器的信息，一方面要在第二层
+ 的地址翻译里加上中断控制器MMIO到实际物理MMIO的映射，这样guest内核里的中断控制器
+ 驱动才能物理上使用中断控制器，具体做法，就是在qemu里通过kvm的ioctl把上面的动作
+ 落实在硬件上。
+
+ 在看第一个问题：怎么把具体的中断送到虚拟机上。riscv的AIA imsic的拓扑大概是这样的：(AIA可以支持中断直通)
+```
+  +-------------+   +-------+    +-------------+     +---------------------------+
+  | PCIe device |   | IOMMU |    | Bus network |     |   IMSIC                   |
+  +-------------+   |       |    |             |     |                           |
+          \         |       |    |             |     |  +---------------------+  |    +--------+
+           ---------+-------+-\  |             |     |  |M mode interrupt file|--+--->| Hart 1 |
+		    |       |  \ |             |     |  +---------------------+  |    |        |
+                    +-------+   \|             |     |  +---------------------+  |    |        |
+                                 \             |     |  |S mode interrupt file|--+--->|        |
+				 |\            |     |  +---------------------+  |    |        |
+                                 | ---------\  |     |  +----------------------+ |    |        |
+                                 |           \ |     |  |Guest interrupt file 1|-+--->|        |
+                                 |            \|     |  +----------------------+ |    |        |
+                                 |             \     |  +----------------------+ |    |        |
+                                 |             |\    |  |Guest interrupt file 2|-+--->|        |
+                                 |             | \   |  +----------------------+ |    |        |
+                                 |             |  \  |  +----------------------+ |    |        |
+                                 |             |   ->|  |Guest interrupt file N|-+--->|        |
+                                 +-------------+     |  +----------------------+ |    +--------+
+                                                     +---------------------------+
+```
+ 从上图可以看出来，物理的core上，对于每个可以支持虚拟机，是存在物理的连接的。PCIe
+ 设备发出一个MSI中断(实际上是对一个地址的写操作)，进过IOMMU翻译的到物理地址，如果
+ 写在Guest interrupt file对应的地址上，中断信号就会送到Hart1(假设没有受IMSIC上配置
+ 的影响)。到了这里，后面的逻辑就比较有意思了，Hart1现在可能运行在不同的实例，比如，
+ 现在是Guest N的中断来了，现在Hart1可能跑Guest 1的实例，也可以跑host系统。如果，
+ Hart1跑的是Guest N的实例，那么直接中断现在CPU的运行就好，也就是说，硬件需要知道
+ 两个信息，一个是Hart1上跑的是哪个实例，一个是相关中断是发给哪个实例的，只有知道
+ 这两个信息，硬件才知道当前中断是不是发给当前实例的，具体上只要给中断和Hart1上都
+ 加上VMID这个信息就好。如果，中断和当前CPU上运行的实例不匹配，直白的做法是把这个
+ 中断记录在虚拟机管理器(也就是hypvisor里，hypvisor管理这虚拟机，必然要维护虚拟机
+ 的状态)，等到对应虚拟机投入Hart1上运行的时候，就可以响应这个中断。如果这样做，
+ 虚拟机上中断的响应完全依赖于hypvisor里虚拟机的调度，中断响应可能会不及时，一个
+ 可以想到的做法是，硬件识别到不是给当前实例的中断时，就把这个信息报到hypvisor上，
+ hypvisor可以调度对应的guest实例运行，具体实现上，可以用VMID去做这个识别。
+
+ 到此为止一切都好，但是你去看riscv协议，就会发现里面VMID这个概念只局限在第二层地址
+ 翻译常，并没有用VMID识别虚拟机。
+
+
 
 硬件逻辑
 ---------
@@ -52,20 +111,20 @@ kvm_arch_init
   +-> kvm_riscv_aia_init
     +-> csr_write CSR_HGEIE 的到hgeie的bit？
         /*
-	 * 每个物理CPU上维护一个aia_hgei_control的结构，在kvm这个层面管理这个物理
-	 * CPU上vCPU的外部中断。
-	 * 
-	 * 把IRQ_SEXT作为入参，调用irq_create_mapping得到一个hgei_parent_irq的中断号，
-	 * 再给这个中断挂上中断处理函数。这里没有看懂?
-	 * 
-	 * 似乎这个中断是直接报给kvm的，中断处理函数里通过CSR_HGEIE/CSR_HGEIP的到
-	 * 中断发给哪个vCPU，对相应的vCPU做下kvm_vcpu_kick，这里没有看懂?
-	 */
+         * 每个物理CPU上维护一个aia_hgei_control的结构，在kvm这个层面管理这个物理
+         * CPU上vCPU的外部中断。
+         * 
+         * 把IRQ_SEXT作为入参，调用irq_create_mapping得到一个hgei_parent_irq的中断号，
+         * 再给这个中断挂上中断处理函数。这里没有看懂?
+         * 
+         * 似乎这个中断是直接报给kvm的，中断处理函数里通过CSR_HGEIE/CSR_HGEIP的到
+         * 中断发给哪个vCPU，对相应的vCPU做下kvm_vcpu_kick，这里没有看懂?
+         */
     +-> aia_hgei_init
         /*
-	 * 把AIA device注册一下，这样用户态下发ioctl创建AIA device直接在kvm公共
-	 * 代码里调用AIA的回调函数就好。
-	 */
+         * 把AIA device注册一下，这样用户态下发ioctl创建AIA device直接在kvm公共
+         * 代码里调用AIA的回调函数就好。
+         */
     +-> kvm_register_device_ops(&kvm_riscv_aia_device_ops, KVM_DEV_TYPE_RISCV_AIA)
 
 
@@ -82,27 +141,24 @@ aia__init
   +-> 使用一组ioctl获取或者设置AIA device的属性。
        /*
         * 其中重要的一步是给AIA这个设备配置MMIO空间，可以想象，要叫guest的内核可以
-	* 直接访问这个MMIO空间，kvm里是需要给这个MMIO做stage 2的页表映射的。
-	*
-	* 我们从KVM_DEV_RISCV_AIA_GRP_ADDR这个kvm ioctl接口跟进去，会看到AIA的MMIO
-	* 地址被保存在了vcpu_aia->imsic_addr域段，查imsic_addr，可以发现它是在
-	* kvm_riscv_vcpu_aia_imsic_update里被更新到硬件，也就是把imsic_addr到实际
-	* 物理MMIO的映射加到stage2页表里。
-	* 
-	* 可以看到这个映射是在vcpu投入运行之前加上的，调用逻辑是:
-	* kvm_arch_vcpu_ioctl_run
-	*   +-> kvm_riscv_vcpu_aia_update
-	*     +-> kvm_riscv_vcpu_aia_imsic_update
-	*
-	* 不过为啥要每次拉起虚拟机都做一次？
-	*/
+        * 直接访问这个MMIO空间，kvm里是需要给这个MMIO做stage 2的页表映射的。
+        *
+        * 我们从KVM_DEV_RISCV_AIA_GRP_ADDR这个kvm ioctl接口跟进去，会看到AIA的MMIO
+        * 地址被保存在了vcpu_aia->imsic_addr域段，查imsic_addr，可以发现它是在
+        * kvm_riscv_vcpu_aia_imsic_update里被更新到硬件，也就是把imsic_addr到实际
+        * 物理MMIO的映射加到stage2页表里。
+        * 
+        * 可以看到这个映射是在vcpu投入运行之前加上的，调用逻辑是:
+        * kvm_arch_vcpu_ioctl_run
+        *   +-> kvm_riscv_vcpu_aia_update
+        *     +-> kvm_riscv_vcpu_aia_imsic_update
+        *
+        * 不过为啥要每次拉起虚拟机都做一次？
+        */
   +-> ioctl(aia_fd, KVM_SET_DEVICE_ATTR, &aia_addr_attr)
 
 kvmtool需要根据需要生成guest的dtb，其中就包括AIA的dtb，这个dtb里描述的AIA和上面
 硬件定义的AIA匹配，guest内核用这个dtb的到AIA的信息，然后驱动上面配置好的AIA设备。
 
 (全部靠kvm给圆过去)
-
-
-
 
