@@ -2,6 +2,7 @@ riscv AIA基本逻辑分析
 ======================
 
 -v0.1 2022.11.26 Shelock init
+-v0.2 2022.11.29 Shelock 补充AIA硬件描述
 
 简介: 本文分析riscv AIA的基本逻辑。目前，相关的代码还在社区review，分析使用的代码为，
       qemu使用v7.1.50主线代码，kvmtool使用https://github.com/avpatel/kvmtool riscvv_aia_v1分支，
@@ -23,9 +24,10 @@ riscv AIA基本逻辑分析
  控制器的信息在dtb里描述，这样guest内核才能获取中断控制器的信息，一方面要在第二层
  的地址翻译里加上中断控制器MMIO到实际物理MMIO的映射，这样guest内核里的中断控制器
  驱动才能物理上使用中断控制器，具体做法，就是在qemu里通过kvm的ioctl把上面的动作
- 落实在硬件上。
+ 落实在硬件上。如果guest里有些控制是通过csr寄存器的，那么还要考虑csr的支持，这个
+ 要么硬件上就直接支持，否则需要trap进hypvisor去处理。 
 
- 在看第一个问题：怎么把具体的中断送到虚拟机上。riscv的AIA imsic的拓扑大概是这样的：(AIA可以支持中断直通)
+ 再看第一个问题：怎么把具体的中断送到虚拟机上。riscv的AIA imsic的拓扑大概是这样的：(AIA可以支持中断直通)
 ```
   +------------+    +-------+    +-------------+    +---------------------------+
   |PCIe device |    | IOMMU |    | Bus network |    |   IMSIC                   |
@@ -48,10 +50,10 @@ riscv AIA基本逻辑分析
                                                     +---------------------------+
 ```
  从上图可以看出来，物理的core上，对于每个可以支持虚拟机，是存在物理的连接的。PCIe
- 设备发出一个MSI中断(实际上是对一个地址的写操作)，进过IOMMU翻译的到物理地址，如果
+ 设备发出一个MSI中断(实际上是对一个地址的写操作)，进过IOMMU翻译得到物理地址，如果
  写在Guest interrupt file对应的地址上，中断信号就会送到Hart1(假设没有受IMSIC上配置
  的影响)。到了这里，后面的逻辑就比较有意思了，Hart1现在可能运行在不同的实例，比如，
- 现在是Guest N的中断来了，现在Hart1可能跑Guest 1的实例，也可以跑host系统。如果，
+ 现在是Guest N的中断来了，但是Hart1可能跑Guest 1的实例，也可以跑host系统。如果，
  Hart1跑的是Guest N的实例，那么直接中断现在CPU的运行就好，也就是说，硬件需要知道
  两个信息，一个是Hart1上跑的是哪个实例，一个是相关中断是发给哪个实例的，只有知道
  这两个信息，硬件才知道当前中断是不是发给当前实例的，具体上只要给中断和Hart1上都
@@ -63,23 +65,20 @@ riscv AIA基本逻辑分析
  hypvisor可以调度对应的guest实例运行，具体实现上，可以用VMID去做这个识别。
 
  到此为止一切都好，但是你去看riscv协议，就会发现里面VMID这个概念只局限在第二层地址
- 翻译常，并没有用VMID识别虚拟机。
-
- 那riscv是怎么搞定上面的问题的。
+ 翻译常，并没有用VMID识别虚拟机。那riscv是怎么搞定上面的问题的。
 
  S_GEXT被硬件直接配置mideleg代理到了HS，所以一旦有这个中断就在HS中做中断处理(虚拟
  机拉起之前并没有做继续委托)。看起来riscv的逻辑是这样的，hstatus.VGEIN可以实现类似
- 过滤器的功能，当hstatus.VGEIN域段的数值和hgeip表示的vCPU想等时，mip.VSEIP才能被
- 配置上，这样当一个特性的vCPU被调度运行时，hypvisor在投入vCPU运行之前把vCPU对应的
+ 过滤器的功能，当hstatus.VGEIN域段的数值和hgeip表示的vCPU相等时，mip.VSEIP才能被
+ 配置上，这样当一个特定的vCPU被调度运行时，hypvisor在投入vCPU运行之前把vCPU对应的
  VGENIN打开，这样这个vCPU上的VS中断就可以直通到vCPU。但是，依照之前的分析，S_GEXT
  中断也会上报到hypvisor, 那就需要有机制可以做到，当VS中断对应的vCPU不在位的时候，
  中断投递到hypvisor，当VS中断对应的vCPU在位的时候，中断只直通到vCPU。前者可以通过
- VGENIN过滤掉，针对后者，riscv上定义了hgeie，这个寄存器配置哪个vCPU的S_GEXT是有效
+ VGENIN过滤掉，针对后者，riscv上定义了hgeie，这个寄存器决定哪个vCPU的S_GEXT是有效
  的。所以，在一个vCPU投入运行之前，hypvisor可以配置VGENIN的值是这个vCPU的编号，
- 配置hgeie对于这个vCPU不带来，在这样的配置下，当这个vCPU对应的VS中断到来时，中断
+ 配置hgeie对于这个vCPU无效，在这样的配置下，当这个vCPU对应的VS中断到来时，中断
  被直通到guest，当来的不是这个vCPU的VS中断时，在HS触发S_GEXT中断。
 
- guest csr的模拟需要trap进hypvisor去处理。 
 
 硬件逻辑
 ---------
