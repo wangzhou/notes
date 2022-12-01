@@ -265,10 +265,10 @@ riscv H扩展spec分析
  它的1-63bit可以表示1-63个vcpu的SGEI pending/enable bit，每个bit描述直通到该vCPU
  上的中断，所以，协议上说要配合中断控制器使用。hgeip是一个只读寄存器。
 
- 所以，VSEIP是一个SEIP的对照中断，而SGEI更像一个直通中断的汇集信号。
+ 所以，VSEIP是一个SEIP的对照中断，而SGEI是一个直通中断的汇集信号。
 
- vcpu怎么响应这个直通的中断？首先硬件必须感知当前运行的是不是V mode，在是V mode
- 的时候感知是不是hgeip/hgeie中指定的vcpu。todo: 直通中断的逻辑分析？
+ vcpu怎么响应这个直通的中断？我们把这个逻辑独立出来在这里描述:
+ [https://wangzhou.github.io/riscv-AIA逻辑分析/](https://wangzhou.github.io/riscv-AIA逻辑分析/)
 
  罗列出riscv上所有的中断类型，S mode/M mode/VS mode的外部中断/时钟中断/软件中断
  这些一共下来就是9种中断类型，再加上supervisor guest external interrupt。

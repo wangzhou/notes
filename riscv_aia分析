@@ -1,8 +1,9 @@
-riscv AIA基本逻辑分析
-======================
+riscv AIA逻辑分析
+==================
 
 -v0.1 2022.11.26 Shelock init
--v0.2 2022.11.29 Shelock 补充AIA硬件描述
+-v0.2 2022.11.29 Shelock 补充AIA基本描述
+-v0.3 2022.12.1  Shelock 补充AIA硬件描述
 
 简介: 本文分析riscv AIA的基本逻辑。目前，相关的代码还在社区review，分析使用的代码为，
       qemu使用v7.1.50主线代码，kvmtool使用https://github.com/avpatel/kvmtool riscvv_aia_v1分支，
@@ -14,7 +15,7 @@ riscv AIA基本逻辑分析
  先看看要完成虚拟机中断，我们可以怎么做。一个直白的考虑是，所有的虚拟机中断都由
  hypvisor也就是kvm来注入，这样注入中断需要qemu发kvm的ioctl，虚拟机里收到中断也处理
  不了，因为没有给虚拟机模拟guest内核可以看见的中断控制器，还要退出到qemu里处理中断。
- 整个逻辑可以参考[https://wangzhou.github.io/riscv-kvm中断虚拟化的基本逻辑](https://wangzhou.github.io/riscv-kvm中断虚拟化的基本逻辑/)
+ 整个逻辑可以参考[https://wangzhou.github.io/riscv-kvm中断虚拟化的基本逻辑/](https://wangzhou.github.io/riscv-kvm中断虚拟化的基本逻辑/)
 
  如上的方式，中断注入和处理都需要qemu的参与，性能比较低。我们考虑怎么可以直接把
  中断送到虚拟机里，并且在虚拟机里就可以处理相关的中断。
@@ -79,13 +80,63 @@ riscv AIA基本逻辑分析
  配置hgeie对于这个vCPU无效，在这样的配置下，当这个vCPU对应的VS中断到来时，中断
  被直通到guest，当来的不是这个vCPU的VS中断时，在HS触发S_GEXT中断。
 
-
 硬件逻辑
 ---------
+
+ 整个中断虚拟化需要riscv的H扩展和AIA中断控制器的配合完成，但是H扩展和AIA的逻辑是
+ 独立的，各自的逻辑都可以自圆其说。
+
+ H扩展的介绍可以参考[https://wangzhou.github.io/riscv-KVM虚拟化分析/](https://wangzhou.github.io/riscv-KVM虚拟化分析/)
+ 最核心的地方是，一个物理Hart上，定义了hgeie/hgeip寄存器，这个寄存器上的每个bit
+ 都对应这个物理Hart上一个虚拟机上的外部中断，hgeip表示对应虚拟机上有没有外部中断
+ 上报，hgeie表示对应的虚拟机外部中断会不会触发SGEI中断，H扩展的定义不关心外部的
+ 中断控制器。H扩展增加了SGEI这个中断类型，当接收到虚拟机外部中断时，硬件通过SGEI
+ 中断把这个信息报给hypvisor, hypvisor就可以去调度虚拟机投入运行，hgeie可以控制针对
+ 具体虚拟机的外部中断，是否上报SGEI。hstatus里的VGEIN控制一个具体虚拟机的外部中断
+ 是否可以直通到虚拟机，所谓直通到虚拟机，就是这个中断会触发CPU直接进入vCPU的中断
+ 上下文里。整个逻辑怎么串起来，在上面的章节里已经说明。
+
+ 下面看AIA的逻辑，riscv的aclint和plic是不支持PCI的MSI中断的，也不支持虚拟化中断
+ 直通，AIA主要是补齐了相关功能。具体看，AIA新增了IMSIC(incoming MSI controller),
+ APLIC(Advanced plic)，以及MSI中断直通对于IOMMU的要求。
+
+ IMSIC是一个可以独立使用的可以接收MSI的中断控制器，从上面章节中的示意图上可以看到，
+ 每个物理的HART都有一个独立的IMSIC，这个IMSCI在M mode、S mode以及对于虚拟化都有
+ 独立的资源，针对虚拟机的资源是每个虚拟机都有一份的，所谓资源，IMSIC上叫做interrupt
+ file，每个interrupt file有一个物理的MSI doorbell接口，而一个interrupt file被用来
+ 记录所有通过它上报的中断。我们从单个中断的视角再走一遍，也就是说中断写了，比如，
+ guest 1 interrupt file的MSI doorbell，那么hgeip的对应bit就会置1，如果这时hgeie
+ 对应bit置1，SGEI中断就会被触发，SGEI会被硬件代理到HS，那么就会进入hypvisor处理这个
+ 中断，如果hgeie对应bit是0，那么SGEI中断不会被触发，如果这时VGEIN配置成1，那么VS
+ 中断被触发，一般在拉起虚拟机之前，hypvisor已经把VS中断代理到VS，这时，这个中断
+ 就直接导致CPU进入vCPU的中断上下文。需要注意的是，我们看问题的时候，一般不要这样
+ 顺着状态变迁分析，但是这样看一遍会叫我们对这个问题有一个感性直观的问题。
+
+ APLIC可以单独使用，APLIC也可以配合IMSIC使用，如果APLIC配合IMSIC使用，那么APLIC
+ 的输出必须被连在IMSIC的输入上，这样一个线中断被转成一个MSI中断。APLIC单独使用的
+ 时候，不支持虚拟化中断直通。本文先不去分析APLIC的逻辑，这个需要在独立的文档中分析。
+
+ 理论上，我们对一个guest interrupt file的MSI doorbell写数据就可以触发对应的虚拟机
+ 机外部中断处于pending。但是，虚拟机里的直通设备并不能直接看到guest interrupt file
+ MSI doorbell的物理地址，所以，需要在guest的地址空间上为guest interrupt file的MSI
+ doorbell建立对应的映射，实际上就是在第二级页表里添加虚拟MSI doorbell到物理MSI
+ doorbell的映射。
 
 QEMU模拟逻辑
 -------------
 
+ qemu里模拟中断的基本思路可以参考这里：[https://wangzhou.github.io/qemu-tcg中断模拟/](https://wangzhou.github.io/qemu-tcg中断模拟/)
+ qemu里的实现需要分两个方面去看，一个是AIA在qemu是怎么被模拟的，一个是AIA在qemu里
+ 是怎么被使用的，怎么被使用是说qemu里怎么调用KVM的接口在KVM的把AIA创建出来。
+ 如果用[这里](https://wangzhou.github.io/构建riscv两层qemu的步骤/)提到的两层qemu
+ 的方法模拟整个系统，第一个方面是指第一层qemu的AIA的模拟，第二个方面指的是第二层
+ qemu的怎么创建KVM里的AIA设备。
+
+ 当前社区中的测试代码，第二层qemu是使用kvmtool代替的，kvmtool可以被简单理解为qemu
+ 里去掉tcg，只保留kvm的部分。
+ 
+ 如下是qemu中模拟AIA的基本逻辑:
+```
 /* target/riscv/cpu.c */
 riscv_cpu_init
       /* 这里是虚拟机外部中断的硬件信号的输入口 */
@@ -108,7 +159,37 @@ riscv_imsic_create
 /* hw/riscv/virt.c */
 virt_create_aia
   +-> riscv_imsic_create
+```
+ 
+ 如下是kvmtool里创建KVM里AIA的逻辑。首先是创建AIA设备，以及配置AIA设备:
+```
+/* kvmtool/riscv/aia.c */
+aia__create
+  +-> ioctl(..., KVM_CREATE_DEVICE, ...)
 
+/* kvmtool/riscv/aia.c */
+aia__init
+  +-> 使用一组ioctl获取或者设置AIA device的属性。
+       /*
+        * 其中重要的一步是给AIA这个设备配置MMIO空间，可以想象，要叫guest的内核可以
+        * 直接访问这个MMIO空间，kvm里是需要给这个MMIO做stage 2的页表映射的。
+        *
+        * 我们从KVM_DEV_RISCV_AIA_GRP_ADDR这个kvm ioctl接口跟进去，会看到AIA的MMIO
+        * 地址被保存在了vcpu_aia->imsic_addr域段，查imsic_addr，可以发现它是在
+        * kvm_riscv_vcpu_aia_imsic_update里被更新到硬件，也就是把imsic_addr到实际
+        * 物理MMIO的映射加到stage2页表里。
+        * 
+        * 可以看到这个映射是在vcpu投入运行之前加上的，调用逻辑是:
+        * kvm_arch_vcpu_ioctl_run
+        *   +-> kvm_riscv_vcpu_aia_update
+        *     +-> kvm_riscv_vcpu_aia_imsic_update
+        *
+        * 不过为啥要每次拉起虚拟机都做一次？
+        */
+  +-> ioctl(aia_fd, KVM_SET_DEVICE_ATTR, &aia_addr_attr)
+```
+另外，kvmtool需要根据需要生成guest的dtb，其中就包括AIA的dtb，这个dtb里描述的AIA和上面
+硬件定义的AIA匹配，guest内核用这个dtb的到AIA的信息，然后驱动上面配置好的AIA设备。
 
 Linux KVM的相关逻辑
 --------------------
@@ -139,39 +220,3 @@ kvm_arch_init
          * 代码里调用AIA的回调函数就好。
          */
     +-> kvm_register_device_ops(&kvm_riscv_aia_device_ops, KVM_DEV_TYPE_RISCV_AIA)
-
-
-那么qemu是怎么和kvm配合给虚拟机创建起一个AIA设备的？目前社区的验证是基于kvmtool的，
-我们从kvmtool入手看下。
-
-创建AIA设备，以及配置AIA设备:
-/* kvmtool/riscv/aia.c */
-aia__create
-  +-> ioctl(..., KVM_CREATE_DEVICE, ...)
-
-/* kvmtool/riscv/aia.c */
-aia__init
-  +-> 使用一组ioctl获取或者设置AIA device的属性。
-       /*
-        * 其中重要的一步是给AIA这个设备配置MMIO空间，可以想象，要叫guest的内核可以
-        * 直接访问这个MMIO空间，kvm里是需要给这个MMIO做stage 2的页表映射的。
-        *
-        * 我们从KVM_DEV_RISCV_AIA_GRP_ADDR这个kvm ioctl接口跟进去，会看到AIA的MMIO
-        * 地址被保存在了vcpu_aia->imsic_addr域段，查imsic_addr，可以发现它是在
-        * kvm_riscv_vcpu_aia_imsic_update里被更新到硬件，也就是把imsic_addr到实际
-        * 物理MMIO的映射加到stage2页表里。
-        * 
-        * 可以看到这个映射是在vcpu投入运行之前加上的，调用逻辑是:
-        * kvm_arch_vcpu_ioctl_run
-        *   +-> kvm_riscv_vcpu_aia_update
-        *     +-> kvm_riscv_vcpu_aia_imsic_update
-        *
-        * 不过为啥要每次拉起虚拟机都做一次？
-        */
-  +-> ioctl(aia_fd, KVM_SET_DEVICE_ATTR, &aia_addr_attr)
-
-kvmtool需要根据需要生成guest的dtb，其中就包括AIA的dtb，这个dtb里描述的AIA和上面
-硬件定义的AIA匹配，guest内核用这个dtb的到AIA的信息，然后驱动上面配置好的AIA设备。
-
-(全部靠kvm给圆过去)
-
