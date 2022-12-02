@@ -4,6 +4,7 @@ riscv AIA逻辑分析
 -v0.1 2022.11.26 Shelock init
 -v0.2 2022.11.29 Shelock 补充AIA基本描述
 -v0.3 2022.12.1  Shelock 补充AIA硬件描述
+-v0.4 2022.12.2  Shelock 补充代码分析
 
 简介: 本文分析riscv AIA的基本逻辑。目前，相关的代码还在社区review，分析使用的代码为，
       qemu使用v7.1.50主线代码，kvmtool使用https://github.com/avpatel/kvmtool riscvv_aia_v1分支，
@@ -140,27 +141,32 @@ QEMU模拟逻辑
 /* target/riscv/cpu.c */
 riscv_cpu_init
       /* 这里是虚拟机外部中断的硬件信号的输入口 */
-  +-> qdev_init_gpio_in(..., riscv_cpu_set_irq, ...)
+  +-> qdev_init_gpio_in(..., riscv_cpu_set_irq, IRQ_LOCAL_MAX+IRQ_LOCAL_GUEST_MAX)
+```
+ 这里定义CPU的中断输入接口，可以看到每个虚拟机的外部中断都会有一个实际的接口放出来。
 
-/* 可以先看下核对虚拟机中断的处理 */
+```
 riscv_cpu_set_irq
       /* 配置hgeip */
   +-> env->hgeip &= ~((target_ulong)1 << irq);
   +-> env->hgeip |= (target_ulong)1 << irq;
       /* 配置mip.SGEIP，并触发中断 */
-  +-> riscv_cpu_update_mip
+  +-> riscv_cpu_update_mip(..., MIP_SGEIP, BOOL_TO_MASK(!!(env->hgeie & env->hgeip))
+    +-> gein = get_field(env->hstatus, HSTATUS_VGENIN);
+    +-> vsgein = (env->hgeip & (1ULL << gein)) ? MIP_VSEIP : 0;
+```
+ 当上面的CPU中断输入接口上收到消息，就会调用这个函数处理，这个函数定义的是核内
+ 根据各种寄存器配置，对中断的处理逻辑。可以看到，这里的逻辑就是上面定义的实现。
 
-AIA中断控制器的出口和core的中断入口相接, 这个在AIA的qemu驱动里：
-/* hw/intc/riscv_imsic.c */
-riscv_imsic_create
-  +-> qdev_init_gpio_out_named(...)
-
-给每个core创建imsic：
+ 机器初始化的时候给每个core创建一个IMSIC：
+```
 /* hw/riscv/virt.c */
 virt_create_aia
+      /* AIA中断控制器的出口和core的中断入口相接, 这个在AIA的qemu驱动里，hw/intc/riscv_imsic.c */
   +-> riscv_imsic_create
+    +-> qdev_init_gpio_out_named(..., qdev_get_gpio_in(DEVICE(cpu), IRQ_LOCAL_MAX + i - 1))
 ```
- 
+
  如下是kvmtool里创建KVM里AIA的逻辑。首先是创建AIA设备，以及配置AIA设备:
 ```
 /* kvmtool/riscv/aia.c */
@@ -194,6 +200,7 @@ aia__init
 Linux KVM的相关逻辑
 --------------------
 
+```
 /* linux/arch/riscv/kvm/vcpu.c */
 kvm_arch_vcpu_create
       /* 没有做什么 */
@@ -220,3 +227,4 @@ kvm_arch_init
          * 代码里调用AIA的回调函数就好。
          */
     +-> kvm_register_device_ops(&kvm_riscv_aia_device_ops, KVM_DEV_TYPE_RISCV_AIA)
+```
