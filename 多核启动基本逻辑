@@ -103,7 +103,7 @@
 
  总体上看，opensbi大概分为汇编部分和C代码部分，在这两部分，多核启动的逻辑也是不同
  的。针对opensbi中可能的三种固件类型，基本上都是用所谓lottery算法做多核启动的，
- 只有fw_dynamic_version_1用的是指定核启动，所以，我们重点看下lottery的多核启动。
+ 只有fw_dynamic_version_2用的是指定核启动，我们这里先看下lottery的多核启动。
 
  lottery算法的逻辑很直白，就是多个核去抢做主启动核，主核就一个人去做公共资源的初始化，
  其它核(从核)就等着，直到主核把公共资源初始化完，从核继续做每个核各自的初始化内容。
@@ -140,8 +140,9 @@ C :              |         |           |
  riscv的多核启动有两种实现，一种是基于spinwait的，在这种启动模拟下，多核均直接进入
  内核，内核使用lottery算法选出一个主核，其它核spinwait，riscv内核Kconfig里提示，
  这种方式不支持CPU hotplug和sparse hartid，这种方式只用在只支持M mode或者是BIOS
- 不支持SBI HSM扩展的情况。另一种是ordered booting，这种方式要依赖HSM扩展，我们下面
- 重点看下ordered booting。
+ 不支持SBI HSM扩展的情况。另一种是ordered booting，这种方式要依赖HSM扩展，配合上面
+ 提到的fw_dynamic_version_2从固定核启动的方式，opensbi只容许主核进到内核，然后内核
+ 通过HSM方法启动从核，我们下面重点看下ordered booting。
 
  riscv ordered booting的基本逻辑： 
 ```
