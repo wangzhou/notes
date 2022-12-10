@@ -1,12 +1,13 @@
 riscv entry.S
 ==============
 
--v0.1 2022.5.12 sherlock init
--v0.2 2022.6.28 sherlock continue
--v0.3 2022.7.4  sherlock continue
--v0.4 2022.8.9  sherlock fix a bug about tp
--v0.5 2022.8.23 sherlock add preempt part
--v0.6 2022.9.6  sherlock continue to add preempt
+-v0.1 2022.5.12  sherlock init
+-v0.2 2022.6.28  sherlock continue
+-v0.3 2022.7.4   sherlock continue
+-v0.4 2022.8.9   sherlock fix a bug about tp
+-v0.5 2022.8.23  sherlock add preempt part
+-v0.6 2022.9.6   sherlock continue to add preempt
+-v0.7 2022.12.10 sherlock add stack and task_struct memory topology
 
 简介：本文分析Linux内核里riscv构架下的entry.S这个文件，内核代码使用的版本是5.12-rc8。
       采用直接在代码里加注释的方式写分析的内容，注释用“n:”开头。目前只分析主流程，
@@ -607,3 +608,30 @@ ENTRY(__user_rt_sigreturn)
 END(__user_rt_sigreturn)
 #endif
 ```
+```
+        -+- task_struct           low address      <--- tp
+         |  (thread_info)
+         |
+         |  struct thread_struct thread
+ stack   |
+ size    |
+         |
+         |
+         |
+         |
+         |
+         |
+         |
+         |
+         |
+         +-+-
+         | |                                          ^
+         | |  PT_SIZE_ON_STACK                        |
+         | |                                          |
+        -+-+- sp end                high address      |
+```
+ 如上是一个线程对应的内核栈和task_struct在内存中的存储格式。栈底在sp end的位置，
+ task_struct在sp end - 栈大小的位置，内核栈会分出PT_SIZE_ON_STACK的大小，用来保存
+ 中断异常时的寄存器上下文，PT_XX的宏就是这个区里的偏移。thread_info放在task_struct
+ 的一开始，用来暂存体系结构相关的一些数据。thread也在task_struct里，在__switch_to
+ 里使用，用TASK_THREAD_XX_XX表示相关的偏移。
