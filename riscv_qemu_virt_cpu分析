@@ -1,0 +1,25 @@
+riscv qemu virt平台CPU拓扑分析
+
+-v0.1 2022.12.15 Sherlock init
+
+简介：本文分析riscv qemu virt平台上和CPU相关的拓扑，分析基于qemu v7.1.50代码。
+
+
+Riscv的qemu virt平台描述一个完整的机器，这个机器包括CPU、内存、以及各种外设,
+在qemu的代码里，这个virt机器用virt-machine类描述，它的实例是RISCVVirtState。
+
+一个RISCVVirtState包含多个RISCVHartArrayState，这个数据结构描述一组CPU core, 一个
+RISCVVirtState里会预留一定数量的RISCVHartArrayState，但是机器实际的RISCVHartArrayState
+个数是根据qemu启动时配置的numa个数决定的:
+```
+/* hw/riscv/virt.c */
+virt_machine_init
+  +-> riscv_socket_count
+```
+所以在qemu上RISCVHartArrayState描述的是一个NUMA节点上的CPU core。
+
+RISCVHartArrayState里用RISCVCPU来描述一个具体的CPU core，里面存放CPU的各种参数。
+需要注意的是，虽然软件上看CPU似乎是分层的，但是在硬件(qemu)的角度看，CPU上的各种
+寄存器只是CPU上的一个变量。
+
+如上的RISCVHartArrayState、RISCVCPU都分别对应有自己的类和实例。
