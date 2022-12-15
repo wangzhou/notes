@@ -1,5 +1,6 @@
--v0.1 2022.2.22 Sherlock init
--v0.2 2022.7.18 Sherlock 增加中断跳过tb，遗留中断控制器触发中断的分析。
+-v0.1 2022.2.22  Sherlock init
+-v0.2 2022.7.18  Sherlock 增加中断跳过tb，遗留中断控制器触发中断的分析。
+-v0.3 2022.12.15 Sherlock 增加riscv_cpu_local_irq_pending中逻辑的分析。
 
 简介：记录qemu irq相关的代码逻辑，以riscv为例。分析使用的qemu代码的版本是6.2.0。
 
@@ -36,6 +37,7 @@ qemu中断实现依赖gpio，向一个gpio上写入信息，逻辑上应该触�
 riscv_cpu_set_irq修改riscv系统寄存器mip，把中断号写入到里面。
 ```
 riscv_cpu_set_irq
+     /* 可以看到这里是把中断无条件写入到mip里的 */
   -> riscv_cpu_update_mip
        /*
         * 写cpu->interrupt_request, 大循环里的cpu_handle_irq根据这个判断是否
@@ -58,7 +60,7 @@ tb最后的一个label处，这个label在gen_tb_end里配置，这样，中断�
  * target/riscv/cpu_helper.c
  */
 riscv_cpu_exec_interrupt
-     /* 拿到中断号 */
+     /* 拿到中断号, 具体的逻辑我们可以在下面打开看下 */
   -> interruptno = riscv_cpu_local_irq_pending(env);
      /*
       * 注意这里会配置exception_index这个值，这个值在异常处理
@@ -69,6 +71,82 @@ riscv_cpu_exec_interrupt
   -> riscv_cpu_do_interrupt(cs);
        /* RISCV_EXCP_NONE是-1 */
     -> cs->exception_index = RISCV_EXCP_NONE
+```
+
+可以看见如下的逻辑先计算出各个特权级中断的enable状态，然后用enable状态和cpu中已
+保存的pending状态得到实际要处理的中断(A出的pending表示)，注意这个是一个临时变量
+CPU中保存的pending依然在。随后，根据中断优先级和中断委托逻辑得到要真实触发的中断。
+```
+static int riscv_cpu_local_irq_pending(CPURISCVState *env)
+{
+    int virq;
+    uint64_t irqs, pending, mie, hsie, vsie;
+
+    /* Determine interrupt enable state of all privilege modes */
+    if (riscv_cpu_virt_enabled(env)) {
+	/* n: cpu目前处于v状体，所以，高特权级m/hs的中断是打开的 */
+        mie = 1;
+        hsie = 1;
+	/*
+	 * n: 对于vs的中断，当cpu现在状态是vs，就看SIE的配置，当cpu现在是vu，
+	 *    高特权级中断一定是开着，所以vs的中断是开着。
+	 */
+        vsie = (env->priv < PRV_S) ||
+               (env->priv == PRV_S && get_field(env->mstatus, MSTATUS_SIE));
+    } else {
+	/*
+	 * n: cpu不在v状体，所以，cpu可能在m，或者比m低，同样的逻辑，在m，就看
+	 *    MIE的配置，比m低，那m中断一定是开着。
+	 */
+        mie = (env->priv < PRV_M) ||
+              (env->priv == PRV_M && get_field(env->mstatus, MSTATUS_MIE));
+	/*
+	 * n: cpu不在v，cpu比S低，中断一定是开，cpu在S，就看SIE，cpu在M，
+	 *    hs的中断应该是关的啊，为啥这里没有涉及？
+	 */
+        hsie = (env->priv < PRV_S) ||
+               (env->priv == PRV_S && get_field(env->mstatus, MSTATUS_SIE));
+	/* n: 因为cpu不在v，那cpu的特权级一定比vs高，vs中断一定是关的 */
+        vsie = 0;
+    }
+
+    /* Determine all pending interrupts */
+    pending = riscv_cpu_all_pending(env);     <------- A
+
+    /*
+     * n: 中断来了，这里就有优先级的处理，大的分类上，M > HS > VS, 就是说有了M,
+     *    我们就先处理M的中断，依此类推。这里有一个问题，如果pending了多个中断，
+     *    高特权级的中断先处理了，低特权级的中断pending还在么？
+     *
+     *    从实现上，中断pending记录在env->mip里，暂时没有看见哪里会清mip。
+     */
+    /* n: 中断有pending, 并且没有被代理出去，并且中断enable是开的，我们才计算中断号 */
+    /* Check M-mode interrupts */
+    irqs = pending & ~env->mideleg & -mie;
+    if (irqs) {
+        /* n: 计算一个特权级下最高优先级的中断 */
+        return riscv_cpu_pending_to_irq(env, IRQ_M_EXT, IPRIO_DEFAULT_M,
+                                        irqs, env->miprio);
+    }
+
+    /* Check HS-mode interrupts */
+    irqs = pending & env->mideleg & ~env->hideleg & -hsie;
+    if (irqs) {
+        return riscv_cpu_pending_to_irq(env, IRQ_S_EXT, IPRIO_DEFAULT_S,
+                                        irqs, env->siprio);
+    }
+
+    /* Check VS-mode interrupts */
+    irqs = pending & env->mideleg & env->hideleg & -vsie;
+    if (irqs) {
+        virq = riscv_cpu_pending_to_irq(env, IRQ_S_EXT, IPRIO_DEFAULT_S,
+                                        irqs >> 1, env->hviprio);
+        return (virq <= 0) ? virq : virq + 1;
+    }
+
+    /* Indicate no pending interrupt */
+    return RISCV_EXCP_NONE;
+}
 ```
 
 大循环的异常处理里会跑下do_interrupt回调，有几个问题没有搞清楚：
