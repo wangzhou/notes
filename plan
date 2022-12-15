@@ -187,3 +187,5 @@ kvm虚拟机和host进程统一调度	 to do
 arm spec笔记			 to do
 cpu中断设计中的逻辑		 to do
 qemu_irq			 repost
+qom模型加dma的例子的链接         repost
+qemu cpu/virt基本拓扑		 to do
