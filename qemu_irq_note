@@ -2,6 +2,7 @@
 -v0.2 2022.7.18  Sherlock 增加中断跳过tb，遗留中断控制器触发中断的分析。
 -v0.3 2022.12.15 Sherlock 增加riscv_cpu_local_irq_pending中逻辑的分析。
 -v0.4 2022.12.23 Sherlock 优化了文档结构
+-v0.5 2022.12.24 Sherlock 增加中断触发逻辑的细节分析
 
 简介：记录qemu irq相关的代码逻辑，以riscv为例。分析使用的qemu代码的版本是7.1.50。
 
@@ -36,8 +37,10 @@ riscv_aclint.c，riscv_aplic.c和riscv_imsic.c，其实AIA被实现为最后两�
 支持MSI和虚拟化中断直通。
 
 中断控制器里使用qdev_init_gpio_out创建一个输出的GPIO，然后使用qdev_connect_gpio_out
-把输出GPIO和输入的GPIO连在一起，在中断控制器里使用qemu_set_irq/qemu_raise_irq向
-CPU发中断，本质上是触发riscv_cpu_set_irq被调用到。(gpio_in对应的qemu_irq.handler如何被gpio_out看见?)
+把输出GPIO和输入的GPIO连在一起，在中断控制器里使用qemu_set_irq/qemu_irq_raise向
+CPU发中断，本质上是触发riscv_cpu_set_irq被调用到。至于gpio_in对应的qemu_irq.handler
+如何被gpio_out看见，就是qemu_set_irq/qemu_irq_raise如何触发riscv_cpu_set_irq被调用，
+其中的细节分析，我们放到本文的最后。
 
 如上，我们已经把核内和核外中断的大概逻辑梳理了下，下面重点看CPU核接收到中断的逻辑。
 riscv上中断控制器的qemu模拟需要在独立的文档中描述。
@@ -159,6 +162,58 @@ static int riscv_cpu_local_irq_pending(CPURISCVState *env)
     return RISCV_EXCP_NONE;
 }
 ```
+
+下面分析下，qemu_set_irq/qemu_irq_raise如何触发riscv_cpu_set_irq被调用。
+
+qdev_init_gpio_in(DeviceState *dev, qemu_irq_handler handler, int n)给CPU核创建
+n个中断gpio接口，每个中断gpio接口的中断处理函数都是handler，这里的dev就是CPU核的
+父类，下面展开这个函数看下。
+```
+qdev_init_gpio_in
+     /*
+      * dev里有gpios，它是一个元素为NameGPIOList的链表，每个NameGPIOList是一组gpio，
+      * NameGPIOList里直接嵌入了qemu_irq，每一个gpio都有一个，这样每个gpio都可以
+      * 当一个中断管脚使用。
+      *
+      * 这个函数就是创建dev里n个这样的gpio, 这个n个gpio被一个NameGPIOList所管理。
+      */
+  +->qdev_init_gpio_in_named_with_opaque
+```
+
+qdev_init_gpio_out(DeviceState *dev, qemu_irq *pins, int n)给dev创建n个中断输出
+接口，这里可以把dev理解为中断控制器。
+```
+qdev_init_gpio_out
+  +-> qdev_init_gpio_out_named
+        /*
+	 * 给dev增加link属性，每个qemu_irq都增加了一个，link属性的名字是：unnamed-gpio-out[num],
+	 */
+    +-> object_property_add_link
+```
+
+qdev_connect_gpio_out_named(DeviceState *dev, const char *name, int n, qemu_irq input_pin)
+这个函数在中断控制器驱动里被调用，dev是中断控制器，input_pin是CPU核上的中断gpio,
+通过name得到上面中断控制器增加的link属性的名字。
+```
+qdev_connect_gpio_out_named
+      /*
+       * 这个函数把dev里的名字是propname的link和input_pin建立一个link。这里的关键
+       * 就是要搞懂set_link的本质。
+       */
+  +-> object_property_set_link(OBJECT(dev), propname, OBJECT(input_pin), ...)
+```
+
+中断控制器里在处理外设上报来的中断后，一般用qemu_set_irq/qemu_irq_raise把中断继续
+上CPU核上报。需要注意的是，这里的qemu_irq是中断控制器上的，而上面的逻辑中，中断控制
+器上的qemu_irq只是和CPU核的qemu_irq建立了link，但是，这里似乎入参qemu_irq就是CPU核
+一侧qemu_irq的指针，只有这样qemu_irq_raise中直接调用qemu_irq的handler发起中断的
+逻辑才讲的通。
+```
+qemu_irq_raise(qemu_irq irq)
+  +-> qemu_set_irq
+    +-> irq->handler
+```
+
 
 大循环的异常处理里会跑下do_interrupt回调，有几个问题没有搞清楚：
 1. replay_xxx是做什么？

@@ -183,10 +183,9 @@ linux调度的细节分析		 to do
 per-cpu				 to do
 rv CPU侧中断设计		 to do
 kvm虚拟机和host进程统一调度	 to do
-arm spec笔记			 to do
+arm spec笔记			 continue
 cpu中断设计中的逻辑		 to do
-qemu_irq			 repost
 qom模型加dma的例子的链接         repost
 qemu cpu/virt基本拓扑		 to do
-riscv plic			 to do
+riscv plic			 #
 riscv sstc			 to do
