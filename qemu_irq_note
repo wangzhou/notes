@@ -1,8 +1,9 @@
 -v0.1 2022.2.22  Sherlock init
--v0.2 2022.7.18  Sherlock 增加中断跳过tb，遗留中断控制器触发中断的分析。
--v0.3 2022.12.15 Sherlock 增加riscv_cpu_local_irq_pending中逻辑的分析。
+-v0.2 2022.7.18  Sherlock 增加中断跳过tb，遗留中断控制器触发中断的分析
+-v0.3 2022.12.15 Sherlock 增加riscv_cpu_local_irq_pending中逻辑的分析
 -v0.4 2022.12.23 Sherlock 优化了文档结构
 -v0.5 2022.12.24 Sherlock 增加中断触发逻辑的细节分析
+-v0.6 2022.12.26 Sherlock 明确gpio_out和gpio_in是用link联系在一起
 
 简介：记录qemu irq相关的代码逻辑，以riscv为例。分析使用的qemu代码的版本是7.1.50。
 
@@ -181,7 +182,8 @@ qdev_init_gpio_in
 ```
 
 qdev_init_gpio_out(DeviceState *dev, qemu_irq *pins, int n)给dev创建n个中断输出
-接口，这里可以把dev理解为中断控制器。
+接口，这里可以把dev理解为中断控制器。需要注意的是，qemu_irq本来已经是指针了，这里
+把指针的地址送进来是为了后续配置qemu_irq这个指针的值。
 ```
 qdev_init_gpio_out
   +-> qdev_init_gpio_out_named
@@ -198,22 +200,24 @@ qdev_connect_gpio_out_named(DeviceState *dev, const char *name, int n, qemu_irq 
 qdev_connect_gpio_out_named
       /*
        * 这个函数把dev里的名字是propname的link和input_pin建立一个link。这里的关键
-       * 就是要搞懂set_link的本质。
+       * 就是要搞懂set_link的本质。这个函数内部会调用object一层的set函数，这个函数
+       * 把link属性所对应的变量的地址直接设置成被指向目标的地址，具体就是把上面
+       * gpio_out的qemu_irq换成了gpio_in的qemu_irq。这样，使用中断控制器的qemu_irq
+       * 就可以直接触发CPU核的中断回调函数，因为经过这么link过后，中断控制器的qemu_irq
+       * 已经就是CPU核的qemu_irq。
        */
   +-> object_property_set_link(OBJECT(dev), propname, OBJECT(input_pin), ...)
 ```
 
 中断控制器里在处理外设上报来的中断后，一般用qemu_set_irq/qemu_irq_raise把中断继续
 上CPU核上报。需要注意的是，这里的qemu_irq是中断控制器上的，而上面的逻辑中，中断控制
-器上的qemu_irq只是和CPU核的qemu_irq建立了link，但是，这里似乎入参qemu_irq就是CPU核
-一侧qemu_irq的指针，只有这样qemu_irq_raise中直接调用qemu_irq的handler发起中断的
-逻辑才讲的通。
+器上的qemu_irq只是和CPU核的qemu_irq建立了link，但是，这里入参qemu_irq就是CPU核一侧
+qemu_irq的指针，这样qemu_irq_raise中直接调用qemu_irq的handler发起中断的逻辑就都通了。
 ```
 qemu_irq_raise(qemu_irq irq)
   +-> qemu_set_irq
     +-> irq->handler
 ```
-
 
 大循环的异常处理里会跑下do_interrupt回调，有几个问题没有搞清楚：
 1. replay_xxx是做什么？
