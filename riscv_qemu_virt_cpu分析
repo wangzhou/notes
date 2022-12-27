@@ -1,11 +1,12 @@
 riscv qemu virt平台CPU拓扑分析
 
 -v0.1 2022.12.15 Sherlock init
+-v0.2 2022.12.27 Sherlock 增加各个对象初始化相关的逻辑
 
 简介：本文分析riscv qemu virt平台上和CPU相关的拓扑，分析基于qemu v7.1.50代码。
 
 
-Riscv的qemu virt平台描述一个完整的机器，这个机器包括CPU、内存、以及各种外设,
+riscv的qemu virt平台描述一个完整的机器，这个机器包括CPU、内存、以及各种外设,
 在qemu的代码里，这个virt机器用virt-machine类描述，它的实例是RISCVVirtState。
 
 一个RISCVVirtState包含多个RISCVHartArrayState，这个数据结构描述一组CPU core, 一个
@@ -20,6 +21,55 @@ virt_machine_init
 
 RISCVHartArrayState里用RISCVCPU来描述一个具体的CPU core，里面存放CPU的各种参数。
 需要注意的是，虽然软件上看CPU似乎是分层的，但是在硬件(qemu)的角度看，CPU上的各种
-寄存器只是CPU上的一个变量。
+寄存器只是CPU上的一个变量。RISCVHartArrayState、RISCVCPU都分别对应有自己的类和实例。
 
-如上的RISCVHartArrayState、RISCVCPU都分别对应有自己的类和实例。
+用图表示一下，virt平台上各个对象的实例大概就是这样的：
+```
+ +---------------------------------------------------------------------------------+
+ | RISCVVirtState                                                                  |
+ |                                                                                 |
+ | +-----------------------------------+     +-----------------------------------+ |
+ | |  RISCVHartArrayState              |     |  RISCVHartArrayState              | |
+ | |                                   |     |                                   | |
+ | |+----------+----------+----------+ |     |+----------+----------+----------+ | |
+ | || RISCVCPU | RISCVCPU | RISCVCPU | |     || RISCVCPU | RISCVCPU | RISCVCPU | | |
+ | |+----------+----------+----------+ |     |+----------+----------+----------+ | |
+ | +-----------------------------------+     +-----------------------------------+ |
+ |                                                                                 |
+ +---------------------------------------------------------------------------------+
+```
+
+下面描述如上各个对象的初始化逻辑，整个逻辑从virt平台初始化开始。
+```
+virt_machine_init
+      /* 初始化hart_array, 被初始化的hart_array的指针通过&s->soc[i]传入 */
+  +-> object_initialize_child(OBJECT(machine), soc_name, &s->soc[i], TYPE_RISCV_HART_ARRAY);
+      /* 触发hart_array的realize函数被调用 */
+  +-> sysbus_realize(SYS_BUS_DEVICE(&s->soc[i]), &error_fatal);
+        /*
+	 * hart_array的realize函数, 其中会初始化和realize各个hart，因为是在hart_array
+	 * 的上下文，这里就可以针对不同的hart做一些差异化的配置，比如, 下面配置
+	 * 每个hart的hart id。
+	 */
+    +-> riscv_harts_realize
+          /* RISCVCPU的内存是在hart_array的realize函数里申请的 */
+      +-> s->harts = g_new0(RISCVCPU, s->num_harts);
+          /* 针对每个hart都调用一个下 */
+      +-> riscv_hart_realize
+            /* RISCVCPU初始化, 对应的初始化函数在这里被调用(riscv_cpu_init) */
+        +-> object_initialize_child(OBJECT(s), "harts[*]", &s->harts[idx], cpu_type);
+	  +-> riscv_cpu_init
+	    /* 为每个hart配置复位pc地址 */
+        +-> qdev_prop_set_uint64(DEVICE(&s->harts[idx]), "resetvec", s->resetvec);
+	    /* 为每个hart配置hart id */
+        +-> s->harts[idx].env.mhartid = s->hartid_base + idx;
+        +-> qemu_register_reset(riscv_harts_cpu_reset, &s->harts[idx]);
+	    /*
+	     * 触发RISCVCPU的realize函数被调用，其中的细节分析，可以参考[这里](https://wangzhou.github.io/多核启动基本逻辑分析/)
+	     */
+        +-> qdev_realize(DEVICE(&s->harts[idx]), NULL, errp); (riscv_cpu_realize)
+	  +-> [...]
+          +-> qemu_init_vcpu(cs);
+          +-> cpu_reset(cs);
+          +-> mcc->parent_realize(dev, errp);
+```
