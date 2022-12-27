@@ -167,25 +167,25 @@ riscv多核启动			 #  增加从核wait的地方   repost
 linux initramfs分析		 #
 linux/kernel/hung_task.c	 to do
       kernel/watchdog.c
-my bios				 to do
+my bios				 draft
 riscv 内存相关指令	         #
 riscv pmp		   	 to do        #
-riscv cache(CMO)		 to do
+riscv cache(CMO)		 to do      7
 qemu tlb广播的模拟		 to do
 修改head.S里多核启动的分析，lottery只用在spinwait boot上
 opensbi里关于HSM的补充分析
 virtio				 to do
-cpu初始化, online/offline	 to do
+cpu初始化, online/offline	 to do      6
 ecall srst的分析		 to do
 
 hsm stop和cpu stop的同步行为	 to do
 linux调度的细节分析		 to do
 per-cpu				 to do
-rv CPU侧中断设计		 to do
+rv CPU侧中断设计		 #
 kvm虚拟机和host进程统一调度	 to do
 arm spec笔记			 continue
-cpu中断设计中的逻辑		 to do
-qom模型加dma的例子的链接         repost
-qemu cpu/virt基本拓扑		 to do
-riscv plic			 #
-riscv sstc			 to do
+cpu中断设计中的逻辑		 to do      3
+qemu cpu/virt基本拓扑		 to do      1 带cpu启动分析
+riscv plic			 #          2 内核部分分析
+riscv sstc			 to do      4 带rv user mode timer的分析
+opensbi再次整理			 to do      5
