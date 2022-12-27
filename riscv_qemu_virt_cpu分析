@@ -65,7 +65,7 @@ virt_machine_init
         +-> s->harts[idx].env.mhartid = s->hartid_base + idx;
         +-> qemu_register_reset(riscv_harts_cpu_reset, &s->harts[idx]);
 	    /*
-	     * 触发RISCVCPU的realize函数被调用，其中的细节分析，可以参考[这里](https://wangzhou.github.io/多核启动基本逻辑分析/)
+	     * 触发RISCVCPU的realize函数被调用，其中的细节分析，可以参考下面的链接。
 	     */
         +-> qdev_realize(DEVICE(&s->harts[idx]), NULL, errp); (riscv_cpu_realize)
 	  +-> [...]
@@ -73,3 +73,4 @@ virt_machine_init
           +-> cpu_reset(cs);
           +-> mcc->parent_realize(dev, errp);
 ```
+[RISCVCPU realize函数细节分析](https://wangzhou.github.io/多核启动基本逻辑分析/)
