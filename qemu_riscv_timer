@@ -1,8 +1,9 @@
 qemu riscv timer的基本逻辑
 
--v0.1 2022.7.26 Sherlock init
--v0.2 2022.8.11 Sherlock 增加如何避免timer误差的逻辑, 是否和真是时间一致
--v0.3 2022.9.15 Sherlock 增加event_handler的初始化逻辑
+-v0.1 2022.7.26  Sherlock init
+-v0.2 2022.8.11  Sherlock 增加如何避免timer误差的逻辑, 是否和真是时间一致
+-v0.3 2022.9.15  Sherlock 增加event_handler的初始化逻辑
+-v0.4 2022.12.28 Sherlock 增加mtime/mtimecmp寄存器描述，sstc部分描述，U mode timer的描述
 
 简介：本文梳理riscv上timer的基本软硬件逻辑，硬件模型基于qemu，使用的qemu版本是6.2.0，
       内核代码分析使用的版本是v5.12-rc8。
@@ -26,8 +27,14 @@ qemu riscv timer的基本逻辑
  软件可以在timer中断处理函数里，更新mtimecmp的值，从而维持一个固定周期的时钟中断，
  一般这个中断就是Linux内核的时钟中断。软件可以写STIP触发一个S mode timer中断。
 
- 多核上M mode寄存
- NOTE: sstc
+ aclint上把mtime以及mtimecmp抽象成一个M mode timer这样的设备，mtime和mtimecmp是这个
+ 设备上的MMIO接口，一个M mode timer上有一个mtime，一个M mode timer为服务的每个hart
+ 设置一个mtimecmp。aclint协议上描述，一个系统可能会有多个M mode timer设备，这样做
+ 的目的是在CPU存在分层拓扑的时候，比如CPU cluster/node/socket时，一组CPU可以和一个
+ M mode timer做在一起，方便这一组CPU的功耗管理。在系统中有多个M mode timer时，需要
+ 做多个mtime数值上的同步，使得多个mtime之间的误差在一定范围之内。
+
+ alint只定义了M mode timer, riscv的sstc扩展定义了S mode下的timer。
 
 qemu逻辑
 ---------
