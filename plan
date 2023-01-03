@@ -191,3 +191,4 @@ riscv sstc			 to do      4 带rv user mode timer的分析
 opensbi再次整理			 to do      5
 多核启动整理                     to do
 rv全部异常定义分析		 to do
+entry.S				 repost

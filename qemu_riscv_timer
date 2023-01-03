@@ -6,7 +6,8 @@ qemu riscv timer的基本逻辑
 -v0.4 2022.12.28 Sherlock 增加mtime/mtimecmp寄存器描述，sstc部分描述，U mode timer的描述
 
 简介：本文梳理riscv上timer的基本软硬件逻辑，硬件模型基于qemu，使用的qemu版本是6.2.0，
-      内核代码分析使用的版本是v5.12-rc8。
+      内核代码分析使用的版本是v5.12-rc8。本文尽可能多的梳理riscv上timer相关的内容，
+      需要独立描述的会在文中指出来。
 
 基础逻辑
 ---------
@@ -34,10 +35,22 @@ qemu riscv timer的基本逻辑
  M mode timer做在一起，方便这一组CPU的功耗管理。在系统中有多个M mode timer时，需要
  做多个mtime数值上的同步，使得多个mtime之间的误差在一定范围之内。
 
- alint只定义了M mode timer, riscv的sstc扩展定义了S mode下的timer。
+ alint只定义了M mode timer, riscv的sstc扩展定义了S mode下的timer。对于S mode timer，
+ sstc只在每个hart上增加了stimecmp寄存器，当time计数值大于等于stimecmp时触发S mode
+ timer中断，stimecmp是一个CSR寄存器。从timer整体定义上看，riscv这里定义的比较乱，
+ M mode timer抽象成一个外设，接口是MMIO，但是S mode timer却改成了CSR，而且sstc还
+ 修改了riscv特权级spec里的一些系统寄存器的定义，mip.STIP这个域段在stimecmp有无时，
+ 读写属性是不一样的，当支持S mode但是没有实现stimecmp时，mip.STIP是读写的，写这个
+ bit会触发S mode timer中断，当实现stimecmp时，mip.STIP是只读的。这样的实现意味着，
+ 在有S mode timer的系统上，将无法使用M mode timer从M mode通过mip.STIP触发S mode
+ timer中断，相关的软件方案需要随之变动。sstc里还有虚拟化相关的描述，这些需要在独立
+ 文档中描述。
 
-qemu逻辑
----------
+ riscv上还定义了一个用户态可以访问的计数器RDTIME，这个计数器从开机起就以一定的频率
+ 一直递增。
+
+qemu逻辑 - M mode timer
+------------------------
 
  qemu中的aclint和plic的代码路径分别在：hw/intc/riscv_aclint.c和hw/intc/sifive_plic.c。
  这里我们只关注和timer相关的部分，可以看到在riscv_aclint.c里只有M mode timer中断的
@@ -77,6 +90,30 @@ qemu逻辑
  定时器来做模拟，timebase_freq是mtime寄存器作为counter的频率，所以实际时间的计算
  就是：(mtimecmp - 上一个中断点的mtime值) * 1/timebase_freq * NANOSECONDS_PER_SECOND，
  单位是ns，就是上面muldiv64函数的计算结果。所以，虚拟机看到的时间和实际时间是一样的。
+
+qemu逻辑 - S mode timer
+------------------------
+
+ qemu里S mode timer的代码在：target/riscv/time_helper.c，stimecmp是CSR寄存器，所以
+ stimecmp的访问代码在: target/riscv/csr.c。
+
+ 可以看到stimecmp的读写逻辑和timecmp的读写逻辑基本上是一致的，而时钟源都使用一样的
+ QEMU_CLOCK_VIRTUAL。具体的看，针对sstc，qemu在time_helper.c里实现了hw/intc/riscv_alint.c
+ 里很多一样的逻辑，通过CPU env里的rdtime_fn_arg/rdtime_fn拿到riscv_alint.c里定义
+ 的和时钟源相关的信息，比如，timebase_freq。
+
+qemu逻辑 - RDTIME
+------------------
+
+ 这个寄存器在U mode也可以访问，所以具体实现也是qemu user mode和system mode各自支持的。
+
+ qemu user mode下的实现，直接使用host上的特性tick执行实现，这样的实现感觉真心
+ 没有什么实用价值。
+
+ system mode下的实现，RDTIME的时钟源也是QEMU_CLOCK_VIRTUAL，读相关的CSR直接得到
+ 计算后的计数值，数值上和如上M/S mode timer计数器的值是一样，表示自系统启动以来
+ 的一个计数值。所以，这个值和墙上时钟还是不一样的，墙上时钟在系统关机后会使用主板
+ 上的纽扣电池继续运行。
 
 Linux内核逻辑
 --------------

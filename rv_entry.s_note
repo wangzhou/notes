@@ -8,6 +8,7 @@ riscv entry.S
 -v0.5 2022.8.23  sherlock add preempt part
 -v0.6 2022.9.6   sherlock continue to add preempt
 -v0.7 2022.12.10 sherlock add stack and task_struct memory topology
+-v0.8 2023.1.3   sherlock add tp/scratch more description
 
 简介：本文分析Linux内核里riscv构架下的entry.S这个文件，内核代码使用的版本是5.12-rc8。
       采用直接在代码里加注释的方式写分析的内容，注释用“n:”开头。目前只分析主流程，
@@ -27,12 +28,25 @@ ENTRY(handle_exception)
 	 * register will contain 0, and we should continue on the current TP.
 	 */
 	/*
-	 * n: 交换tp寄存器和scratch寄存器里的值。如果exception从用户态进来，tp和
-	 * scratch的值应该是相等的(下面在离开内核的时候，会把用户进程的task_struct
+	 * n: 交换tp寄存器和scratch寄存器里的值。如果exception从用户态进来，scratch
+	 * 的值应该是task_struct(下面在离开内核的时候，会把用户进程的task_struct
 	 * 指针赋给tp)，如果exception从内核态进来，tp应该是当前线程的task_struct
 	 * 指针，scratch应该是0。
 	 *
 	 * 所以，下面紧接着的处理中，如果从内核进来，要恢复下tp。
+	 *
+	 * 总结下在用户态和内核态时tp和scratch的值是什么：
+	 *
+	 *  +----------+--------------+---------------+
+	 *  |          | 用户态       |   内核        |
+	 *  +----------+--------------+---------------+
+	 *  | tp:      | tls base     |   task_struct |
+	 *  +----------+--------------+---------------+
+	 *  | scratch: | task_struct  |   0           |
+	 *  +----------+--------------+---------------+
+	 *
+	 * 注意：配置tp为tls地址的函数是：copy_thread，如果用户态没有使用TLS，tp
+	 *       在用户态的值是？
 	 */
 	csrrw tp, CSR_SCRATCH, tp
 	/* n: tp不为0，异常来自用户态，直接跳到上下文保存的地方 */
