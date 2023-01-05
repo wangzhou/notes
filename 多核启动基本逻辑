@@ -1,5 +1,6 @@
 -v0.1 2022.11.2  Sherlock init
 -v0.2 2022.11.10 Sherlock 补充内核多核启动的逻辑
+-v0.2 2023.01.05 Sherlock 补充opensbi中从核hsm的相关逻辑
 
 简介：本文分析CPU多核启动的基本逻辑，我们分析基于riscv的qemu虚拟机，固件基于opensbi,
       内核采用Linux。各个分析内容的版本是：qemu v7.1.50, opensbi v1.0, Linux v6.0。
@@ -103,7 +104,8 @@
 
  总体上看，opensbi大概分为汇编部分和C代码部分，在这两部分，多核启动的逻辑也是不同
  的。针对opensbi中可能的三种固件类型，基本上都是用所谓lottery算法做多核启动的，
- 只有fw_dynamic_version_2用的是指定核启动，我们这里先看下lottery的多核启动。
+ 只有fw_dynamic_version_2用的是指定核启动，我们这里分别看下lottery的多核启动和指定
+ 核的多核启动。
 
  lottery算法的逻辑很直白，就是多个核去抢做主启动核，主核就一个人去做公共资源的初始化，
  其它核(从核)就等着，直到主核把公共资源初始化完，从核继续做每个核各自的初始化内容。
@@ -129,6 +131,11 @@ C :              |         |           |
                  |         |           |
                 mret      mret       mret       <--- 各个核通过mret跳进内核执行 
 ```
+  
+ 指定核的多核启动，汇编部分使用qemu指定的核启动，C部分依然使用lottery算法，选择一个
+ 核启动内核，其它核则执行一条wfi指令，先把自己挂起。从核继续运行需要内核通过sbi的
+ HSM接口下发启动命令，使用的是HSM的hart start接口，这个接口可以指定需要启动的hart
+ 以及执行内核(S mode)执行的起始地址。
 
 内核逻辑
 ---------
@@ -168,7 +175,7 @@ C :              |         |           |
            /* 最终会一路调到riscv的实现函数(linux/arch/riscv/kernel/smpboot.c) */
            +-> __cpu_up
              +-> start_secondary_cpu
-               +-> cpu_ops[cpu]->cpu_start
+               +-> cpu_ops[cpu]->cpu_start (sbi_hsm_hart_start)
 ```
  目前的opensbi代码里，只会叫cold root的核先进入内核，但是，warm boot的核是停在哪里
  等待呢？

@@ -184,11 +184,9 @@ per-cpu				 to do
 rv CPU侧中断设计		 #
 kvm虚拟机和host进程统一调度	 to do
 arm spec笔记			 continue
-cpu中断设计中的逻辑		 to do      3                   #
-qemu cpu/virt基本拓扑		 to do      1 带cpu启动分析     #
 riscv plic			 #          2 内核部分分析
-riscv sstc			 to do      4 带rv user mode timer的分析
 opensbi再次整理			 to do      5
 多核启动整理                     to do
 rv全部异常定义分析		 to do
 entry.S				 repost
+ELF/PE启动			 to do
