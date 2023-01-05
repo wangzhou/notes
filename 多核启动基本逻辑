@@ -126,16 +126,39 @@
               sbi_init  sbi_init     sbi_init   <--- 这里core1抢到了coldboot
 C :              |         |           |
                +->-+       |         +->-+
-               ^   v       |         ^   v  <------- warmboot先等coldboot完成
-               +-<-+       |         +-<-+
+          wfi  ^   v       |    wfi  ^   v  <------- warmboot先等coldboot完成
+               +-<-+ <+    |      +> +-<-+
+                 |    |    |      |    |
+                 |    |    |      |    |
+                 |    +- wake up -+    |
+                 |     core0 and N     |
                  |         |           |
-                mret      mret       mret       <--- 各个核通过mret跳进内核执行 
+                 |         |           |
+            HSM STOPPED    |        HSM STOPPED
+               (wfi)       |           (wfi)
+               |  ^        |            ^  |
+               |  |        |            |  |
+               |  |        |            |  |
+               |  |       mret          |  |
+               |  |        |            |  |
+               |  |        |            |  |
+               |  |        |            |  |
+               |  +-sbi_hsm_hart_start  |  |
+               |      (core0, addr)     |  |
+               |    sbi_hsm_hart_start -+  |
+               |      (coreN, addr)        |
+               |           |               |
+              mret         |              mret
+               |           |               |
+               |           |               |
 ```
   
  指定核的多核启动，汇编部分使用qemu指定的核启动，C部分依然使用lottery算法，选择一个
- 核启动内核，其它核则执行一条wfi指令，先把自己挂起。从核继续运行需要内核通过sbi的
- HSM接口下发启动命令，使用的是HSM的hart start接口，这个接口可以指定需要启动的hart
- 以及执行内核(S mode)执行的起始地址。
+ 核先作为主核，初始化公共资源，这个时候各个从核是挂起的，在主核准备进入内核前，主核
+ 通过IPI解开挂起的从核，不过从核执行走几步之后，又会挂起。从核继续运行需要内核通过
+ sbi的HSM接口下发启动命令，使用的是HSM的hart start接口，这个接口可以指定需要启动的
+ hart以及执行内核(S mode)执行的起始地址。从后面内核分析中可以看出，从核的内核启动
+ 地址并不是_start，而是secondary_start_sbi。
 
 内核逻辑
 ---------
@@ -175,7 +198,9 @@ C :              |         |           |
            /* 最终会一路调到riscv的实现函数(linux/arch/riscv/kernel/smpboot.c) */
            +-> __cpu_up
              +-> start_secondary_cpu
-               +-> cpu_ops[cpu]->cpu_start (sbi_hsm_hart_start)
+                   /*
+                    * sbi_cpu_start, 传入的启动参数包括：启动地址，task_struct指针，
+                    * 栈指针。(todo)
+                    */
+               +-> cpu_ops[cpu]->cpu_start
 ```
- 目前的opensbi代码里，只会叫cold root的核先进入内核，但是，warm boot的核是停在哪里
- 等待呢？
