@@ -1,6 +1,7 @@
 -v0.1 2022.11.2  Sherlock init
 -v0.2 2022.11.10 Sherlock 补充内核多核启动的逻辑
--v0.2 2023.01.05 Sherlock 补充opensbi中从核hsm的相关逻辑
+-v0.3 2023.01.05 Sherlock 补充opensbi中从核hsm的相关逻辑
+-v0.4 2023.01.06 Sherlock 梳理hsm的细节
 
 简介：本文分析CPU多核启动的基本逻辑，我们分析基于riscv的qemu虚拟机，固件基于opensbi,
       内核采用Linux。各个分析内容的版本是：qemu v7.1.50, opensbi v1.0, Linux v6.0。
@@ -102,29 +103,28 @@
 
  我们直接看opensbi中的多核启动逻辑，具体opensbi的代码分析可以看[这里](https://wangzhou.github.io/opensbi逻辑分析/)。
 
- 总体上看，opensbi大概分为汇编部分和C代码部分，在这两部分，多核启动的逻辑也是不同
- 的。针对opensbi中可能的三种固件类型，基本上都是用所谓lottery算法做多核启动的，
- 只有fw_dynamic_version_2用的是指定核启动，我们这里分别看下lottery的多核启动和指定
- 核的多核启动。
+ 总体上看，opensbi大概分为汇编部分和C代码部分，这两部分都会涉及到多核启动的逻辑。
+ qemu rom启动opensbi时会有一个主核选择的逻辑，opensbi的三种固件类型在这个逻辑上基
+ 本都是用所谓lottery算法，只有fw_dynamic_version_2用的是指定核启动。opensbi在C代码
+ 部分会再次随机的选一个核做主核。
 
  lottery算法的逻辑很直白，就是多个核去抢做主启动核，主核就一个人去做公共资源的初始化，
  其它核(从核)就等着，直到主核把公共资源初始化完，从核继续做每个核各自的初始化内容。
 
- 具体上看，opensbi的汇编和C语言部分各自都采用了lottery算法，C语言把主核启动叫做
- coldboot，从核启动叫做warmboot，warmboot还包括CPU运行中被挂起，然后继续运行的情况，
- 我们这里先不考虑这个逻辑。所以，从qemu和opensbi的角度看，硬件的初始状态都是一样的，
- 所谓多核启动，不过opensbi怎么初始化多核环境下的公有和私有软件资源。
+ 从硬件的视角看，riscv qemu virt上的各个核在系统初始化后都立即投入运行, 多核启动
+ 的逻辑都用软件搞定的，其中选核可以用类似lottery的算法，从核可以用wfi挂起，主从核
+ 可以用IPI来通信。我们把整个逻辑描述在如下的图里：
 ```
 汇编部分:
-               core0     core1  ...  coreN      <--- 这里core0抢到了
+               core0     core1  ...  coreN      <--- 这里core0抢到了。如果是指定核启动，就不用抢了
                  |
                  |       +->-+       +->-+
                  |       ^   v       ^   v
                  |       +-<-+       +-<-+
                  |         |           |
                  |         |           |
-              sbi_init  sbi_init     sbi_init   <--- 这里core1抢到了coldboot
-C :              |         |           |
+C:             sbi_init  sbi_init     sbi_init   <--- 这里core1抢到了coldboot
+                 |         |           |
                +->-+       |         +->-+
           wfi  ^   v       |    wfi  ^   v  <------- warmboot先等coldboot完成
                +-<-+ <+    |      +> +-<-+
@@ -153,12 +153,11 @@ C :              |         |           |
                |           |               |
 ```
   
- 指定核的多核启动，汇编部分使用qemu指定的核启动，C部分依然使用lottery算法，选择一个
- 核先作为主核，初始化公共资源，这个时候各个从核是挂起的，在主核准备进入内核前，主核
- 通过IPI解开挂起的从核，不过从核执行走几步之后，又会挂起。从核继续运行需要内核通过
- sbi的HSM接口下发启动命令，使用的是HSM的hart start接口，这个接口可以指定需要启动的
- hart以及执行内核(S mode)执行的起始地址。从后面内核分析中可以看出，从核的内核启动
- 地址并不是_start，而是secondary_start_sbi。
+ 如上C部分依然使用lottery算法，选择一个核先作为主核，初始化公共资源，这个时候各个
+ 从核是挂起的，在主核准备进入内核前，主核通过IPI解开挂起的从核，不过从核执行走几步
+ 之后，又会挂起。从核继续运行需要内核通过sbi的HSM接口下发启动命令，使用的是HSM的
+ hart start接口，这个接口可以指定需要启动的hart以及执行内核(S mode)执行的起始地址。
+ 从后面内核分析中可以看出，从核的内核启动地址并不是_start，而是secondary_start_sbi。
 
 内核逻辑
 ---------
@@ -200,7 +199,10 @@ C :              |         |           |
              +-> start_secondary_cpu
                    /*
                     * sbi_cpu_start, 传入的启动参数包括：启动地址，task_struct指针，
-                    * 栈指针。(todo)
+                    * 栈指针。sbi_cpu_start的接口通过a0传启动地址，通过a1传打包
+                    * task_struct指针和栈指针的数据结构的地址。opensbi中不处理这
+                    * 两个参数，在启动内核的时候又通过a0和a1传给内核，内核解析a1
+                    * 地址上的数据，得到task_struct指针和栈指针。
                     */
                +-> cpu_ops[cpu]->cpu_start
 ```
