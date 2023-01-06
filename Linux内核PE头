@@ -1,0 +1,92 @@
+Linux内核镜像头分析
+====================
+
+-v0.1 2023.01.06
+
+简介：本文分析Linux内核镜像中Image头部格式的一些相关问题，使用的硬件构架是riscv，
+      分析中使用的内核版本使用v6.1
+
+Linux内核镜像头部格式
+----------------------
+
+
+opensbi启动内核
+----------------
+
+
+uboot启动内核
+--------------
+
+ riscv EFI内核已经支持，patch URL：https://lwn.net/Articles/813589/
+ 这个patch是使用uboot + qemu来测试的。
+
+ 用这个命令可以启动uboot:
+```
+qemu-system-riscv64 -m 256m -machine virt -nographic -kernel path_to_u-boot/u-boot
+```
+ 启动的效果大概是：
+```
+OpenSBI v1.1
+   ____                    _____ ____ _____
+  / __ \                  / ____|  _ \_   _|
+ | |  | |_ __   ___ _ __ | (___ | |_) || |
+ | |  | | '_ \ / _ \ '_ \ \___ \|  _ < | |
+ | |__| | |_) |  __/ | | |____) | |_) || |_
+  \____/| .__/ \___|_| |_|_____/|____/_____|
+        | |
+        |_|
+
+Platform Name             : riscv-virtio,qemu
+Platform Features         : medeleg
+Platform HART Count       : 1
+Platform IPI Device       : aclint-mswi
+Platform Timer Device     : aclint-mtimer @ 10000000Hz
+Platform Console Device   : uart8250
+Platform HSM Device       : ---
+Platform Reboot Device    : sifive_test
+Platform Shutdown Device  : sifive_test
+Firmware Base             : 0x80000000
+Firmware Size             : 288 KB
+Runtime SBI Version       : 1.0
+
+Domain0 Name              : root
+Domain0 Boot HART         : 0
+Domain0 HARTs             : 0*
+Domain0 Region00          : 0x0000000002000000-0x000000000200ffff (I)
+Domain0 Region01          : 0x0000000080000000-0x000000008007ffff ()
+Domain0 Region02          : 0x0000000000000000-0xffffffffffffffff (R,W,X)
+Domain0 Next Address      : 0x0000000080200000
+Domain0 Next Arg1         : 0x000000008fe00000
+Domain0 Next Mode         : S-mode
+Domain0 SysReset          : yes
+
+Boot HART ID              : 0
+Boot HART Domain          : root
+Boot HART Priv Version    : v1.12
+Boot HART Base ISA        : rv64imafdch
+Boot HART ISA Extensions  : time,sstc
+Boot HART PMP Count       : 16
+Boot HART PMP Granularity : 4
+Boot HART PMP Address Bits: 54
+Boot HART MHPM Count      : 16
+Boot HART MIDELEG         : 0x0000000000001666
+Boot HART MEDELEG         : 0x0000000000f0b509
+
+
+U-Boot 2023.01-rc4-00059-g8d6cbf5e6b (Jan 05 2023 - 15:59:10 +0800)
+
+CPU:   rv64imafdch_zicsr_zifencei_zihintpause_zba_zbb_zbc_zbs_sstc
+Model: riscv-virtio,qemu
+DRAM:  256 MiB
+Core:  25 devices, 12 uclasses, devicetree: board
+Flash: 32 MiB
+Loading Environment from nowhere... OK
+In:    serial@10000000
+Out:   serial@10000000
+Err:   serial@10000000
+Net:   No ethernet found.
+Working FDT set to 8f734950
+Hit any key to stop autoboot:  0 
+=> 
+```
+ (todo: 怎么继续启动内核)
