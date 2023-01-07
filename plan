@@ -189,4 +189,5 @@ opensbi再次整理			 to do      5
 多核启动整理                     to post
 rv全部异常定义分析		 to do
 entry.S				 repost
-ELF/PE启动			 to do
+ELF/PE启动			 post
+unix编程艺术读书笔记		 todo
