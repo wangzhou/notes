@@ -163,7 +163,6 @@ riscv reset逻辑分析		 to do 2
 riscv 虚拟化中断直通		 todo         #####
 riscv 内存模型(重要)  	  	 to do
 riscv wfi			 to do
-riscv多核启动			 #  增加从核wait的地方   repost
 linux initramfs分析		 #
 linux/kernel/hung_task.c	 to do
       kernel/watchdog.c
@@ -181,13 +180,12 @@ ecall srst的分析		 to do
 hsm stop和cpu stop的同步行为	 to do
 linux调度的细节分析		 to do
 per-cpu				 to do
-rv CPU侧中断设计		 #
 kvm虚拟机和host进程统一调度	 to do
 arm spec笔记			 continue
-riscv plic			 #          2 内核部分分析
-opensbi再次整理			 to do      5
-多核启动整理                     to post
+riscv plic			 # 内核部分分析
+opensbi再次整理			 to do
+多核启动整理                     # hsm
 rv全部异常定义分析		 to do
-entry.S				 repost
-ELF/PE启动			 post
+ELF/PE启动			 # uboot EFI
 unix编程艺术读书笔记		 todo
+kvm中断虚拟化逻辑中加中断直通link todo
