@@ -1,10 +1,12 @@
 qemu goto tb分析
 ================
+
 -v0.1 2023.1.13 Sherlock init
 
-简介：分析goto tb什么要在一个page内。
+简介：分析goto tb什么要在一个page内，使用的qemu代码的版本是v7.1.50。
 
-
+ [qemu tcg跳转的处理](https://wangzhou.github.io/qemu-tcg跳转的处理/)中分析了qemu
+ 中模拟跳转的逻辑jj
 ```
       VA1 ---> +---------------+ 
                |               |
@@ -31,7 +33,6 @@ qemu goto tb分析
                                                     |               |
                                                     |               |
                                                     +---------------+
-
      tb1 key: pa1
      +-------+ <---------------------+   <------ htable
      |       |                       |
@@ -67,6 +68,15 @@ qemu goto tb分析
  两个进程的va相同，映射的pa就可能不同。所以，要保证在tb_jmp_cache里，va只唯一映射
  一个pa，当va到pa的映射改变的时候，tb_jmp_cache里
 
+
+
+ store_helper
+   +--> notdirty_write(env_cpu(env), addr, size, full, retaddr);
+     +-> tb_invalidate_phys_page_fast(pages, ram_addr, size, retaddr);
+       +-> tb_invalidate_phys_page_range__locked
+         +-> tb_phys_invalidate__locked(tb);
+	   +-> do_tb_phys_invalidate(tb, true);
+	     +-> qht_remove(&tb_ctx.htable, tb, h)
 
 
 
