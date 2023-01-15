@@ -2,6 +2,7 @@ git submodule的使用
 ===================
 
 -v0.1 2023.1.13 Sherlock init
+-v0.2 2023.1.15 Sherlock 更新git submodule update --remote命令
 
 简介：本文介绍git中submodule的基本逻辑以及使用方法。
 
@@ -16,7 +17,8 @@ git submodule的使用
  qemu就是用submodule的方式管理各种firmware的，比如，qemu把opensbi就作为它的一个
  submodule。
 
-```                             +-----------+
+```
+                                +-----------+
                                 | project_a |
                                 +-----------+
                                  /
@@ -106,4 +108,24 @@ index 0000000..e78b044
 +Subproject commit e78b0444f95c05e6cc9a2aa953dfd135e6cde1ef
 ```
 
-怎么改动superproject中子仓库的提交? (git submodule的各个命令)
+git submodule里有和子仓库相关的各种自命令，比如，我们可以用如下的命令更新子仓库，
+可以看见superproject的子仓库的提交也更新了。
+```
+sherlock@m1:~/tests/git_submodule/superproject$ git submodule update --remote 
+remote: Enumerating objects: 5, done.
+remote: Counting objects: 100% (5/5), done.
+remote: Compressing objects: 100% (1/1), done.
+remote: Total 3 (delta 2), reused 3 (delta 2), pack-reused 0
+Unpacking objects: 100% (3/3), 289 bytes | 96.00 KiB/s, done.
+From https://github.com/wangzhou/notes
+   9ed1125..a24c0b1  master     -> origin/master
+Submodule path 'submodule/notes': checked out 'a24c0b112dd342e2c00ec79dfe4f5f3fbfcd09b4'
+sherlock@m1:~/tests/git_submodule/superproject$ git diff
+diff --git a/submodule/notes b/submodule/notes
+index e78b044..a24c0b1 160000
+--- a/submodule/notes
++++ b/submodule/notes
+@@ -1 +1 @@
+-Subproject commit e78b0444f95c05e6cc9a2aa953dfd135e6cde1ef
++Subproject commit a24c0b112dd342e2c00ec79dfe4f5f3fbfcd09b4
+```
