@@ -189,6 +189,6 @@ rv全部异常定义分析		 to do
 ELF/PE启动			 # uboot EFI
 unix编程艺术读书笔记		 todo
 kvm中断虚拟化逻辑中加中断直通link todo
-git submodule			 todo
+git submodule			 post
 IPI详细分析			 todo
 csr寄存器整理		         todo
