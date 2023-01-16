@@ -6,7 +6,10 @@ qemu goto tb分析
 简介：分析goto tb什么要在一个page内，使用的qemu代码的版本是v7.1.50。
 
  [qemu tcg跳转的处理](https://wangzhou.github.io/qemu-tcg跳转的处理/)中分析了qemu
- 中模拟跳转的逻辑jj
+ 中模拟跳转的逻辑，其中提到了chained tb的概念，chained tb中有一个限制，这个在它
+ 的代码实现里看出来：两个chained tb对应的guest指令需要在同一个guest的page里。下面
+ 分析这样限制的原因。
+
 ```
       VA1 ---> +---------------+ 
                |               |
@@ -55,7 +58,8 @@ qemu goto tb分析
 ```
  qemu在翻译执行的时候，对于tb有两个cache，首先所有生成的tb都会放到htable这个哈希表，
  这个是我们这里说的第一个cache，这个哈希表的key是guest代码块的起始pa以及一些其它的
- flag，另外一个cache叫tb_jmp_cache，这个是很简单的用guest代码块的起始va做key。
+ flag，另外一个cache叫tb_jmp_cache，这个是很简单的用guest代码块的起始va做key(这个
+ cache和本文分析的问题无关，对于它的分析，我们单独放到最后)。
 
  htable用pa以及flag做key，在翻译执行的时候首先会用va查tlb得到pa，如果tlb里没有缓存，
  那就触发page table walk或者取指令异常，终归是要把pa找到并填到tlb里。
@@ -64,11 +68,23 @@ qemu goto tb分析
  比如上图中从map2到map3映射的改变。从htable的设计上看，当这种映射关系改变的时候，
  旧映射对应的tb就应该从htable里删掉。
 
+ chained tb还需要面对的一个问题是，如果被指向的tb对应的guest指令被修改了怎么办，
+ 比如，上面tb2对应的guest指令被修改了，之前得到tb2显然是不能用了。qemu使用了一个叫
+ PageDesc的软件结构管理guest的物理内存，管理的单位是guest的页大小，一个PageDesc
+ 对应一个guest页，PageDesc记录着相关guest页对应的所有tb，理论上看，如果一个guest
+ 页上的指令有修改，qemu只要找到修改的guest指令对应的tb块，把这个tb块从chained tb
+ 的链条里移除就好。说说容易，真实做起来比较复杂，qemu这里做了两个事情，一个是只要
+ 看到有guest指令被修改，就把这一页上的指令对应的tb都移除，第二个就是goto_tb对应的
+ guest指令只能在一页，这样，把整个页对应的tb都移除，就把chained tb链条里的两个tb
+ 一下都移除了。
+
+ (todo: 代码分析)
+
+ 附tb_jmp_cache分析:
+ 
  tb_jmp_cache用va做key是存在问题的，一个系统里可能有相同的va映射到不同的pa，比如，
  两个进程的va相同，映射的pa就可能不同。所以，要保证在tb_jmp_cache里，va只唯一映射
  一个pa，当va到pa的映射改变的时候，tb_jmp_cache里
-
-
 
  store_helper
    +--> notdirty_write(env_cpu(env), addr, size, full, retaddr);
@@ -77,6 +93,3 @@ qemu goto tb分析
          +-> tb_phys_invalidate__locked(tb);
 	   +-> do_tb_phys_invalidate(tb, true);
 	     +-> qht_remove(&tb_ctx.htable, tb, h)
-
-
-
