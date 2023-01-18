@@ -1,7 +1,8 @@
 qemu goto tb分析
 ================
 
--v0.1 2023.1.13 Sherlock init
+-v0.1 2023.1.13  Sherlock init
+-v0.2 2023.1.18  Sherlock 分析tb_invalidate_phys_page_range__locked
 
 简介：分析goto tb什么要在一个page内，使用的qemu代码的版本是v7.1.50。
 
@@ -78,14 +79,47 @@ qemu goto tb分析
  guest指令只能在一页，这样，把整个页对应的tb都移除，就把chained tb链条里的两个tb
  一下都移除了。
 
- (todo: 代码分析)
-
- 附tb_jmp_cache分析:
+ PageDesc初始化的地方是page_init函数，可以看出相关的位置是各种tcg资源初始化的地方:
+```
+ /* accel/tcg/tcg-all.c */
+ tcg_init_machine
+   +-> page_init
+         /*
+	  * 这个函数里初始化PageDesc的各级表项的配置，它和页表类似的用一个多级表
+	  * 管理整个物理地址空间。
+	  *
+	  * 对于riscv 44bit的物理地址空间来说，如果一个PageDesc管理4KB的页面，
+	  * 整个物理地址空间的管理分为两级，第二级一项管理1K个页面，那么第一级有
+	  * 44 - 12 - 10 = 22，2 ^ 22项。
+	  */
+     +-> page_table_config_init
+   +-> tb_htable_init
+```
+ 通过物理地址找见PageDesc的函数：
+```
+ page_find_alloc
+```
+ 把一个tb加入到一个PageDesc里：
+```
+ tb_page_add 
+       /*
+        * 把tb插入first_tb指向的链表的第一个节点，n是1表示有指令跨域了一个page，
+	* 那么就要在两个page对应的PageDesc中都要做记录。
+        */
+   +-> tb->page_next[n] = p->first_tb
+   +-> p->first_tb = tb | n
+       /* 如果是第一次给这个PageDesc加tb，就要保护下这个page，这里的保护是？ */
+   +-> tlb_protect_code(page_addr)
+         /* softmmu/physmem.c */
+     +-> cpu_physical_memory_set_dirty_flag(ram_addr & TARGET_PAGE_MASK, TARGET_PAGE_SIZE, DIRTY_MEMORY_CODE);                
+```
+ 从PageDesc里去掉一个tb，直接从链表里去掉对应的tb即可：
+```
+ tb_page_remove(p, tb)
+```
  
- tb_jmp_cache用va做key是存在问题的，一个系统里可能有相同的va映射到不同的pa，比如，
- 两个进程的va相同，映射的pa就可能不同。所以，要保证在tb_jmp_cache里，va只唯一映射
- 一个pa，当va到pa的映射改变的时候，tb_jmp_cache里
-
+ PageDesc里tb被去掉的调用路径：(todo)
+```
  store_helper
    +--> notdirty_write(env_cpu(env), addr, size, full, retaddr);
      +-> tb_invalidate_phys_page_fast(pages, ram_addr, size, retaddr);
@@ -93,3 +127,61 @@ qemu goto tb分析
          +-> tb_phys_invalidate__locked(tb);
 	   +-> do_tb_phys_invalidate(tb, true);
 	     +-> qht_remove(&tb_ctx.htable, tb, h)
+```
+
+ 我们可以把gdb的断点设在tb_invalidate_phys_page_range__locked上，然后运行一段自修改
+ 代码([自修改代码可以参考这里](https://9to5answer.com/how-to-write-self-modifying-code-in-c))，看看实际运行的效果。
+
+ 实际上，在riscv 7.1.50的qemu tcg模拟中，只有一个4B指令跨越页边界这一种情况存在了。
+```
+ riscv_tr_translate_insn
+   [...]
+   /* Only the first insn within a TB is allowed to cross a page boundary. */  
+   if (ctx->base.is_jmp == DISAS_NEXT) {                                       
+       /*
+        *  pc_first       pc_next
+        *      |            |
+        *  |   v       |    v      |
+        *  +-----------+-----------+
+        *  |   Page    |   Page    |
+        *
+        */
+       if (!is_same_page(&ctx->base, ctx->base.pc_next)) {                     
+           ctx->base.is_jmp = DISAS_TOO_MANY;                                  
+       } else {                                                                
+           unsigned page_ofs = ctx->base.pc_next & ~TARGET_PAGE_MASK;          
+           /*
+            *  pc_first pc_next
+            *      |    |
+            *  |   v    v  |           |
+            *  +-----------+-----------+
+            *  |   Page    |   Page    |
+            *
+            *  这里就是pc_next为页尾 - 2Byte的情况，这种情况下，如果pc_next指向
+            *  的指令是一个2B的压缩编码指令，最后这个指令还可以放到当前tb，如果是
+            *  一个4B的普通指令，那么pc_next + len就到了下一个页里，需要结束当前
+            *  tb。
+            *
+            *  对于下个4B编码的指令，下次翻译先取16bit，得到是一个32bit指令后再
+            *  再把后16bit取出来，前端翻译后走到上面第一个分支里，发现已经跨越了
+            *  页边界，于是停止当前tb的翻译，这个tb里只翻译了一个跨越页边界的32bit
+            *  指令。
+            */ 
+           if (page_ofs > TARGET_PAGE_SIZE - MAX_INSN_LEN) {                   
+               uint16_t next_insn = cpu_lduw_code(env, ctx->base.pc_next);     
+               int len = insn_len(next_insn);                                  
+               if (!is_same_page(&ctx->base, ctx->base.pc_next + len)) {       
+                   ctx->base.is_jmp = DISAS_TOO_MANY;                          
+               }                                                               
+           }                                                                   
+       }                                                                       
+}                                                                           
+```
+
+ 附tb_jmp_cache分析:
+ 
+ tb_jmp_cache用va做key是存在问题的，一个系统里可能有相同的va映射到不同的pa，比如，
+ 两个进程的va相同，映射的pa就可能不同。所以，要保证在tb_jmp_cache里，va只唯一映射
+ 一个pa，当va到pa的映射改变的时候，tb_jmp_cache里
+
+
