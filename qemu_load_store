@@ -1,6 +1,11 @@
 -v0.1 2022.1.30 init
+-v0.2 2023.1.19 一年之后继续分析... 增加tlb框架、慢速路径以及page walk细节。
 
 简介：本文分析qemu tcg里关于load/store的流程，以riscv平台为分析对象。qemu的版本是5.1.50。
+
+
+load/store基本流程模拟
+-----------------------
 
 我们从一个普通的load指令的模拟代码入手分析。
 /* qemu/target/riscv/insn_trans/trans_rvi.c.inc */
@@ -24,15 +29,21 @@ tcg/riscv/tcg-target.c.inc里的tcg_out_qemu_ld_slow_path。
     -> tcg_out_op
          /* 可以看到这里分了有MMU和没有MMU的情况 */
       -> tcg_out_qemu_ld
-           /* 有MMU的情况，似乎tlb_load这个函数检测是否tlb可以直接命中，如果命中，直接就load数据了(todo: 继续分析) */
+           /*
+            * 有MMU的情况，似乎tlb_load这个函数检测是否tlb可以直接命中，如果命中，
+            * 直接就load数据了。
+            *
+            * 没有有MMU的情况, 计算地址后直接用tcg_out_qemu_ld_direct。
+            */
         -> tcg_out_tlb_load
-          /* tlb hit时，直接load完，为啥还要做下面add_qemu_ldst_label? */
+           /* tlb hit时，直接load完，为啥还要做下面add_qemu_ldst_label? */
         -> tcg_out_qemu_ld_direct
+          /* ? */
         -> add_qemu_ldst_label
-           /* 没有有MMU的情况, 计算地址后直接用tcg_out_qemu_ld_direct */
-           /* 这里没有看到gueset做tlb fill的代码 */
+
        /* tcg/tcg-ldst.c.inc, 为啥最后面才插入慢速路径代码? */
     -> tcg_out_ldst_finalize
+         /* tcg/riscv/tcg-target.c.inc */
       -> tcg_out_qemu_ld_slow_path
            /* 各种不同数据宽度的load函数被定义到qemu_ld_helpers这个表里 */
         -> qemu_ld_helpers
@@ -48,7 +59,12 @@ tcg/riscv/tcg-target.c.inc里的tcg_out_qemu_ld_slow_path。
   tlb_fill
        /* target/riscv/cpu.c */
     -> cc->tcg_ops_tlb_fill risv下是riscv_cpu_tlb_fill
-         /* 先做page walk，翻译成功自然可以，翻译失败报缺页异常 */
-         /* todo: 两级翻译 */
+         /*
+          * 先做page walk，翻译成功自然可以，翻译失败报缺页异常，我们把page walk
+          * 的逻辑分析独立放到下面。
+          */
       -> riscv_raise_exception
 ```
+
+riscv page walk分析
+--------------------

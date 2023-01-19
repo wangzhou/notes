@@ -3,8 +3,13 @@ qemu goto tb分析
 
 -v0.1 2023.1.13  Sherlock init
 -v0.2 2023.1.18  Sherlock 分析tb_invalidate_phys_page_range__locked
+-v0.3 2023.1.18  Sherlock 取指令/访存/set dirty分析
 
-简介：分析goto tb什么要在一个page内，使用的qemu代码的版本是v7.1.50。
+简介：分析goto tb什么要在一个page内，使用的qemu代码的版本是v7.1.50，分析基于riscv构架。
+
+
+goto tb分析
+------------
 
  [qemu tcg跳转的处理](https://wangzhou.github.io/qemu-tcg跳转的处理/)中分析了qemu
  中模拟跳转的逻辑，其中提到了chained tb的概念，chained tb中有一个限制，这个在它
@@ -85,15 +90,17 @@ qemu goto tb分析
  tcg_init_machine
    +-> page_init
          /*
-	  * 这个函数里初始化PageDesc的各级表项的配置，它和页表类似的用一个多级表
-	  * 管理整个物理地址空间。
-	  *
-	  * 对于riscv 44bit的物理地址空间来说，如果一个PageDesc管理4KB的页面，
-	  * 整个物理地址空间的管理分为两级，第二级一项管理1K个页面，那么第一级有
-	  * 44 - 12 - 10 = 22，2 ^ 22项。
-	  */
+          * 这个函数里初始化PageDesc的各级表项的配置，它和页表类似的用一个多级表
+          * 管理整个物理地址空间。
+          *
+          * 对于riscv 44bit的物理地址空间来说，如果一个PageDesc管理4KB的页面，
+          * 整个物理地址空间的管理分为两级，第二级一项管理1K个页面，那么第一级有
+          * 44 - 12 - 10 = 22，2 ^ 22项。
+          */
      +-> page_table_config_init
    +-> tb_htable_init
+       /* tcg后端翻译需要的资源 */
+   +-> tcg_init
 ```
  通过物理地址找见PageDesc的函数：
 ```
@@ -104,33 +111,44 @@ qemu goto tb分析
  tb_page_add 
        /*
         * 把tb插入first_tb指向的链表的第一个节点，n是1表示有指令跨域了一个page，
-	* 那么就要在两个page对应的PageDesc中都要做记录。
+        * 那么就要在两个page对应的PageDesc中都要做记录。
+        *
+        * 实际上在riscv的qemu tcg模型里，只有一种跨page边界的情况，我们把这个逻辑
+        * 独立放到下面。
         */
    +-> tb->page_next[n] = p->first_tb
    +-> p->first_tb = tb | n
-       /* 如果是第一次给这个PageDesc加tb，就要保护下这个page，这里的保护是？ */
+       /*
+        * 如果是第一次给这个PageDesc加tb，就是这个page上的指令第一次翻译出tb块，
+        * 把对应page的dirty bit清理(初始化)下。
+        *
+        * 如下的dirty bit和qemu里虚拟机的热迁移有关系。
+        */
    +-> tlb_protect_code(page_addr)
          /* softmmu/physmem.c */
-     +-> cpu_physical_memory_set_dirty_flag(ram_addr & TARGET_PAGE_MASK, TARGET_PAGE_SIZE, DIRTY_MEMORY_CODE);                
+     +-> cpu_physical_memory_test_and_clear_dirty
 ```
  从PageDesc里去掉一个tb，直接从链表里去掉对应的tb即可：
 ```
  tb_page_remove(p, tb)
 ```
  
- PageDesc里tb被去掉的调用路径：(todo)
+ PageDesc里tb被去掉的调用路径：(to do test)
 ```
  store_helper
    +--> notdirty_write(env_cpu(env), addr, size, full, retaddr);
      +-> tb_invalidate_phys_page_fast(pages, ram_addr, size, retaddr);
        +-> tb_invalidate_phys_page_range__locked
          +-> tb_phys_invalidate__locked(tb);
-	   +-> do_tb_phys_invalidate(tb, true);
-	     +-> qht_remove(&tb_ctx.htable, tb, h)
+           +-> do_tb_phys_invalidate(tb, true);
+             +-> qht_remove(&tb_ctx.htable, tb, h)
 ```
 
  我们可以把gdb的断点设在tb_invalidate_phys_page_range__locked上，然后运行一段自修改
  代码([自修改代码可以参考这里](https://9to5answer.com/how-to-write-self-modifying-code-in-c))，看看实际运行的效果。
+
+指令垮页分析
+-------------
 
  实际上，在riscv 7.1.50的qemu tcg模拟中，只有一个4B指令跨越页边界这一种情况存在了。
 ```
@@ -175,13 +193,12 @@ qemu goto tb分析
                }                                                               
            }                                                                   
        }                                                                       
-}                                                                           
+    }                                                                           
 ```
 
- 附tb_jmp_cache分析:
+tb_jmp_cache分析
+-----------------
  
  tb_jmp_cache用va做key是存在问题的，一个系统里可能有相同的va映射到不同的pa，比如，
  两个进程的va相同，映射的pa就可能不同。所以，要保证在tb_jmp_cache里，va只唯一映射
- 一个pa，当va到pa的映射改变的时候，tb_jmp_cache里
-
-
+ 一个pa，这个在user mode似乎没有问题，在system mode的完整逻辑还有待分析。(todo)
