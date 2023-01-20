@@ -1,5 +1,6 @@
 -v0.1 2022.1.30 init
--v0.2 2023.1.19 一年之后继续分析... 增加tlb框架、慢速路径以及page walk细节。
+-v0.2 2023.1.19 增加tlb框架、慢速路径
+-v0.2 2023.1.20 page walk细节
 
 简介：本文分析qemu tcg里关于load/store的流程，以riscv平台为分析对象。qemu的版本是5.1.50。
 
@@ -30,27 +31,74 @@ tcg/riscv/tcg-target.c.inc里的tcg_out_qemu_ld_slow_path。
          /* 可以看到这里分了有MMU和没有MMU的情况 */
       -> tcg_out_qemu_ld
            /*
-            * 有MMU的情况，似乎tlb_load这个函数检测是否tlb可以直接命中，如果命中，
-            * 直接就load数据了。
+            * 有MMU的情况，tlb_load这个函数检测是否tlb可以直接命中，如果命中，直接
+            * 就load数据了, 没有有MMU的情况, 计算地址后直接用tcg_out_qemu_ld_direct。
             *
-            * 没有有MMU的情况, 计算地址后直接用tcg_out_qemu_ld_direct。
+            * tlb查找直接用tb里生成的host汇编指令做了，得到pa放到TMP0寄存器里,
+            * 如下生成的host汇编里插入了跳转指令，如果tlb有命中就继续执行
+            * tcg_out_qemu_ld_direct里生成的汇编指令，如果tlb没有命中就跳转到慢速
+            * 路径的代码上执行，后端翻译到这里的时候还不能确定慢速路径的跳转目的
+            * 地址是什么，所以可以看到如下函数里生成的跳转指令的目标先配置成了0。
             */
-        -> tcg_out_tlb_load
-           /* tlb hit时，直接load完，为啥还要做下面add_qemu_ldst_label? */
-        -> tcg_out_qemu_ld_direct
-          /* ? */
-        -> add_qemu_ldst_label
-
-       /* tcg/tcg-ldst.c.inc, 为啥最后面才插入慢速路径代码? */
+        -> tcg_out_tlb_load(s, addr_regl, addr_regh, oi, label_ptr, 1)
+           /* tlb hit时，直接load完 */
+        -> tcg_out_qemu_ld_direct(s, data_regl, data_regh, base, opc, is_64)
+           /*
+            * 创建一个lable的描述信息，放到后端解码的上下文里，这里没有生成后端指令。
+            *
+            * 慢速路径的返回地址: label->raddr = tcg_splitwx_to_rx(code_ptr)
+            * 跳转指令的地址记录在: label->label_ptr[0]
+            */
+        -> add_qemu_ldst_label(s, 1, oi, (is_64 ? TCG_TYPE_I64 : TCG_TYPE_I32),                  
+                               data_regl, data_regh, addr_regl, addr_regh,             
+                               s->code_ptr, label_ptr)
+                               /*                                                      
+                                *    注意这里code_ptr已经是上面ld_direct生成指令的后面 
+                                *    一个地址了，而label_ptr里的内容还是bne指令对应的  
+                                *    地址。                                            
+                                *                tb code buff                          
+                                *                  ---+---                             
+                                *    find tlb --->    |                                
+                                *                     |                                
+                                *                     |                                
+                                *                     |                                
+                                *                    bne <-------- label_ptr[0]        
+                                *                     |                                
+                                *    direct ld --->   |                                
+                                *                     |                                
+                                *                    -+-                               
+                                *    code_ptr ------> |                                
+                                *                                                      
+                                * 所以，bne需要跳到慢速路径上，慢速路径的执行结果有两种
+                                * 1. 找见了pa，填充了tlb，这种情况应该回到快速路径上执行，
+                                *    可以看到慢速路径后面是返回到了code_ptr这里继续执行。
+                                * 2. 有异常产生，软件处理异常后，重新从ld指令开始翻译执行。
+                                */                                                     
+       /*
+        * tcg/tcg-ldst.c.inc, 解析ldst label, 生成慢速路径的代码，补上上面bne的
+        * 跳转目的地址。
+        */
     -> tcg_out_ldst_finalize
          /* tcg/riscv/tcg-target.c.inc */
       -> tcg_out_qemu_ld_slow_path
+           /*
+            * label_ptr[0]保存的是bne的地址, 但是注意这里的code_ptr是慢速路径指令
+            * 的起始地址，如下函数找见上面bne指令的地址，然后把慢速路径的跳转地址
+            * 补起来。
+            */                                         
+        -> reloc_sbimm12(l->label_ptr[0], tcg_splitwx_to_rx(s->code_ptr)))
+
            /* 各种不同数据宽度的load函数被定义到qemu_ld_helpers这个表里 */
-        -> qemu_ld_helpers
+        -> tcg_out_call(s, qemu_ld_helpers[opc & MO_SSIZE])
               /* 取ldul为例子，这是一个公共函数，定义在accel/tcg/cputlb */
            -> helper_le_ldul_mmu
                 /* accel/tcg/cputlb.c */
              -> load_helper
+
+           /* 如上的函数要把数据放到a0里，所以慢速路径是要把整个load执行完 */                                         
+        -> tcg_out_mov(s, (opc & MO_SIZE) == MO_64, l->datalo_reg, a0)
+
+        -> tcg_out_goto(s, l->raddr)
 ```
 
 在load_helper里做如上提到的load的各种硬件模拟。load_helper里对于没有找到tlb的情况
@@ -68,3 +116,5 @@ tcg/riscv/tcg-target.c.inc里的tcg_out_qemu_ld_slow_path。
 
 riscv page walk分析
 --------------------
+
+ Page walk的细节在独立的文档中分析。

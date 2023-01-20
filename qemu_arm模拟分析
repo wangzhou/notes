@@ -65,3 +65,8 @@ qemu模拟ARM构架综合分析
            /* 底层就是把定义的寄存器插入到cp_regs哈希表里 */
        +-> define_arm_cp_regs
 ```
+
+machine模拟
+------------
+
+ 我们只看virt平台的模拟逻辑，机器实例的初始化函数是machvirt_init。
