@@ -1,0 +1,67 @@
+qemu模拟ARM构架综合分析
+========================
+
+-v0.1 2023.1.19 Sherlock init
+
+简介：本文分析qemu模拟ARM平台的方式，我们并不会深入分析相关的技术细节，只是大概
+      看下整体构架，点出各个模拟的关键点，保证我们在随后的深入分析中可以迅速找见
+      相关代码。
+
+
+总体介绍
+---------
+
+ 一般我们看一个构架的模拟，可能涉及这几个方面：
+
+ - 非特权态指令模拟
+
+   这个模拟相对直接，主要做的工作是写中间码去模拟一条一条的指令，这些都是一些和
+   特权态无关的指令，涉及的主要是计算、跳转和load/store指令，这些指令一般改变通用
+   寄存器、内存以及PC寄存器的状态。
+
+ - 特权态指令模拟
+
+   特权指令可能会改变CPU的状态，相关的模拟可能和CPU异常处理有关系。ARMv8上使用
+   MSR/MRS两条指令，用系统寄存器的id访问系统寄存器，具体逻辑在下面整理。
+
+ - CPU内部中断异常模拟
+
+ - machine模拟
+
+ - 关键外设模拟
+
+ 一般我们只关心前端翻译就好，前端翻译的代码一般在hw/arm，target/arm这两个目录下,
+ hw/arm放machine相关的代码，arm的这个目录下放了一堆不同厂家的平台代码，一般我们
+ 只使用virt这个平台，smmu的代码也在这里，gic相关的代码在hw/intc，target/arm下放
+ 指令模拟和中断异常相关的代码，集中在cpu核的模拟。
+
+系统寄存器访问
+---------------
+
+ ARM64的前端翻译入口是aarch64_tr_translate_insn，ARM这里写的又点乱，直接解析指令
+ 的编码，根据编码的特定域段进入不同类指令的解码函数解码，比较起来RISCV写的就很清
+ 爽了，RISCV上把指令全部定义文件里，通过脚本自动生成一个decode函数，所有解码的行为
+ 直接调用decode函数就好。
+
+ 系统寄存器解码的调用路径是：
+```
+ /* target/arm/translate-a64.c */
+ aarch64_tr_translate_insn
+   +-> disas_b_exc_sys
+     +-> disas_system
+       +-> handle_sys(s, insn, l, op0, op1, op2, crn, crm, rt)
+         +-> get_arm_cp_reginfo
+```
+ 从get_arm_cp_reginfo可以看出，系统寄存器被保存在名为cp_regs的一个哈希表里，这个
+ 函数就是通过指令的各个域段作为key找到相关系统寄存器的描述结构体，寄存器的相关
+ 操作函数都定义在这个结构体里，在系统初始化的时候插入到cp_regs哈希表里:
+```
+ /* target/arm/cpu.c */
+ arm_cpu_realizefn
+   +-> register_cp_regs_for_features
+         /* 在V8这个分支定义相关和注册的寄存器 */
+     +-> if (arm_feature(env, ARM_FEATURE_V8))
+       [...]
+           /* 底层就是把定义的寄存器插入到cp_regs哈希表里 */
+       +-> define_arm_cp_regs
+```
