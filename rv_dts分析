@@ -65,7 +65,34 @@ CPU相关dts节点
  CPU和numa相关的信息描述在cpu-map里，一个cluster表示一个numa节点，相关的CPU core
  写到cluster里。
 
- 相关的内核代码分析(todo)
+ 相关的内核代码分析(todo): (mem/numa结构的解析也在这里?)
+```
+ start_kernel
+       /* arch/riscv/kernel/setup.c */
+   +-> setup_arch
+         /* 展开dtb的入口? */
+     +-> unflatten_device_tree
+         /* 解析riscv.isa字符串 */
+     +-> riscv_fill_hwcap
+```
+
+ 本地"中断控制器"的初始化触发路径是：
+```
+ start_kernel
+       /* arch/riscv/kernel/irq.c */
+   +-> init_IRQ
+     +-> irqchip_init
+           /*
+	    * 貌似会扫描__irqchip_of_table这个段里的所有中断控制器，然后调用它们
+	    * 的初始化函数。
+	    */
+       +-> of_irq_init(__irqchip_of_table)
+```
+ 这个中断控制器的驱动在drivers/irqchip/irq-riscv-intc.c, 这个驱动会把中断控制器
+ 相关的structure of_device_id放到__irqchip_of_table段里。
+ 
+ (todo: local irq和plic的整体软件构架)
+
 
 中断相关dts节点
 ----------------
