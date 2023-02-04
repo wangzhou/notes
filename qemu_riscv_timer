@@ -121,12 +121,22 @@ Linux内核逻辑
  内核timer初始化在：arch/riscv/kernel/time.c, time_init
  内核相关驱动的位置在：drivers/clocksource/timer-riscv.c
 
- 如上的timer驱动里会注册timer中断的处理函数riscv_timer_interrupt, 这个函数会进一步
- 调用clock_event_device里的event_handler回调函数，但是这个回调函数并不是在驱动里
- 直接提供的。
+ riscv timer的内核驱动把对应的of_device_id静态定义到__timer_of_table段里。time_init
+ 里的timer_probe会扫描__timer_of_table这个段里timer相关的of_device_id, 然后调用
+ 对应的初始化函数，这里就是调用riscv_timer_init_dt，这个函数会找见intc对应的domain，
+ 通过domain和S mode timer硬件中断号得到S mode timer对应中断的virq，最后向virq注册
+ S timer的中断处理函数：
+```
+ riscv_timer_init_dt
+   +-> riscv_clock_event_irq = irq_create_mapping(domain, RV_IRQ_TIMER)
+   +-> request_percpu_irq(riscv_clock_event_irq, riscv_timer_interrupt, ...)
+```
+
+ 但是继续看riscv_timer_interrupt的实现, 会发现这个函数会进一步调用clock_event_device
+ 里的event_handler回调函数，但是这个回调函数并不是在驱动里直接提供的。
 
  event_handler的注册逻辑是通过这个驱动里注册的cpu hotplu回调函数riscv_timer_starting_cpu
- 完成的，大概的调用逻辑如下：
+ 完成的，大概的调用逻辑如下，可以看见event_handler实际上是一个公共函数tick_handle_periodic。
 ```
 start_kernel
   +-> time_init

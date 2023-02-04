@@ -182,7 +182,7 @@ linux调度的细节分析		 to do
 per-cpu				 to do
 kvm虚拟机和host进程统一调度	 to do
 arm spec笔记			 continue
-riscv plic			 # 内核部分分析 1
+riscv plic			 # 内核部分分析 1      <------ todo
 opensbi再次整理			 to do
 多核启动整理                     # hsm
 rv全部异常定义分析		 to do
@@ -194,4 +194,6 @@ csr寄存器整理		         todo
 qemu goto tb再分析		 post #
 qemu内存模拟分析		 todo 4
 arm qemu模型分析		 todo 3
-linux timer内核代码分析          todo 2
+
+linux timer内核代码分析          todo 1    <------ todo
+tmux				 repost
