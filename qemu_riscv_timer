@@ -4,6 +4,7 @@ qemu riscv timer的基本逻辑
 -v0.2 2022.8.11  Sherlock 增加如何避免timer误差的逻辑, 是否和真是时间一致
 -v0.3 2022.9.15  Sherlock 增加event_handler的初始化逻辑
 -v0.4 2022.12.28 Sherlock 增加mtime/mtimecmp寄存器描述，sstc部分描述，U mode timer的描述
+-v0.5 2023.02.06 Sherlock 增加timer驱动分析
 
 简介：本文梳理riscv上timer的基本软硬件逻辑，硬件模型基于qemu，使用的qemu版本是6.2.0，
       内核代码分析使用的版本是v5.12-rc8。本文尽可能多的梳理riscv上timer相关的内容，
@@ -118,8 +119,9 @@ qemu逻辑 - RDTIME
 Linux内核逻辑
 --------------
 
- 内核timer初始化在：arch/riscv/kernel/time.c, time_init
- 内核相关驱动的位置在：drivers/clocksource/timer-riscv.c
+ 内核timer初始化在：arch/riscv/kernel/time.c的time_init。内核相关驱动的位置在：
+ drivers/clocksource/timer-riscv.c。截止到目前为止，S mode timer的内核patch还在
+ 社区评审，相关的连接在lwn.net/Articles/886863/。
 
  riscv timer的内核驱动把对应的of_device_id静态定义到__timer_of_table段里。time_init
  里的timer_probe会扫描__timer_of_table这个段里timer相关的of_device_id, 然后调用
@@ -157,3 +159,5 @@ start_kernel
 ```
  tick_handle_periodic就是每次时钟中断时要运行的逻辑，相关逻辑已经和调度有关系，
  在另外讲调度的文章里独立分析吧。
+
+ (todo: register clock source and clock event)

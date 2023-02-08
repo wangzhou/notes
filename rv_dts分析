@@ -4,9 +4,11 @@ RISCV DTS描述分析
 -v0.1 2023.1.30 Sherlock Init
 -v0.2 2023.1.31 Sherlock Continue
 -v0.3 2023.2.04 Sherlock Add plic/timer code analysis
+-v0.4 2023.2.08 Sherlock Continue cpu/mem dts parse
 
 简介：本文分析riscv的dts描述格式，分析用的是riscv qemu virt平台，我们将分析不同
-      启动参数下生成的dts格式。依赖的qemu版本是v7.1.50。
+      启动参数下生成的dts格式，重点分析CPU、中断控制器以及PCIe控制器的相关定义。
+      依赖的qemu版本是v7.1.50，依赖的内核版本是v6.1。
 
 背景介绍
 ---------
@@ -66,64 +68,37 @@ CPU相关dts节点
  CPU和numa相关的信息描述在cpu-map里，一个cluster表示一个numa节点，相关的CPU core
  写到cluster里。
 
- 相关的内核代码分析(todo): (mem/numa结构的解析也在这里?)
+ 相关的内核代码分析:
 ```
  start_kernel
        /* arch/riscv/kernel/setup.c */
    +-> setup_arch
-         /* 展开dtb的入口? */
-     +-> unflatten_device_tree
-         /* 解析riscv.isa字符串 */
-     +-> riscv_fill_hwcap
+   | +-> parse_dtb
+   | | +-> early_init_dt_scan
+   | |       /*
+   | |        * dts中memory节点的解析和添加memblock，这里会去掉0x80000000-0x80200000
+   | |        * 这段BIOS占用的内存。
+   | |        */
+   | |   +-> early_init_dt_scan_memory
+   | |     +-> early_init_dt_add_memory_arch
+   | |       +-> memblock_add
+   | |
+   | |   /* 展开dtb的入口? */
+   | +-> unflatten_device_tree
+   | |   /* 解析riscv.isa字符串 */
+   | +-> riscv_fill_hwcap
+   |   /*
+   |    * riscv上在arch/riscv/kernel/smpboot.c, 这里是CPU的numa拓扑的解析代码的
+   |    * 入口。
+   |    *
+   |    * 如何和内核numa相关结构建立上联系？
+   |    */
+   +-> smp_prepare_boot_cpu
+     +-> init_cpu_topology
+       +-> parse_dt_topology
 ```
-
- 本地"中断控制器"的初始化触发路径是：
-```
- start_kernel
-       /* arch/riscv/kernel/irq.c */
-   +-> init_IRQ
-     +-> irqchip_init
-           /*
-	    * 貌似会扫描__irqchip_of_table这个段里的所有中断控制器，然后调用它们
-	    * 的初始化函数。
-	    */
-       +-> of_irq_init(__irqchip_of_table)
-```
- 这个中断控制器的驱动在drivers/irqchip/irq-riscv-intc.c, 这个驱动会把中断控制器
- 相关的structure of_device_id放到__irqchip_of_table段里。of_irq_init会扫面dts里
- 所有的interrupt controller节点，并且按照最顶端的中断控制器依此向下遍历每个中断
- 控制器节点，调用其中的初始化函数。具体到riscv就是依此调用riscv_intc_init、plic_init
- 等，我们这里先考虑最简单的系统，即系统中只有plic。
  
- (todo: local irq和plic的整体软件构架)
-
-```
- riscv_intc_init
-       /*
-        * 初始化intc对应的irq domain, 在riscv64上为这个irq domain分了64个中断输入，
-	* 这里的输入就是cpu core上对应的各种中断类型，比如M mode timer中断、S mode
-	* 外部中断等。
-	*
-	* 这里并没有为每个具体的中断类型建立irq_desc以及建立硬件中断号到virq的映射，
-	* 我们下面可以看到，直到有具体的用户时，才会建立对应的virq。
-	*/
-   +-> irq_domain_add_linear
-   +-> set_handle_irq
-```
- set_handle_irq把riscv_intc_irq配置给handle_arch_irq，从entry.S的分析可以知道，
- CPU被中断时会跳到handle_arch_irq执行，所以riscv_intc_irq就是riscv上中断处理的总
- 入口。
-
- plic会汇集外设的中断，然后接入CPU的M mode external irq和S mode external irq，所以
- S mode external irq对应的irq_desc和virq是在plic初始化时做的，具体上plic的初始化
- 会找见plic的父中断控制器，就是intc，然后做相关操作:
-```
- __plic_init
-   +-> of_irq_parse_one
-   +-> plic_parent_irq = irq_of_parse_and_map
-       /* 配置intc外部中断对应的处理函数, todo: 展开细节 */
-   +-> irq_set_chained_handler
-```
+ plic内核代码分析可以参考这里[这里](https://wangzhou.github.io/riscv-plic基本逻辑分析/)。
 
 中断相关dts节点
 ----------------
@@ -169,7 +144,8 @@ plic@c600000 {
                                0x02 0x09>;
 ```
  可以看见interrupts-extended完整描述了plic的输出和CPU的关系，包括M mode和S mode
- 的外部中断。plic和CPU的逻辑关系可以参考[这里](https://wangzhou.github.io/riscv-plic基本逻辑分析/)。
+ 的外部中断。这种情况的最大问题是, 在numa系统里会有多个plic，一个numa节点上的plic
+ 只能连接本numa节点上的CPU。plic和CPU的逻辑关系可以参考[这里](https://wangzhou.github.io/riscv-plic基本逻辑分析/)。
 
  如下是只有aplic的dts节点，这里只写了numa0上的节点：
 ```
@@ -287,7 +263,9 @@ imsics@24000000 {
 timer相关dts节点
 -----------------
 
- 每个numa节点一个mtimer。stimer怎么描述？
+ 每个numa节点一个mtimer。stimer只是增加了相关的CSR寄存器，并没有抽象出一个timer
+ 设备，所以dts并没有stimer的节点。其实，从下面的内核代码可以看出，内核是不需要这
+ 里mtimer的节点信息的(todo: 原因分析)。
 ```
 mtimer@2000000 {                                                
         numa-node-id = <0x00>;                                  
@@ -303,7 +281,7 @@ mtimer@2008000 {
         compatible = "riscv,aclint-mtimer";                     
 };                                                              
 ```
- timer的内核代码分析可以参考[这里](https://wangzhou.github.io/riscv-timer的基本逻辑/)
+ timer的内核代码分析可以参考[这里](https://wangzhou.github.io/riscv-timer的基本逻辑/)。
 
 PCIe相关dts节点
 ----------------

@@ -1,6 +1,7 @@
 riscv plic基本逻辑分析
 
 -v0.1 2022.12.19 Sherlock init
+-v0.2 2023.02.06 Sherlock plic内核代码分析
 
 简介：本文分析riscv下plic中断控制器的基本逻辑，分析基于plic-1.0.0_rc5, qemu代码
       基于v7.1.50, Linux内核代码基于v6.1。
@@ -127,6 +128,70 @@ IPI4:         0  Timer broadcast interrupts
 内核实现
 ---------
 
- plic的Linux内核驱动在: linux/drivers/irqchip/irq-sifive-plic.c
+ plic的Linux内核驱动在: linux/drivers/irqchip/irq-sifive-plic.c，要理解plic的代码
+ 还需要理解intc的逻辑，intc是CPU core本地"中断控制器"，是CPU core内部处理中断逻辑
+ 的一个抽象，可以简单的理解intc的输入是各个CPU中断类型，输出是中断CPU。
 
- [to do]
+ 本地"中断控制器"的初始化触发路径是：
+```
+ start_kernel
+       /* arch/riscv/kernel/irq.c */
+   +-> init_IRQ
+     +-> irqchip_init
+           /*
+            * 扫描__irqchip_of_table这个段里的所有中断控制器，然后调用它们的初始
+	    * 化函数。
+            */
+       +-> of_irq_init(__irqchip_of_table)
+```
+ 这个中断控制器的驱动在drivers/irqchip/irq-riscv-intc.c, 这个驱动会把中断控制器
+ 相关的structure of_device_id放到__irqchip_of_table段里。of_irq_init会扫面dts里
+ 所有的interrupt controller节点，并且按照最顶端的中断控制器依此向下遍历每个中断
+ 控制器节点，调用其中的初始化函数。具体到riscv就是依此调用riscv_intc_init、plic_init
+ 等，我们这里先考虑最简单的系统，即系统中只有plic。
+ 
+```
+ riscv_intc_init
+       /*
+        * 初始化intc对应的irq domain, 在riscv64上为这个irq domain分了64个中断输入，
+        * 这里的输入就是cpu core上对应的各种中断类型，比如M mode timer中断、S mode
+        * 外部中断等。
+        *
+        * 这里并没有为每个具体的中断类型建立irq_desc以及建立硬件中断号到virq的映射，
+        * 我们下面可以看到，直到有具体的用户时，才会建立对应的virq。
+        */
+   +-> irq_domain_add_linear
+   +-> set_handle_irq
+```
+ set_handle_irq把riscv_intc_irq配置给handle_arch_irq，从entry.S的分析可以知道，
+ CPU被中断时会跳到handle_arch_irq执行，所以riscv_intc_irq就是riscv上中断处理的总
+ 入口。
+
+ plic会汇集外设的中断，然后接入CPU的M mode external irq和S mode external irq，所以
+ S mode external irq对应的irq_desc和virq是在plic初始化时做的，具体上，plic的初始化
+ 会找见plic的父中断控制器，就是intc，然后做相关操作:
+```
+ __plic_init
+       /*
+        * 通过plic dts中的interrupts-extended得到中断context的个数，简单情况下，
+        * 如果一个CPU core上有M mode external irq和S mode external irq，那么整个
+        * 系统上plic的context个数就是核数乘2。
+        */
+   +-> nr_contexts = of_irq_count(node)
+       /* 创建plic的irq domain */
+   +-> irq_domain_add_linear
+
+   +-> 针对每个context做如下迭代：
+         /*
+	  * 找到plic的父节点，并调用irq_create_of_mapping，得到S mode external irq
+	  * 的virq，这个过程会分配对应的irq_desc。
+	  */
+     +-> plic_parent_irq = irq_of_parse_and_map
+       +-> irq_create_of_mapping
+         /* 配置intc S mode外部中断对应的处理函数 */
+     +-> irq_set_chained_handler(plic_parent_irq, plic_handle_irq)
+```
+
+ 可以想象，一个中断连接到plic输入上的具体外设，应该是在外设对应的设备节点初始化
+ 的时候找见外设对应的plic节点，在plic irq domain上创建外设中断对应的irq_desc以及
+ virq。外设驱动里通过requst_irq接口把外设的中断处理函数注册给virq。
