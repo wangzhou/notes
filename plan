@@ -188,4 +188,5 @@ arm qemu模型分析		 todo
 linux timer内核代码分析          todo
 tmux				 repost
 riscv timer			 repost
+rv dts				 repost
 aia imsic细节分析		 todo
