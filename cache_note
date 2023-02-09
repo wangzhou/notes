@@ -134,7 +134,7 @@ cache line是相同的。当对A地址引用后，再对B地址引用，由于ca
 ```
         for (i = 0; i < NUM; i++) {
         	tmp = *(A + i) * *(B + i);
-		value += tmp;
+        	value += tmp;
         }
 ```
 组相连cache因为一个set里有多个cache line, 还可以在set这一维度引入很多处理算法，

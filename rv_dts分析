@@ -327,4 +327,5 @@ pci@30000000 {
         #address-cells = <0x03>;                                
 };                                                              
 ```
- 是PCIe控制器INTx中断的配置，ranges是MEM/IO窗口的配置，reg是ECAM空间的配置。
+ interrupt-map/interrupt-map-map是PCIe控制器INTx中断的配置，ranges是MEM/IO窗口的
+ 配置，reg是ECAM空间的配置。
