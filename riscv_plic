@@ -140,7 +140,7 @@ IPI4:         0  Timer broadcast interrupts
      +-> irqchip_init
            /*
             * 扫描__irqchip_of_table这个段里的所有中断控制器，然后调用它们的初始
-	    * 化函数。
+            * 化函数。
             */
        +-> of_irq_init(__irqchip_of_table)
 ```
@@ -183,9 +183,9 @@ IPI4:         0  Timer broadcast interrupts
 
    +-> 针对每个context做如下迭代：
          /*
-	  * 找到plic的父节点，并调用irq_create_of_mapping，得到S mode external irq
-	  * 的virq，这个过程会分配对应的irq_desc。
-	  */
+          * 找到plic的父节点，并调用irq_create_of_mapping，得到S mode external irq
+          * 的virq，这个过程会分配对应的irq_desc。
+          */
      +-> plic_parent_irq = irq_of_parse_and_map
        +-> irq_create_of_mapping
          /* 配置intc S mode外部中断对应的处理函数 */
