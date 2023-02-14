@@ -182,11 +182,8 @@ ELF/PE启动			 continue(uboot EFI)
 unix编程艺术读书笔记		 todo
 IPI详细分析			 todo
 csr寄存器整理		         todo
-qemu goto tb再分析		 contiue(制造tb清理)
+qemu goto tb再分析		 contiue(制造tb清理) -- 自修改代码分析
 qemu内存模拟分析		 todo
 arm qemu模型分析		 todo
 linux timer内核代码分析          todo
-tmux				 repost
-riscv timer			 repost
-rv dts				 repost
 aia imsic细节分析		 todo
