@@ -187,3 +187,6 @@ qemu内存模拟分析		 todo
 arm qemu模型分析		 todo
 linux timer内核代码分析          todo
 aia imsic细节分析		 todo
+qemu取指令分析/访问host内存分析  todo
+qemu tlb分析			 todo
+测试一个tb对应不同的代码	 todo
