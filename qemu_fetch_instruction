@@ -1,0 +1,61 @@
+qemu tcg取指令逻辑分析
+======================
+
+-v0.1 2023.2.16 Sherlock init
+
+简介：本文分析qemu tcg里vCPU取指令实现逻辑的分析，基于的qemu版本是v7.1.50，分析
+      基于riscv平台。
+
+
+基本逻辑
+---------
+
+ qemu的基本的执行模型是翻译guest代码到tb和在host上执行tb两个动作交替进行，所以vCPU
+ 取指令发生在翻译guest代码这个步骤。取指令是要通过guest VA得到guest PA，进而的到
+ host VA，然后就可以得到host VA上的guest指令，其中guest VA到guest PA可能TLB hit，
+ 也可能要经过page table walk，还有可能触发异常，借助软件把页补齐，guest PA和host
+ VA通常就是一个固定的偏移。
+
+ 指令翻译是一条一条进行的，但是终归在一个page内，所以在开始翻译一段指令之前可以
+ 先计算得到对应的host VA，这样后面的翻译，只要还是在相同page内，host VA就不变。
+
+代码分析
+---------
+
+```
+ tb_gen_code
+       /*
+        * phys_pc是guest PA，pc是guest VA，host_pc是host VA。在tb翻译开始时，先
+	* 得到各种地址。
+        */
+   +-> phys_pc = get_page_addr_code_hostp(env, pc, &host_pc);                      
+         /*
+          * 先看TLB是否命中，TLB不命中会触发page table walk，tlb_fill里的page
+          * table walk失败后会直接触发异常。
+          *
+          * TLB相关的分析可以参考[这里](todo)。
+          */
+     +-> probe_access_internal
+
+   +-> gen_intermediate_code(cpu, tb, max_insns, pc, host_pc);                     
+     +-> translator_loop(cs, tb, max_insns, pc, host_pc, &riscv_tr_ops, &ctx.base);  
+
+       +-> db->host_addr[0] = host_pc;                                                 
+           /* 反复执行单条指令的翻译 */
+       +-> riscv_tr_translate_insn(DisasContextBase *dcbase, CPUState *cpu);
+             /* 得到当前指令的编码 */
+         +-> opcode16 = translator_lduw(env, &ctx->base, ctx->base.pc_next);    
+               /*
+                * 这里会直接用上面db->host_addr[0]里的值的到host VA，但是也可能
+                * guest的指令会跨过页边界，这个时候就有可能要再走一下get_page_addr_code_hostp
+                * 的流程，得到下一页的host VA。
+                */
+           +-> void *p = translator_access(env, db, pc, sizeof(ret));                      
+               /* 如果可以得到host VA，那么直接memcpy就可以得到指令编码 */
+           +-> lduw_p(p);
+               /* */
+           +-> cpu_lduw_code(env, pc);
+             +-> load_helper
+```
+
+
