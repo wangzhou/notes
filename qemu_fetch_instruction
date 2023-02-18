@@ -30,23 +30,24 @@ qemu tcg取指令逻辑分析
  代码在不同的page里，qemu取指令就不能直接跳过去，它必须要么做guest代码翻译要么做
  tb哈希表搜索，而这两者都做guest VA到guest PA的地址翻译。
 
- 那么我们能否去掉chain tb只能在一页内这个限制？相关的逻辑可以参考[这里](todo)。
+ 那么我们能否去掉chain tb只能在一页内这个限制？相关的逻辑可以参考[这里](https://wangzhou.github.io/qemu-tcg-goto-tb分析/)。
 
 代码分析
 ---------
-
+ 
+ 如下是qemu翻译执行时取指令的代码逻辑：
 ```
  tb_gen_code
        /*
         * phys_pc是guest PA，pc是guest VA，host_pc是host VA。在tb翻译开始时，先
-	* 得到各种地址。
+        * 得到各种地址。
         */
    +-> phys_pc = get_page_addr_code_hostp(env, pc, &host_pc);                      
          /*
           * 先看TLB是否命中，TLB不命中会触发page table walk，tlb_fill里的page
           * table walk失败后会直接触发异常。
           *
-          * TLB相关的分析可以参考[这里](todo)。
+          * TLB相关的分析可以参考[这里](https://wangzhou.github.io/qemu-tlb实现分析/)。
           */
      +-> probe_access_internal
 
@@ -66,9 +67,15 @@ qemu tcg取指令逻辑分析
            +-> void *p = translator_access(env, db, pc, sizeof(ret));                      
                /* 如果可以得到host VA，那么直接memcpy就可以得到指令编码 */
            +-> lduw_p(p);
-               /* */
+               /* 不明白什么逻辑会走到这里? */
            +-> cpu_lduw_code(env, pc);
              +-> load_helper
 ```
 
-
+ 如下tb搜索时的逻辑：
+```
+ tb_lookup
+   +-> tb_htable_lookup(cpu, pc, cs_base, flags, cflags);                     
+     +->phys_pc = get_page_addr_code(desc.env, pc);                                 
+       +-> get_page_addr_code_hostp(env, addr, NULL);                           
+```

@@ -66,7 +66,7 @@ typedef struct CPUTLBEntry {
  化指令触发相关的逻辑。当虚拟地址到物理地址的映射改变时，就需要做TLB的无效化操作，
  相关指令可以有不同的参数，定义TLB无效化的范围。
 
- qemu取指令的基本逻辑可以参考[这里](todo)。qemu load/store的基本逻辑可以参考[这里]()。
+ qemu取指令的基本逻辑可以参考[这里](https://wangzhou.github.io/qemu-tcg取指令逻辑分析/)。qemu load/store的基本逻辑可以参考[这里](https://wangzhou.github.io/qemu-tcg访存指令模拟/)。
 
 代码分析
 ---------
@@ -100,7 +100,7 @@ typedef struct CPUTLBEntry {
              +-> tlb_reset_dirty_range_locked
 ```
  
- 数据的load/store访问，总是要进过TLB的，相关的逻辑可以参考[这里](todo)，当TLB的
+ 数据的load/store访问，总是要进过TLB的，相关的逻辑可以参考[这里](https://wangzhou.github.io/qemu-tcg访存指令模拟/)，当TLB的
  flag区域里有标记时会强制进入load/store的慢速路径，在慢速路径里处理各种TLB flag，
  慢速路径里有专门对TLB_MOTDIRTY的处理，所以，对于代码页面，当程序把页面改成可写，
  然后改动代码，继续执行改动过的代码，就会出问题，因为guest代码可能已经被翻译到tb里，
