@@ -2,6 +2,7 @@ qemu tcg取指令逻辑分析
 ======================
 
 -v0.1 2023.2.16 Sherlock init
+-v0.2 2023.2.17 Sherlock 增加取指令分析的方式
 
 简介：本文分析qemu tcg里vCPU取指令实现逻辑的分析，基于的qemu版本是v7.1.50，分析
       基于riscv平台。
@@ -11,13 +12,25 @@ qemu tcg取指令逻辑分析
 ---------
 
  qemu的基本的执行模型是翻译guest代码到tb和在host上执行tb两个动作交替进行，所以vCPU
- 取指令发生在翻译guest代码这个步骤。取指令是要通过guest VA得到guest PA，进而的到
- host VA，然后就可以得到host VA上的guest指令，其中guest VA到guest PA可能TLB hit，
- 也可能要经过page table walk，还有可能触发异常，借助软件把页补齐，guest PA和host
- VA通常就是一个固定的偏移。
+ 取指令这个动作可能发生在很多地方。它可以发生在翻译guest代码这个步骤，这时guest
+ 指令还没有翻译到tb里；它也可以发生在qemu搜tb哈希表这个步骤，qemu可能把相关的guest
+ 代码已经翻译到tb里了，所以也可以从这里“取指令”; qemu可以把tb chain起来，从一个tb
+ 直接跳到一个tb，我们也可以把这个tb跳转理解成一种取指令的方式。
 
+ 翻译guest代码要通过guest VA得到guest PA，进而的到host VA，然后就可以得到host VA
+ 上的guest指令，其中guest VA到guest PA可能TLB hit，也可能要经过page table walk，
+ 还有可能触发异常，借助软件把页补齐，guest PA和hostVA通常就是一个固定的偏移。
  指令翻译是一条一条进行的，但是终归在一个page内，所以在开始翻译一段指令之前可以
  先计算得到对应的host VA，这样后面的翻译，只要还是在相同page内，host VA就不变。
+
+ qemu搜tb哈希表时，要先做地址翻译得到guest VA对应的guest PA，然后用guest PA以及
+ 其它参数作为key去tb哈希表里搜索。
+
+ chain tb之间来回跳转，但是qemu规定chain tb只能在一个page的范围内，这样一旦guest
+ 代码在不同的page里，qemu取指令就不能直接跳过去，它必须要么做guest代码翻译要么做
+ tb哈希表搜索，而这两者都做guest VA到guest PA的地址翻译。
+
+ 那么我们能否去掉chain tb只能在一页内这个限制？相关的逻辑可以参考[这里](todo)。
 
 代码分析
 ---------
