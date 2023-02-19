@@ -1,4 +1,4 @@
-QEMU中basic block以及tcg中各种变量的基本逻辑
+qemu中basic block以及tcg中各种变量的基本逻辑
 ---------------------------------------------
 
 -v0.1 2022.8.27 Sherlock init
@@ -29,7 +29,7 @@ QEMU中basic block以及tcg中各种变量的基本逻辑
  举一个arm里的例子：target/arm/translate.c
 ```
  static bool trans_LE
- 	[...]
+        [...]
         TCGv_i32 decr = tcg_temp_local_new_i32();                               
         TCGv_i32 ltpsize = load_cpu_field(v7m.ltpsize);                         
         tcg_gen_sub_i32(decr, tcg_constant_i32(4), ltpsize);                    
@@ -40,7 +40,7 @@ QEMU中basic block以及tcg中各种变量的基本逻辑
                                                                                 
         tcg_gen_sub_i32(cpu_R[14], cpu_R[14], decr);                            
         tcg_temp_free_i32(decr);                                                
-	[...]
+        [...]
 ```
  这里的decr就要是一个local temporary，因为这个变量在brcon_i32的前后都要使用，已经
  跨越了两个BB，这里的decr换成temporary变量就会出错。
@@ -48,4 +48,4 @@ QEMU中basic block以及tcg中各种变量的基本逻辑
 QEMU代码分析
 ------------
 
-
+ (todo)

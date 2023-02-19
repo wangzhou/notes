@@ -14,10 +14,9 @@ qemu goto tb分析
 goto tb分析
 ------------
 
- [qemu tcg跳转的处理](https://wangzhou.github.io/qemu-tcg跳转的处理/)中分析了qemu
- 中模拟跳转的逻辑，其中提到了chained tb的概念，chained tb中有一个限制，这个在它
- 的代码实现里看出来：两个chained tb对应的guest指令需要在同一个guest的page里。下面
- 分析这样限制的原因。
+ [qemu tcg跳转的处理](https://wangzhou.github.io/qemu-tcg跳转的处理/)中分析了qemu中模拟跳转的逻辑，其中提到了chained tb的概念，
+ chained tb中有一个限制，这个在它的代码实现里看出来：两个chained tb对应的guest
+ 指令需要在同一个guest的page里。下面分析这样限制的原因。
 
 ```
       VA1 ---> +----------+ 

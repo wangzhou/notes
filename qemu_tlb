@@ -85,6 +85,7 @@ typedef struct CPUTLBEntry {
               */
          +-> write_address |= TLB_MOTDIRTY;
 ```
+ (todo: 补充大页和iommu的逻辑)
 
 创建tb时也会配置代码所在page对应TLB的TLB_MOTDIRTY标记，这里TLB_MOTDIRTY是专门针对
 指令页面的。
@@ -115,7 +116,4 @@ typedef struct CPUTLBEntry {
  chain tb只能在一个page内，所以tb在一个page内跳来跳去是安全的。当guest的执行逻辑
  进入一个新page时，取指令的时候，必然要做TLB相关的操作。
  
- tlb里的dirty是在创建tlb的时候配置进去的，tlb_set_page, 各个架构里调用
-
- tlb无效化的逻辑。todo
-
+ (todo: 补充tlb无效化的逻辑)

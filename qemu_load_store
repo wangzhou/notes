@@ -1,9 +1,12 @@
 -v0.1 2022.1.30 init
 -v0.2 2023.1.19 增加tlb框架、慢速路径
 -v0.3 2023.1.20 page walk细节
+-v0.4 2023.2.19 增加取指令的超链接
 
 简介：本文分析qemu tcg里关于load/store的流程，以riscv平台为分析对象。qemu的版本是5.1.50。
-
+      CPU访存主要有使用load/store的显示访存也有隐式访存，比如CPU取指令就属于一种
+      隐式访存，qemu对CPU取指令的模拟逻辑可以参考: htts://wangzhou.github.io/qemu-tcg取指令逻辑分析/
+      
 
 load/store基本流程模拟
 -----------------------

@@ -142,7 +142,6 @@ linux kvm/riscv spec		 #
 
 qemu listener			 to do
 linux scheduler			 to do
-qemu bb以及temp和local temp	 to post/还有代码分析没有写
 linux 不可屏蔽中断		 to do
 riscv pmu逻辑分析		 to do
 riscv vector			 to do
@@ -182,10 +181,11 @@ ELF/PE启动			 continue(uboot EFI)
 unix编程艺术读书笔记		 todo
 IPI详细分析			 todo
 csr寄存器整理		         todo
-qemu goto tb再分析		 repost(制造tb清理) -- 自修改代码分析
+qemu goto tb再分析		 repost(制造tb清理) -- 自修改代码分析 5
 qemu内存模拟分析		 todo
-arm qemu模型分析		 todo
+arm qemu模型分析		 todo 3
 linux timer内核代码分析          todo
 aia imsic细节分析		 todo
-qemu取指令分析/访问host内存分析  post
-qemu tlb分析			 post
+qemu取指令分析/访问host内存分析  post 2
+qemu tlb分析			 post 1
+qemu bb以及temp和local temp	 to post/还有代码分析没有写 4

@@ -66,7 +66,23 @@ qemu模拟ARM构架综合分析
        +-> define_arm_cp_regs
 ```
 
+CPU内部中断异常模拟
+--------------------
+
+ (todo: )
+
 machine模拟
 ------------
 
  我们只看virt平台的模拟逻辑，机器实例的初始化函数是machvirt_init。
+
+ (todo: 启动、多核、NUMA)
+
+关键外设模拟
+-------------
+
+ ARM64的关键外设有GIC中断控制器和SMMU。
+
+ (todo: GIC)
+
+ SMMU的qemu模拟逻辑可以参考[这里](https://wangzhou.github.io/qemu-iommu模拟思路分析/)。
