@@ -132,6 +132,7 @@ chained tb之间的关系可以用如下的图来描述：
    +-> tb_jmp_unlink(tb)
 ```
 
+ 如上已经介绍了goto tb相关的关键逻辑，下面进一步看下qemu PageDesc相关的整体实现。
  PageDesc初始化的地方是page_init函数，可以看出相关的位置是各种tcg资源初始化的地方:
 ```
  /* accel/tcg/tcg-all.c */
@@ -188,8 +189,16 @@ chained tb之间的关系可以用如下的图来描述：
      +-> tb_invalidate_phys_page_fast(pages, ram_addr, size, retaddr);
        +-> tb_invalidate_phys_page_range__locked
          +-> tb_phys_invalidate__locked(tb);
+               /* 如上讲的guest代码被修改后，需要移除对应的tb，相关逻辑的入口是这里*/
            +-> do_tb_phys_invalidate(tb, true);
+                 /* 移除htable里的tb */
              +-> qht_remove(&tb_ctx.htable, tb, h)
+                 /* 移除PageDesc里的tb */
+             +-> tb_page_remove
+	         /* 从tb链条里移除tb */
+             +-> tb_remove_from_jmp_list(tb, 0);                                             
+             +-> tb_remove_from_jmp_list(tb, 1);                                             
+             +-> tb_jmp_unlink(tb);                                                          
 ```
 
  我们可以把gdb的断点设在tb_invalidate_phys_page_range__locked上，然后运行一段自修改

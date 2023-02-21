@@ -188,4 +188,4 @@ linux timer内核代码分析          todo
 aia imsic细节分析		 todo
 qemu取指令分析/访问host内存分析  post 2
 qemu tlb分析			 post 1
-qemu bb以及temp和local temp	 to post/还有代码分析没有写 4
+qemu bb以及temp和local temp	 to post/还有代码分析没有写 4 --> 重要
