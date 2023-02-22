@@ -154,7 +154,6 @@ link script			 to do
 riscv qemu地址翻译		 to do 1
 riscv reset逻辑分析		 to do 2
 riscv 虚拟化中断直通		 todo         #####
-riscv 内存模型(重要)  	  	 to do
 riscv wfi			 to do
 linux/kernel/hung_task.c	 to do
       kernel/watchdog.c
@@ -181,11 +180,12 @@ ELF/PE启动			 continue(uboot EFI)
 unix编程艺术读书笔记		 todo
 IPI详细分析			 todo
 csr寄存器整理		         todo
-qemu goto tb再分析		 repost(制造tb清理) -- 自修改代码分析 5
+qemu goto tb再分析		 c(制造tb清理) -- 自修改代码分析 5
 qemu内存模拟分析		 todo
-arm qemu模型分析		 todo 3
+arm qemu模型分析		 c
 linux timer内核代码分析          todo
 aia imsic细节分析		 todo
-qemu取指令分析/访问host内存分析  post 2
-qemu tlb分析			 post 1
-qemu bb以及temp和local temp	 to post/还有代码分析没有写 4 --> 重要
+qemu tlb分析			 c
+qemu bb以及temp和local temp	 c 还有代码分析没有写 4 --> 重要
+riscv 内存模型(重要)  	  	 to do
+全部文档csdn链接的修改		 to do

@@ -283,9 +283,9 @@ trasaction with va |
 
 Reference
 
-[1] http://blog.csdn.net/scarecrow_byr/article/details/53844162
-[2] https://blog.csdn.net/scarecrow_byr/article/details/52348234
-[3] https://blog.csdn.net/scarecrow_byr/article/details/53844162
-[4] https://blog.csdn.net/scarecrow_byr/article/details/104606571
-[5] https://blog.csdn.net/scarecrow_byr/article/details/100983619
-[6] https://blog.csdn.net/scarecrow_byr/article/details/51494401
+[1] https://wangzhou.github.io/PCI-SMMU-parse-in-ACPI/
+[2] https://wangzhou.github.io/PCI-ACPI笔记2/
+[3] https://wangzhou.github.io/PCI-SMMU-parse-in-ACPI/
+[4] https://wangzhou.github.io/vSVA逻辑分析/
+[5] https://wangzhou.github.io/Linux-SVA特性分析/
+[6] https://wangzhou.github.io/Linux-vfio-driver-arch-analysis/
