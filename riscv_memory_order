@@ -46,7 +46,7 @@ riscv内存序规则
 
  第二条规则就比较绕了，直接翻译是，a和b是load操作，x是a和b读到的值，a和b之间没有对x
  这个值的修改(?)，a和b load的值会被不同的内存写操作改变，这个规则翻译出来还是比较
- 费解？
+ 费解？(todo: xxx)
 
  第三条规则是说，后面的load不能超过之前由AMO/SC触发的写操作，直观的理解也是这样。
 
@@ -79,7 +79,7 @@ riscv内存序规则
          +-------------+          
 ```
  第七条规则中的RCsc指的是Release Consistency with sequentially-consistent synchronization
- operation。(引用了一篇经典的论文?)
+ operation。(todo: 引用了一篇经典的论文?)
 
  第八条规则说的a和b是一个pair，是说lr/sc指令组成的pair。
 
@@ -112,6 +112,7 @@ riscv内存序规则
  beqi a0, #1, lable     if (a == 1)           if (a == 1)
  store a2, a3(0)            write(p2, b);         c = read(p2);
 ```
+ 这条规则是多么的反直觉，但是既然定义成了规则，它就是软硬件约定的编程接口！
 
 ```
 • Pipeline Dependencies 
