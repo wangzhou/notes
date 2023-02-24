@@ -24,9 +24,12 @@ riscv内存模型分析
 
 riscv内存序规则
 ----------------
- 
- riscv在Chapter 14定义Preserved Program Order，其中有13条规则(rule)，大部分是符合
- 我们的直观的认识，但是也有一些和直观的认知是不同的。我们逐条看下这写规则:
+
+ riscv在Chapter 14定义了它的弱内存序，定义的逻辑是这样的，"Memory Model Primitives"
+ 这一节是一些术语的定义，"Syntactic Dependencies"这一节定义的是两个指令关系的名称，
+ 这一节并没有定义内存序的规则，后面定义规则时依赖这一节里定义的指令关系，"Preserved Program Order"
+ 这一节定义的是riscv弱内存序的规则，这一节是这一章的主体，一共定义了13条规则(rule)，
+ 大部分是符合我们的直观的认识，但是也有一些和直观的认知是不同的。我们逐条看下这些规则:
 ```
 • Overlapping-Address Orderings
 
@@ -89,11 +92,25 @@ riscv内存序规则
 
   11. b is a store, and b has a syntactic control dependency on a 
 ```
- 这几条规则说的是指令之间语意上的依赖，和最开始访存地址重合的依赖比较类似。需要
- 注意的是规则11，控制依赖里面，后面的store的顺序是不能乱的，这里没有提load，也就
- 是说load是可以乱的，todo详细分析：
+ 这几条规则说的是指令之间语意上的依赖，和最开始访存地址重合的依赖比较类似。
+
+ 需要注意的是规则11，这条规则提到了“控制依赖”，控制依赖的定义是，指令a和指令b，
+ 如果中间还有一条分支或者间接跳转指令(branch and indirect jump)m，如果a和m存在
+ Syntactic Dependencies，那么b和a之间就存在一个控制依赖，而规则11是说，在a和b之间
+ 存在一个控制依赖时，如果b是个store指令，那么a和b是不能乱序的。
+
+ riscv spec里在“Syntactic Dependencies”这一节定义各种依赖关系的定义，但是只是说
+ 当两条指令满足某种情况时，它们之间叫什么关系，并不是满足这种关系后就有序的约束，
+ riscv spec随后在“Preserved Program Order”这一节借助"Syntactic Dependencies"的定义，
+ 描述内存序的约束，规则9和规则10，直接就说满足地址依赖和数据依赖的两条指令有内存
+ 序上的约束，而规则11是说在满足控制依赖关系时，只对后面是store的情况有序上的约束。
+
+ 规则11的代码示意如下，左边两个是不会乱序的情况，其中一个是汇编实现，一个是对应的
+ C语言实现，最右边的是需要加读barrier的场景。
 ```
- todo
+ load a0, a1(0)         a = read(p1);         a = read(p1); <--- 这个read后需要一个读barrier
+ beqi a0, #1, lable     if (a == 1)           if (a == 1)
+ store a2, a3(0)            write(p2, b);         c = read(p2);
 ```
 
 ```
