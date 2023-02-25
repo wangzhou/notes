@@ -3,6 +3,7 @@ riscv内存模型分析
 
 -v0.1 2023.2.23 Sherlock init
 -v0.2 2023.2.24 Sherlock 增加riscv内存序规则
+-v0.3 2023.2.24 Sherlock 规则2和其它一些增补修改
 
 简介：本文整理riscv的内存模型，基于riscv unprivileged ISA 20191213这个版本。其实
       对于使用弱内存序的构架，它们的内存模型都是比较相似的，无非是细节上有可能有
@@ -22,6 +23,12 @@ riscv内存模型分析
  专门做了这些规则的解释(RVWMO Explanatory Material, Version 0.1)，在附录里还有内存
  序相关的形式化验证模型(Formal Memory Model Specifications, Version 0.1)。
 
+ 注意内存序(consistency)和cache一致性(coherence)是两个不同的概念，前者是说的是硬件
+ 故意放松一些指令执行上的循序，依此来提高硬件性能，指令的这种乱序行为是程序员可以
+ 直接感知的，本文讨论的就是内存序的相关问题，而后者指的是，多核系统上，因为多核
+ 共享内存或者cache而引发的数据存储一致性上的问题，硬件需要用一定的cache一致性协议
+ (比如MESI协议)在硬件层面解决这个问题。
+
 riscv内存序规则
 ----------------
 
@@ -29,7 +36,10 @@ riscv内存序规则
  这一节是一些术语的定义，"Syntactic Dependencies"这一节定义的是两个指令关系的名称，
  这一节并没有定义内存序的规则，后面定义规则时依赖这一节里定义的指令关系，"Preserved Program Order"
  这一节定义的是riscv弱内存序的规则，这一节是这一章的主体，一共定义了13条规则(rule)，
- 大部分是符合我们的直观的认识，但是也有一些和直观的认知是不同的。我们逐条看下这些规则:
+ 随后在"Memory Model Axioms"这一节里定义了三条公理(Axioms)，这些约束大部分是符合
+ 我们的直观的认识，但是也有一些和直观的认知是不同的。学习这些规则时，我们要认识到
+ 这些规则之外的情况，这些情况都是可以乱序的，barrier指令正是对有可能出现的乱序情况
+ 的约束。下面逐条看下这些规则:
 ```
 • Overlapping-Address Orderings
 
@@ -44,11 +54,17 @@ riscv内存序规则
 ```
  访存地址有重合的情况，第一条规则是说后面的store不能跑到前面的指令之前执行。
 
- 第二条规则就比较绕了，直接翻译是，a和b是load操作，x是a和b读到的值，a和b之间没有对x
- 这个值的修改(?)，a和b load的值会被不同的内存写操作改变，这个规则翻译出来还是比较
- 费解？(todo: xxx)
+ 第二条规则就比较绕了，直接翻译是，a和b是load操作，x是a和b读到的值，a和b之间没有
+ store修改x内存里的值，a和b load的值会被不同的内存写操作改变。这一条规则进一步的
+ 解释是，两个load读同一个地址上值，新的load不能读到旧load读到的值，但是，还有进一步
+ 考虑两种情况，第一种是a和b之间有store修改x的值，这种情况下a和b不保序，第二种情况
+ 是，a和b读到的值是被不同写内存操作修改的值，这种情况a和b也不保序。
 
  第三条规则是说，后面的load不能超过之前由AMO/SC触发的写操作，直观的理解也是这样。
+
+ 注意，根据如上的定义，当a是一个普通的store，b是一个load，他们访问相同地址，load
+ 是可以跑到store之前的，不过load到的值是store缓存在store buff里的值，这个就是Intel
+ TSO内存序上唯一放松的内存序。(todo: 待确定)
 
 ```
 • Explicit Synchronization 
@@ -126,10 +142,19 @@ riscv内存序规则
 ```
  这两条规则是说，依赖之间是可以前后构成依赖链条的。
 
+ 下面是三条Axioms的定义。
+
+ Load Value Axiom: 每个load指令得到值是global memory order上最近一次store的值，这个
+                   store是global memory order或者是program order上在loadz之前。
+
+ Atomicity Axiom: 这个已经体现在lr/sc指令定义里。
+
+ Progress Axiom: 貌似是说乱序时提前执行总有一定的限制的。
+
 riscv barrier指令
 ------------------
 
- (fence/fence.i)
+ riscv上barrier有fence和fence.i，相关的指令可以参考[这里](https://wangzhou.github.io/riscv内存管理相关指令整理/)。
 
 ARM内存序以及barrier指令
 -------------------------
@@ -140,3 +165,8 @@ Linux内核内存序介绍
 --------------------
 
  Linux内核有详细介绍内存序的文档：Documentation/memory-barriers.txt。
+
+参考
+-----
+
+ - https://www.youtube.com/watch?v=QkbWgCSAEoo
