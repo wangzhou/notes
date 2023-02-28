@@ -164,6 +164,8 @@ decode tree语法
  是一个在指令编码31-12bit定义立即数，要把31-12bit的数值左移12bit得到最终结果，rd
  实际的格式是%rd，是一个在指令编码11-7bit定义的rd寄存器的标号。可以看到riscv里对应
  的trans函数的实现如下，在编译时，脚本只生成一个空函数，函数内容需要前端实现者编写。
+ 需要注意的是ex_shift_12这个函数是使用宏定义在target/riscv/translate.c里的，也是
+ 风骚。
 ```
  static bool trans_lui(DisasContext *ctx, arg_lui *a)
  {
