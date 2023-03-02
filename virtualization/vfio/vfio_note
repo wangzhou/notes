@@ -242,6 +242,6 @@ mmap: map cfg/mem/io range in pci_dev to user space.
 
 Reference:
 ----------
-[1] https://www.ibm.com/developerworks/community/blogs/5144904d-5d75-45ed-9d2b-cf1754ee936a/entry/20160605?lang=en
-[2] http://blog.csdn.net/qq123386926/article/details/47757089
-[3] https://zhuanlan.zhihu.com/p/35489035
+- https://www.ibm.com/developerworks/community/blogs/5144904d-5d75-45ed-9d2b-cf1754ee936a/entry/20160605?lang=en
+- http://blog.csdn.net/qq123386926/article/details/47757089
+- https://zhuanlan.zhihu.com/p/35489035
