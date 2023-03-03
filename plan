@@ -143,11 +143,9 @@ qemu listener			 to do
 linux scheduler			 to do
 linux 不可屏蔽中断		 to do
 riscv pmu逻辑分析		 to do
-riscv vector			 to do
 rcu使用和原理			 to do
 riscv vdso			 to do
 cpuhp逻辑分析			 to do
-riscv aia			 to do 4
 link script			 to do
 
 riscv qemu地址翻译		 to do 1
@@ -158,7 +156,6 @@ linux/kernel/hung_task.c	 to do
       kernel/watchdog.c
 my bios				 draft
 riscv 内存相关指令	         continue
-riscv pmp		   	 to do        #
 riscv cache(CMO)		 to do      7
 qemu tlb广播的模拟		 to do
 修改head.S里多核启动的分析，lottery只用在spinwait boot上
@@ -183,9 +180,11 @@ qemu goto tb再分析		 c(制造tb清理) -- 自修改代码分析 5
 qemu内存模拟分析		 todo
 arm qemu模型分析		 c
 linux timer内核代码分析          todo
-aia imsic细节分析		 todo
 qemu tlb分析			 c
 qemu bb以及temp和local temp	 c 还有代码分析没有写 4 --> 重要
 riscv 内存模型(重要)  	  	 c
 全部文档csdn链接的修改		 post
 qemu 内存模拟			 to do
+riscv vector			 to do
+riscv aia			 to do
+riscv pmp		   	 to do
