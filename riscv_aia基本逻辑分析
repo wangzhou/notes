@@ -1,0 +1,130 @@
+riscv AIA基本逻辑分析
+=====================
+
+-v0.1 2023.3.4 Sherlock init
+
+简介: 本文分析riscv AIA的基本逻辑。目前，相关的代码还在社区review，分析使用的代码为，
+      qemu使用v7.1.50主线代码，内核使用https://github.com/avpatel/linux riscv_aia_v2分支。
+
+
+AIA基本逻辑
+------------
+ 
+ 如下是AIA中APLIC和IMSIC的一个示意图：
+```
++------------+    +-------+    +-------------+    +---------------------------+
+|PCIe device |    | IOMMU |    | Bus network |    |   IMSIC                   |
++------------+    |       |    |             |    |                           |
+        \         |       |    |             |    |  +---------------------+  |    +--------+
+         ---------+-------+-\  |             |    |  |M mode interrupt file|--+--->| Hart 1 |
+                  |       |  \ |             |    |  +---------------------+  |    |        |
+                  +-------+   \|             |    |  +---------------------+  |    |        |
+                               +-------------+--->|  |S mode interrupt file|--+--->|        |
++----------------+   +-----+  -+-------------+-/  |  +---------------------+  |    |        |
+|Platform device |-->|APLIC| / |             |    |  +----------------------+ |    |        |
++----------------+   |     |/  |             |    |  |Guest interrupt file 1|-+--->|        |
+                     |     |   --------------+    |  +----------------------+ |    |        |
++----------------+   |     |                      |  +----------------------+ |    |        |
+|Platform device |-->|     |                      |  |Guest interrupt file 2|-+--->|        |
++----------------+   +-----+                      |  +----------------------+ |    |        |
+                                                  |  +----------------------+ |    |        |
+                                                  |  |Guest interrupt file N|-+--->|        |
+                                                  |  +----------------------+ |    +--------+
+                                                  +---------------------------+
+```
+ 一个hart上M mode、S mode以及不同的vCPU都有不同的IMSIC interrupt file，每个IMSIC
+ interrupt file对下游设备提供一个MSI doorbell接口。PCIe设备写这个MSI doorbell接口
+ 触发MSI中断，APLIC写这个MSI doorbell接口也可以触发MSI中断。APLIC作为次一级的中断
+ 控制器可以把下游设备的线中断汇集到一个MSI中断上。
+
+ 标识一个MSI中断需要两个信息，一个CPU的外部中断，比如S mode external interrupt,
+ 另外一个是写入MSI doorbell的MSI message，对应的中断编号，前者叫major identity，
+ 后者叫minor identity。所谓interrupt file就是minor identity的线性表，里面保存着
+ 对应中断的配置情况，比如，enable/pending等状态。各个minor identity标识的中断的
+ 优先级随编号增大而降低。
+
+ IMSIC通过一组CSR寄存器向外暴露信息或者接收CPU的配置。拿S mode的对应寄存器举例，
+ 相关的寄存器有：
+
+ siselect
+ sireg
+
+ eidelivery
+ eithreshold
+ eip0-eip63
+ eie0-eie63
+
+
+ stopi
+
+ sseteipnum
+
+ sclreipnum
+
+ sseteienum
+
+ sclreienum
+
+ stopei
+
+ seteipnum_le
+ seteipnum_be
+
+ todo: 和arm的不同
+
+IMSIC DTS节点定义
+------------------
+
+ IMSIC DTS节点各个域段的描述可以参考:
+ Linux/Documentation/devicetree/bindings/interrupt-controller/riscv.imsics.yaml。
+
+ 整个系统(包括NUMA系统)为M mode和S mode各创建一个imsic节点，如下是S mode的节点:
+```
+imsics@28000000 {                                               
+        phandle = <0x12>;                                       
+        riscv,group-index-shift = <0x18>;                       
+        riscv,group-index-bits = <0x01>;                        
+        riscv,hart-index-bits = <0x02>;                         
+        riscv,num-ids = <0xff>;                                 
+        reg = <0x00 0x28000000 0x00 0x4000 0x00 0x29000000 0x00 0x4000>;
+        interrupts-extended = <0x10 0x09 0x0e 0x09 0x0c 0x09 0x0a 0x09 0x08 0x09 0x06 0x09 0x04 0x09 0x02 0x09>;
+        msi-controller;                                         
+        interrupt-controller;                                   
+        #interrupt-cells = <0x00>;                              
+        compatible = "riscv,imsics";                            
+};                                                              
+```
+ 其中一堆group/hart-index等信息都是为了描述这个系统上各个cpu(vcpu)对应的MSI doorbell
+ 页面所在的位置。如上binding文件中描述了MSI doorbell page地址的计算方式：
+```
+  XLEN-1           >=24                                 12    0
+  |                  |                                  |     |
+  -------------------------------------------------------------
+  |xxxxxx|Group Index|xxxxxxxxxxx|HART Index|Guest Index|  0  |
+  -------------------------------------------------------------
+```
+ group是NUMA node的概念，系统中不同NUMA节点上的MSI doorbell page所用的基地址不同，
+ 如上的系统有两个NUMA节点，所以reg域段有0x28000000和0x29000000两个基地址，每个NUMA
+ 节点上的MSI doorbell page按照如上的格式计算，格式中Guest Index/HART index的偏移和
+ 位宽在在DTS节点中定义在，没有定义的话就取binding文件中定义的默认值。
+
+ 所以，按照上面的DTS，我们可以得到有两个NUMA节点，每个NUMA节点里有4个CPU的场景下，
+ 这个系统上每个CPU的S mode MSI doorbell page的地址是：
+
+ 0x28000000 0x28001000 0x28002000 0x28003000
+ 0x29000000 0x29001000 0x29002000 0x29003000
+
+AIA qemu模拟
+-------------
+
+ qemu tcg模拟imsic设备的驱动在：qemu/hw/int/riscv_imsic.c
+
+ todo:
+
+AIA Linux内核驱动
+------------------
+ 
+ Linux内核imsic的驱动在：Linux/drivers/irqchip/irq-riscv-imsic.c
+
+ todo:
+
