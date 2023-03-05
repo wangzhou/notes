@@ -2,6 +2,7 @@ riscv AIA基本逻辑分析
 =====================
 
 -v0.1 2023.3.4 Sherlock init
+-v0.2 2023.3.5 Sherlock 补充寄存器描述
 
 简介: 本文分析riscv AIA的基本逻辑。目前，相关的代码还在社区review，分析使用的代码为，
       qemu使用v7.1.50主线代码，内核使用https://github.com/avpatel/linux riscv_aia_v2分支。
@@ -43,32 +44,37 @@ AIA基本逻辑
  对应中断的配置情况，比如，enable/pending等状态。各个minor identity标识的中断的
  优先级随编号增大而降低。
 
+ todo: 表格大致介绍，从下面qemu仿真中可以看到interrupt file在AIA硬件内部。
+
  IMSIC通过一组CSR寄存器向外暴露信息或者接收CPU的配置。拿S mode的对应寄存器举例，
  相关的寄存器有：
 
- siselect
- sireg
+ - siselect/sireg
 
- eidelivery
- eithreshold
- eip0-eip63
- eie0-eie63
+   AIA使用siselect控制把如下寄存器映射到sireg上，这样通过两个CSR就可以访问一堆寄
+   存器，通过这种间接方式访问的寄存器有: eidelivery/eithreshold/eip0-eip63/eie0-eie63。
+    
 
 
- stopi
+ - stopi(S mode top interrupt)
 
- sseteipnum
+   读这个寄存器可以得到S mode下当前要处理的最高优先级的中断。
 
- sclreipnum
+ - sseteipnum/sclreipnum/sseteienum/sclreienum
 
- sseteienum
+   如上寄存器名字里，第一个s表示是S mode，set表示置1，clr表示清0，ei表示是外部中断，
+   p表示pending bit，num之前的e表示是enable bit，num表示操作的对象是中断的minor
+   identity编号。所以，这几个寄存器直接操作interrupt file里具体中断的pending和enable
+   状态。
 
- sclreienum
+ - stopei(S mode top external interrupt)
 
- stopei
+   读这个寄存器可以得到S mode下当前要处理的最高优先级的外部中断的minor interrupt号。
 
- seteipnum_le
- seteipnum_be
+ - seteipnum_le/seteipnum_be
+
+   这两个寄存器是MSI doorbell寄存器，在对应MSI doorbell page的最开始，一个是小端
+   格式，一个是大端格式，根据系统大小端配置，使用对应的寄存器。
 
  todo: 和arm的不同
 
