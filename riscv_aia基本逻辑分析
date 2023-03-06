@@ -3,6 +3,7 @@ riscv AIA基本逻辑分析
 
 -v0.1 2023.3.4 Sherlock init
 -v0.2 2023.3.5 Sherlock 补充寄存器描述
+-v0.3 2023.3.6 Sherlock 
 
 简介: 本文分析riscv AIA的基本逻辑。目前，相关的代码还在社区review，分析使用的代码为，
       qemu使用v7.1.50主线代码，内核使用https://github.com/avpatel/linux riscv_aia_v2分支。
@@ -44,7 +45,12 @@ AIA基本逻辑
  对应中断的配置情况，比如，enable/pending等状态。各个minor identity标识的中断的
  优先级随编号增大而降低。
 
- todo: 表格大致介绍，从下面qemu仿真中可以看到interrupt file在AIA硬件内部。
+ 具体上看，每个interrupt file包含一个enable表和一个pending表，表中每个bit表示每个
+ MSI中的enable和pending状态。一个interrupt file支持的MSI中断个数，最小是63，最大
+ 是2047，从下面eip/eie寄存器的定义也可以得到这里的最大最小值，当eip/eie是32bit时，
+ 64个eip/eie寄存器可以表示的最大值是2048，当eip/eie是64bit时，协议定义奇数eip/eie
+ 是不存在的，这样可以表示的最大值也是2048。从下面qemu仿真中可以看到interrupt file
+ 在AIA硬件内部。
 
  IMSIC通过一组CSR寄存器向外暴露信息或者接收CPU的配置。拿S mode的对应寄存器举例，
  相关的寄存器有：
@@ -53,12 +59,16 @@ AIA基本逻辑
 
    AIA使用siselect控制把如下寄存器映射到sireg上，这样通过两个CSR就可以访问一堆寄
    存器，通过这种间接方式访问的寄存器有: eidelivery/eithreshold/eip0-eip63/eie0-eie63。
-    
-
+   
+   eidelivery控制imsic是否可以报中断给hart，其中有一个可选配置项是可以控制是否把
+   来自PLIC的中断直接报给hart。eithreshold可以设置优先级，比这个优先级高的中断才
+   能报给hart。eip0-eip63/eie0-eie63就是相关中断的pending/enable状态，一个bit表示
+   一个中断的相关状态。
 
  - stopi(S mode top interrupt)
 
-   读这个寄存器可以得到S mode下当前要处理的最高优先级的中断。
+   读这个寄存器可以得到S mode下当前要处理的最高优先级的中断，包括major中断号和中断
+   优先级编号。(todo: 需要新增这个CSR的逻辑)
 
  - sseteipnum/sclreipnum/sseteienum/sclreienum
 
@@ -76,7 +86,21 @@ AIA基本逻辑
    这两个寄存器是MSI doorbell寄存器，在对应MSI doorbell page的最开始，一个是小端
    格式，一个是大端格式，根据系统大小端配置，使用对应的寄存器。
 
- todo: 和arm的不同
+ 可以看到riscv的MSI支持和ARM的GICv3(ITS)很不一样，imsic用一个表(逻辑上我们把pend/enable
+ 看成一个表)表示所有支持的MSI中断，这样PCI设备发出的MSI message其实对应的minor
+ interrupt identity，imsic收到minor interrupt identity后，直接配置对应的bit并且
+ 根据相关逻辑配置stopei, sseteipnum/sclreipnum/sseteienum/sclreienum也可以直接配置
+ interrupt file里的对应bit。而GICv3 ITS使用PCI设备相关的表格保存设备MSI中断对应的
+ 中断号，而且这些表格保存在内存里，可以想象GICv3在收到MSI message(ARM系统上一般
+ 一个PCI设备的MSI message从0开始依此递增)后应该从硬件报文里把设备信息(BDF)提取出来，
+ 然后再用设备信息去查找相关的表格得到MSI中断的硬件中断号，为了把这样的信息配置给
+ ITS，GICv3里就还需要设计各种command以及附带的command queue。从如上的分析中，我们
+ 可以看出为啥AIA设计比GICv3简单很多但是基本功能都支持的一些原因。
+
+APLIC的基本逻辑
+----------------
+
+ (todo: ...)
 
 IMSIC DTS节点定义
 ------------------
@@ -123,14 +147,36 @@ imsics@28000000 {
 AIA qemu模拟
 -------------
 
- qemu tcg模拟imsic设备的驱动在：qemu/hw/int/riscv_imsic.c
+ qemu tcg模拟imsic设备的驱动在：qemu/hw/int/riscv_imsic.c, riscv_aplic.c
 
- todo:
+- imsic基本逻辑
+
+ imsic实例创建的接口是riscv_imsic_create，具体平台可以调用这个函数创建imsic设备,
+ imsic设备对外暴露一些规格相关的属性，比如mmode/hartid/num-pages/num-irqs，平台
+ 初始化的时候先根据对应的配置生成imsic dts节点，然后根据对应的配置模拟imsic设备。
+
+ imsic会暴露一些CSR寄存器给hart，在imsic的realize函数里调用hart侧的注册接口把访问
+ 具体寄存器的回调函数提供给hart的CSR访问框架:
+```
+ riscv_imsic_realize
+   +-> riscv_cpu_set_aia_ireg_rmw_fn(..., riscv_imsic_rmw, ...)
+```
+ imsic创建一组MMIO模拟MSI doorbell寄存器seteipnum_le/seteipnum_be。
+
+ imsic的内部模拟逻辑也很直白，内部创建interrupt file以及相关寄存器的内存，来自设备
+ 的MSI message触发interrupt file的变化以及中断上报，来自CPU的CSR寄存器访问获得或者
+ 改变interrupt file以及imsic的配置状态。
+
+ (todo: aplic逻辑分析)
 
 AIA Linux内核驱动
 ------------------
  
- Linux内核imsic的驱动在：Linux/drivers/irqchip/irq-riscv-imsic.c
+ Linux内核imsic的驱动在：Linux/drivers/irqchip/irq-riscv-imsic.c, irq-riscv-aplic.c
 
- todo:
+ - imsic基本逻辑
 
+ imsic在Linux内核里抽象为一个独立的中断控制器，代码构架和PLIC的逻辑基本上是一致的,
+ PLIC的内核驱动可以参考[这里](https://wangzhou.github.io/riscv-plic基本逻辑分析/)
+
+ (todo: aplic逻辑分析)
