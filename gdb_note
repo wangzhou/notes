@@ -95,3 +95,5 @@ gdb可以单步执行程序，或者跳入跳出函数。用n单步执行，这�
 的长度为size的数据，p file::variable、p function::variable可以给变量限定作用域。
 
 watch cond可以监控变量和表达式的值没有改变，只要改变，程序就会停止。
+
+p打印格式, p/x 十六进制。

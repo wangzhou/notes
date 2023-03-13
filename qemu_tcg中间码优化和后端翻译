@@ -104,8 +104,8 @@ qemu tcg中间码优化和后端翻译
      +-> cpu_tb_exec(cpu, ...)
        +-> tcg_qemu_tb_exec(env, ...)
 ```
- 在tb头里，会有一条指令把这个入参送给TCG_AREG0，我们看看ARM64作为后端时，这个代码
- 生成的逻辑：
+ 在tb头里，会有一条指令把这个入参送给TCG_AREG0(ARM64的x19)，我们看看ARM64作为后端
+ 时，这个代码生成的逻辑：
 ```
  /* tcg/aarch64/tcg-target.c.inc */
  tcg_target_qemu_prologue
@@ -153,13 +153,250 @@ qemu tcg中间码优化和后端翻译
  这一节和下一节就是要解决这个问题。直观来看，IR和host指令大概是可以对应上的，这里
  要解决的关键问题就是怎么把虚拟级的TCG寄存器映射到host物理寄存器上。
 
+ 我们先看下具体的两条riscv指令是怎么翻译成host指令的:
 ```
- liveness_pass_1(s);                                                         
+riscv guest汇编:
 
+  0x0000000000010172:  1101              addi            sp,sp,-32
+  0x0000000000010174:  ec06              sd              ra,24(sp)
+
+中间码：
+
+  ---- 0000000000010172 0000000000000000
+  add_i64 x2/sp,x2/sp,$0xffffffffffffffe0
+  
+  ---- 0000000000010174 0000000000000000
+  add_i64 tmp4,x2/sp,$0x18
+  qemu_st_i64 x1/ra,tmp4,leq,0
+
+ARM64 host汇编：
+
+    -- guest addr 0x0000000000010172 + tb prologue
+  0xffff9c000140:  b85f8274  ldur     w20, [x19, #-8]
+  0xffff9c000144:  7100029f  cmp      w20, #0
+  0xffff9c000148:  5400064b  b.lt     #0xffff9c000210
+  0xffff9c00014c:  f9400a74  ldr      x20, [x19, #0x10]
+  0xffff9c000150:  d1008294  sub      x20, x20, #0x20
+  0xffff9c000154:  f9000a74  str      x20, [x19, #0x10]
+    -- guest addr 0x0000000000010174
+  0xffff9c000158:  91006295  add      x21, x20, #0x18
+  0xffff9c00015c:  f9400676  ldr      x22, [x19, #8]
+  0xffff9c000160:  f83f6ab6  str      x22, [x21, xzr]
+```
+ riscv的addi被翻译成中间码add_i64, 注意中间码中的x2/sp是TEMP_GLOBAL类型的TCG寄存器，
+ riscv的sd指令被翻译成两条中间码，第一个中间码计算store的地址，并存在tmp4里，第二个
+ 中间码把ra寄存器的值保存到tmp4指向的地址。
+
+ 我们看下实际翻译出来的ARM64指令，第一条指令合并了一点tb头的指令，addi对应的host
+ 指令是从0xffff9c00014c这里开始的，从上面知道x19就是cpu_env的指针，0x10是riscv sp
+ 对应的TCG寄存器在cpu_env的偏移，所以“ldr x20, [x19, #0x10]”就是把保存在内存里的
+ guest CPU sp的值load到host寄存器x20上，下面sub指令对应的就是riscv的addi指令，然后
+ 紧接着一个str指令把sp的值更新会cpu_env，注意x20还是sp的值，所以, host还是可以使用
+ x20中保存的sp计算指令“sd ra,24(sp)”中sd要保存值的地址，翻译到host上的“add x21, x20, #0x18”，
+ x21保存sd要保存值的地址，后面的“ldr x22, [x19, #8]”同样把riscv的ra load到host寄存器
+ x22上，最后host使用“str x22, [x21, xzr]”完成“sd ra,24(sp)”的模拟。
+
+ 需要注意的是，如上的log是用qemu的user mode下得到的，user mode没有地址翻译，所以
+ store的模拟才会如此直接。如上的host寄存器对应的TCG寄存器类型: x19是fixed，x20/x22
+ 是global，x21是temp。寄存器如何分配、分配出的host寄存器什么时候可以重复利用、host
+ 寄存器上的值什么时候需要保存回cpu_env，这些都是活性分析和后端翻译要考虑的问题。
+
+ 寄存器活性分析代码主体逻辑如下:
+```
+ tcg_gen_code
+   +-> liveness_pass_1(s);                                                         
+   /*
+    * nb_indirects的值在创建global TCG寄存器的时候更新: *tcg_global_mem_new_internal，
+    * 这个函数会检测base入参的TCG类型，注意不是自己的TCG类型，如果base的类型是global
+    * 才会增加nb_indirects的计数。一般调用这个函数为guest gpr创建global TCG寄存器
+    * 都是用cpu_env作为base入参，所以nb_indirects的都不会增加。
+    *
+    * 也就是qemu认为，对于global虚拟寄存器的访问，如果是通过一个fix寄存器作为指针
+    * 访问，就叫direct，但是如果不是，就叫indirect。针对indirect的访问需要进行额外
+    * 的liveness_pass_2优化。
+    *
+    * 目前还有没有想到需要liveness_pass_2优化的例子。
+    */
+   +-> if (s->nb_indirects > 0) {
+           if (liveness_pass_2(s)) {                                               
+               liveness_pass_1(s);                                                 
+           }                                                                       
+       }
 ```
 
- nb_indirects?
+ 如上，我们目前先分析liveness_pass_1的逻辑，IR和TCG寄存器的数据结构大概是这样的：
+```
+ tcg_ctx:
+         +--------+---------+---------+---------+---------+
+         | temp0  |  temp1  |  temp2  |  temp3  |  temp4  |
+         +--------+---------+---------+---------+---------+
+            ^        ^                   ^           ^
+ TB ops:    |        +----------------+  |           |
+            +-------------+-------+   |  +--------+  |                 
+                          |    +--+---+-----------+--+                ^
+                          |    |  |   |           |                   |
+         +----------------+----+--+---+-----------+----------------+  |
+         | +-----+      +-+--+ |  | +-+--+      +-+--+             |  |
+         | |insn0|      |arg0| |  | |arg1|      |arg2|        life |  |  parse insn
+         | +-----+      +----+ |  | +----+      +----+             |  |
+         +---------------------+--+--------------------------------+  |
+         +---------------------+--+--------------------------------+  |
+         | +-----+      +----+ |  | +----+                         |  |
+         | |insn1|      |arg0+-+  +-+arg1|                    life |  |
+         | +-----+      +----+      +----+                         |  |
+         +---------------------------------------------------------+  |
+           ...                                                        |
+```
+ 如上所示，前端翻译生成的IR组成一个IR链表，每个IR节点里有它自己的寄存器定义和life，
+ 这个life标记当前IR中每个寄存器的状态。IR中的每个TCG变量指向tcg_ctx中TCG变量的实际
+ 保存地址，活性分析对于TB中的IR，按照逆序逐个分析对应的IR和IR的TCG寄存器的状态，
+ 分析过程把TCG寄存器的状态动态的更新到tcg_ctx的TCG寄存器对象中，位置相对在上面的
+ IR的TCG寄存器状态受下面IR的TCG寄存器状态的影响，而下面的TCG寄存器状态在分析的时候
+ 已经更新到tcg_ctx的TCG寄存器对象中，每条IR的寄存器分析完后的静态状态保存在op->life
+ 里。
 
+ TCG寄存器的状态有两种，分别是TS_DEAD和TS_MEM，TS_DEAD的寄存器表示，在随后的逆序
+ 遍历中，这个寄存器不对之前IR的寄存器有依赖，TS_MEM的表示寄存器需要向内存同步。
+
+ TCG寄存器在遍历开始的初始值是：global变量是TS_DEAD | TS_MEM, 其它是TS_DEAD。所有
+ global变量，比如gpr，都要刷回内存，其它的变量都是临时变量(cpu_env，sp也不需要刷会
+ 内存)，先都配置成dead，如果后续检测到寄存器之间存在依赖，再配置成live(我们把dead
+ 这个状态被去掉，认为TCG寄存器变成live状态)。
+
+ liveness_pass_1的逻辑大概是这样的：
+```
+ liveness_pass_1
+       /* 遍历开始，更新TCG寄存器为初识状态 */
+   +-> la_func_end(s, nb_globals, nb_temps);                                       
+       /*
+        * 逆序遍历TB的中间码链表，除了几种类型的中间码要特殊处理下，剩余的都在默认
+	* 处理分支里(default)。需要单独处理的中间码有：call、insn_start、discard、
+	* 多输出的中间码(add2/sub2/mulu2/muls2_i32/i64)。
+	*
+	* 我们先关注default流程，然后再看需要单独处理的中间码。
+	*/
+   +-> QTAILQ_FOREACH_REVERSE_SAFE(op, &s->ops, link, op_prev) {                   
+       +-> switch (opc) {                                                          
+           case INDEX_op_call:                                                     
+	   [...]
+
+	   default:
+	   /* 
+	    * 对于不是side_effect的指令，只要有输出参数不是dead，就不能去掉这条
+	    * 指令，否则，所有输出参数都dead了，这个指令就可以去掉了。
+	    */
+	   do_remove:
+	     +-> tcg_op_remove(s, op);                                               
+
+	   /* 寄存器活性分析核心逻辑在这里 */
+           do_not_remove:
+	         /*
+		  * 首先处理IR的输出寄存器，根据TCG寄存器状态更新IR的life，更新
+		  * 完后把TCG寄存器状态配置为dead，对于输出寄存器，必然不会对之前
+		  * IR的寄存器有依赖。
+		  */
+	     +-> for (i = 0; i < nb_oargs; i++) {
+                     ts = arg_temp(op->args[i]);
+              
+                     op->output_pref[i] = *la_temp_pref(ts);
+              
+                     /* Output args are dead. */
+                     if (ts->state & TS_DEAD) {
+                         arg_life |= DEAD_ARG << i;
+                     }
+              
+                     if (ts->state & TS_MEM) {
+                         arg_life |= SYNC_ARG << i;
+                     }
+                     ts->state = TS_DEAD;
+                     la_reset_pref(ts);
+                 }
+
+	         /*
+	          * 处理TB结束、BB结束、条件跳转以及有side effect的指令。
+		  *
+		  * TCG_OPF_BB_EXIT是离开TB，所以temp dead，global dead和sync，
+                  *
+                  * 这里把条件branch指令单拿出来看，条件branch指令只是结束一个BB
+		  * 的一种情况, 结束一个BB还有goto_tb和exit_tb，开始一个BB还有
+		  * set_label。     
+                  *                                                               
+                  * 对于条件branch指令：                                          
+                  *                                                               
+                  * insn5                         |  BB0                          
+                  * insn6                         |                               
+                  * brcond t0, t1, cond, label  --+                               
+                  * insn1                       --+                               
+                  * insn2                         |  BB1                          
+                  * insn3                         |                               
+                  * insn4     --------------------+                               
+                  * set_label --------------------+                               
+                  * insn7                         |  BB2                          
+                  * insn8                         |                               
+                  *                                                               
+                  * 从下到上解析到brcond的时候，所有global和local要sync，注意可以还
+                  * 不是dead, 普通temp要都dead, 在向上分析指令不可能有temp作为输出
+		  * 提供给这里的temp作为输入。                                
+                  *                                                               
+                  * EBB和const不处理, 为啥？                                      
+                  *                                                               
+                  * 那么也就是说，比如BB1/BB2里有一个temp live了，这里也要dead。  
+                  * 对于local还sync下再load回来，对于temp怎么办？所以qemu规定temp 
+                  * 不能垮BB使用。                                                
+                  *                                                               
+                  * 那不是BB1和BB2里有global和local要重新load？这个又怎么标记的？ 
+                  * (要不要重新load？上面没有dead global和local。)                
+                  */                                                                 
+             +-> if (def->flags & TCG_OPF_BB_EXIT) {
+                     la_func_end(s, nb_globals, nb_temps);
+                 } else if (def->flags & TCG_OPF_COND_BRANCH) {
+                     la_bb_sync(s, nb_globals, nb_temps);
+                 } else if (def->flags & TCG_OPF_BB_END) {
+                     la_bb_end(s, nb_globals, nb_temps);
+                 } else if (def->flags & TCG_OPF_SIDE_EFFECTS) {
+                     la_global_sync(s, nb_globals);
+                     if (def->flags & TCG_OPF_CALL_CLOBBER) {
+                         la_cross_call(s, nb_temps);
+                     }
+                 }
+
+                 /*
+		  * 处理输入寄存器状态。
+                  *
+                  * 一个input，如果之前已经dead，作为本条指令，这个寄存器是dead
+                  * 的，因为后面没有人用了。但是，显然再往上遍历，因为这个寄存器
+                  * 在这里使用了，上面的指令就要live这个寄存器，这个就是下面一段
+                  * 代码做的事。                                              
+		  */
+             +-> for (i = nb_oargs; i < nb_oargs + nb_iargs; i++) {                  
+                     ts = arg_temp(op->args[i]);                                     
+                     if (ts->state & TS_DEAD) {                                      
+                         arg_life |= DEAD_ARG << i;                                  
+                     }                                                               
+                 }                                                                   
+
+                 /*
+		  * 改变输入寄存器活性。
+                  *
+                  * 因为是逆序遍历的，这里当然就是前面的指令了，当有一条指令的
+		  * input用了一个寄存器，那么这个寄存器当然要live了。
+                  */                                                                 
+             +-> for (i = nb_oargs; i < nb_oargs + nb_iargs; i++) {                  
+                     ts = arg_temp(op->args[i]);                                     
+                     if (ts->state & TS_DEAD) {                                      
+                         /* For operands that were dead, initially allow             
+                            all regs for the type.  */                               
+                         /*                                                          
+                          * ts->type是? type是类似TCG_TYPE_I32的东西，找到可以用的寄 
+                          * 存器? 用来做什么？                                       
+                          */                                                         
+                         *la_temp_pref(ts) = tcg_target_available_regs[ts->type];    
+                         ts->state &= ~TS_DEAD;                                      
+                     }                                                               
+                 }                                                                   
+
+		 /* todo: 寄存器传递？*/
+```
 
 后端翻译
 ---------
@@ -167,4 +404,5 @@ qemu tcg中间码优化和后端翻译
  IR和host指令联系的定义
 
  具体生成过程
+
 
