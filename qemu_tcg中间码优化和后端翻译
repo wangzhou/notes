@@ -1,0 +1,170 @@
+qemu tcg中间码优化和后端翻译
+=============================
+
+-v0.1 2023.3.12 Sherlock init
+-v0.2 2023.3.13 Sherlock 继续写
+
+简介：本文介绍qemu tcg下中间码翻译和后端翻译的基本逻辑，代码分析基于qemu v7.1.50，
+      文中涉及的测试场景，我们选择riscv作为guest、arm64作为host。
+
+基本逻辑
+---------
+
+ qemu tcg的基本翻译思路是把guest指令先翻译成中间码(IR)，然后再把IR翻译成host指令。
+ guest->IR->host这种三段式实现的好处是把前端翻译，优化和后端翻译拆开了，降低了开发
+ 的难度，比如，要模拟一个新构架的CPU，只要实现guest->IR这一步就好，后续在X86或者在
+ ARM64的host的机器上跑，重新编译下qemu就好，并不用去熟悉host CPU的构架。
+
+ guest翻译成IR的逻辑在(这里)[https://wangzhou.github.io/xxxx]已经有介绍，这一步
+ 主要靠程序员手写代码生成IR，本文主要讲中间码的优化和后端翻译，我们可以认为这两
+ 部分属于翻译IR到host指令，为了看清楚IR到host指令的翻译，我们首先要明确前端翻译
+ 得到的IR是怎么样的。
+
+ IR指令的理解是比较直白的，qemu定义了一套IR的指令，具体的定义在tcg/README里说明,
+ 在一个tb里，qemu前端翻译得到的IR被串联到一个链表里，中间码优化和后端翻译都靠这个
+ 链表得到IR，中间码优化时，需要改动IR时(比如，删掉不可达的IR)，对这个链表做操作就
+ 好。
+
+ 中间码不只是定义了对应的指令，也有寄存器的定义，它形成了一个独立的逻辑空间，在IR
+ 这一层，可以认为都在中间码相关的寄存器上做计算的。IR这一层定义了几个寄存器类型，
+ 它们分别是：global, local temp, normal temp, fixed, const, ebb
+```
+ typedef enum TCGTempKind {                                                      
+     /* Temp is dead at the end of all basic blocks. */                          
+     TEMP_NORMAL,                                                                
+     /* Temp is live across conditional branch, but dead otherwise. */           
+     TEMP_EBB,                                                                   
+     /* Temp is saved across basic blocks but dead at the end of TBs. */         
+     TEMP_LOCAL,                                                                 
+     /* Temp is saved across both basic blocks and translation blocks. */        
+     TEMP_GLOBAL,                                                                
+     /* Temp is in a fixed register. */                                          
+     TEMP_FIXED,                                                                 
+     /* Temp is a fixed constant. */                                             
+     TEMP_CONST,                                                                 
+ } TCGTempKind;                                                                  
+```
+ 一般guest的gpr也被定义为IR这一层的寄存器，中间码做计算的时候，会用到一些临时变量，
+ 这些临时变量就保存在local temp或者是normal temp这样的寄存器里，计算的时候要用到
+ 一些常量时，就需要定义一个TCG寄存器，创建一个常量并把它赋给TCG寄存器。
+
+ global、local temp、normal temp和const这些TCG寄存器我们在写前端翻译的时候会经常
+ 用到，fixed和ebb直接用到的情况不多。
+ 
+ TCG寄存器是怎么定义和被使用的，以及它们本质上是什么？我们基于riscv看下这个问题。
+ riscv下global寄存器一般如下定义：
+```
+ /* target/riscv/translate.c */
+ riscv_translate_init
+   [...]
+   +-> cpu_gpr[i] = tcg_global_mem_new(cpu_env, 
+   		    offsetof(CPURISCVState, gpr[i]), riscv_int_regnames[i]);            
+         /* 在TCGContext里分配对应的空间，并且设定这个寄存器是TEMP_GLOBAL */
+     +-> tcg_global_mem_new_internal(..., reg, offset, name);  
+   [...]
+   +-> cpu_pc = tcg_global_mem_new(cpu_env, offsetof(CPURISCVState, pc), "pc");    
+   [...]
+```
+ 我们只挑了gpr和pc的这几行代码出来，这里分配了对应的TCG寄存器，返回值是这些寄存器
+ 存储地址相对tcg_ctx的偏移。
+
+ 实际上，所有TCG寄存器的分配都是在TCGContext里分配了对应的存储空间，并且配置上相关
+ 参数，这些参数和IR一起交给后端做IR优化和后端翻译，后端使用TCGContext的地址和具体
+ 寄存器的偏移可以找见具体的TCG寄存器。
+
+ local temp和normal temp的分析在
+ [这里](https://wangzhou.github.io/qemu中basic-block以及tcg中各种变量的基本逻辑)有说明。
+ (todo: 考虑怎么整合)简而言之，normal temp只在一个BB中有效，local temp在一个TB
+ 中有效。
+
+ fixed要结合host寄存器分配来看，首先IR中分配的这些寄存器都是虚拟机寄存器，IR翻译
+ 到host指令都要给虚拟寄存器分配对应的host物理寄存器，当一个TCG寄存器有TEMP_FIXED
+ 标记表示在后端翻译时把这个虚拟寄存器固定映射到一个host物理寄存器上，一般fixed寄存器
+ 都是翻译执行时经常要用到的参数。
+```
+ /* tcg/tcg.c */
+ tcg_context_init
+   /*
+    * 在tcg后端公共逻辑里，定义一个TCG寄存器，并把它绑定到host的TCG_AREG0这个寄存器上
+    * 每个host都会把具体的实际物理寄存器映射到TCG_AREG0。
+    */
+   +-> ts = tcg_global_reg_new_internal(s, TCG_TYPE_PTR, TCG_AREG0, "env");        
+   +-> cpu_env = temp_tcgv_ptr(ts);                                                
+```
+ 如上的cpu_env依然是cpu_env寄存器存储地址针对tcg_ctx的偏移，前端翻译代码里会大量
+ 的用到cpu_env这个值，所以这里把它定义成fixed寄存器，提示后端翻译把cpu_env的值固定
+ 的放到一个host寄存器里。具体看，tcg_global_reg_new_internal里会把被绑定的host物理
+ 寄存器放到reserved_regs集合，这样，后端翻译后续就不会分配这个物理寄存器，cpu_env
+ 保存的是guest CPU软件结构体的指针，那么这个指针又是怎么传递给reserved TCG_AREG0
+ host物理寄存器？可以看到一个tb执行的时候这个指针作为第一个入参传递给tb里生成的
+ host指令：
+```
+ cpu_exec
+   +-> cpu_loop_exec_tb
+     +-> cpu_tb_exec(cpu, ...)
+       +-> tcg_qemu_tb_exec(env, ...)
+```
+ 在tb头里，会有一条指令把这个入参送给TCG_AREG0，我们看看ARM64作为后端时，这个代码
+ 生成的逻辑：
+```
+ /* tcg/aarch64/tcg-target.c.inc */
+ tcg_target_qemu_prologue
+   [...]
+   +-> tcg_set_frame(s, TCG_REG_SP, TCG_STATIC_CALL_ARGS_SIZE, CPU_TEMP_BUF_NLONGS * sizeof(long));
+     +-> tcg_global_reg_new_internal(s, TCG_TYPE_PTR, reg, "_frame");          
+   [...]
+   +-> tcg_out_mov(s, TCG_TYPE_PTR, TCG_AREG0, tcg_target_call_iarg_regs[0]);      
+```
+ 如上，公共代码里还会把host的栈寄存器也reserv出来做特定的用途，这里sp就是host上
+ sp自己的语意，因为host调用翻译好的host指令，就是一个host上的函数调用。
+
+ ebb类型的TCG寄存器表示这个寄存器可以跨越条件跳转，但是跨越之后状态为dead。(todo: 具体用法)
+ 
+中间码优化
+-----------
+
+ 前端翻译得到的IR可能会有优化的空间存在，所以qemu在进行后端翻译之前会先做中间码
+ 优化，优化以一个TB为单位，优化的输入就是一个TB对应的IR和用到的TCG寄存器。
+```
+ /* tcg/tcg.c */
+ tcg_gen_code
+   +-> tcg_optimize(s)
+     +-> done = fold_add(&ctx, op);                                          
+
+   +-> reachable_code_pass(s);                                                     
+```
+ tcg_optimize是做着一些常量的检查，进而做指令优化(折叠常量表达式), 我们取其中的
+ 一个case，比如fold_add具体看下，大概知道下这里是在干什么。可以看到这个case检测
+ add_32/64这个IR的两个操作数是不是常量，如果是常量，那么在这里直接把常量相加后的
+ 结果放到一个常量类型TCG寄存器，然后把之前的add_32/64改成一条mov指令。
+
+ 从名字就可以看出reachable_code_pass应该做的是一些死代码的删除，这里检测到运行不到
+ 的IR就直接从IR链表里把他们删掉。
+
+ 中间码优化的输出还是IR链表和相关的TCG寄存器，可见我们也可以把这两个函数注释掉，
+ 从而把中间码优化关掉。可以看出，中间码优化和编译器IR优化的逻辑是类似的。
+
+ 中间码优化的具体case本文就不继续展开了，后续有需要再写吧。
+
+寄存器活性分析
+---------------
+
+ qemu最终还是要把IR和TCG寄存器翻译成host指令和host寄存器，才能在host机器上运行,
+ 这一节和下一节就是要解决这个问题。直观来看，IR和host指令大概是可以对应上的，这里
+ 要解决的关键问题就是怎么把虚拟级的TCG寄存器映射到host物理寄存器上。
+
+```
+ liveness_pass_1(s);                                                         
+
+```
+
+ nb_indirects?
+
+
+后端翻译
+---------
+
+ IR和host指令联系的定义
+
+ 具体生成过程
+
