@@ -277,6 +277,7 @@ ARM64 host汇编：
 	*/
    +-> QTAILQ_FOREACH_REVERSE_SAFE(op, &s->ops, link, op_prev) {                   
        +-> switch (opc) {                                                          
+	   /* call中间码相关TCG寄存器的分析下面单独来分析 */
            case INDEX_op_call:                                                     
 	   [...]
 
@@ -334,25 +335,22 @@ ARM64 host汇编：
                   * insn7                         |  BB2                          
                   * insn8                         |                               
                   *                                                               
-                  * 从下到上解析到brcond的时候，所有global和local要sync，注意可以还
-                  * 不是dead, 普通temp要都dead, 在向上分析指令不可能有temp作为输出
-		  * 提供给这里的temp作为输入。                                
-                  *                                                               
-                  * EBB和const不处理, 为啥？                                      
-                  *                                                               
-                  * 那么也就是说，比如BB1/BB2里有一个temp live了，这里也要dead。  
-                  * 对于local还sync下再load回来，对于temp怎么办？所以qemu规定temp 
-                  * 不能垮BB使用。                                                
-                  *                                                               
-                  * 那不是BB1和BB2里有global和local要重新load？这个又怎么标记的？ 
-                  * (要不要重新load？上面没有dead global和local。)                
+                  * 从下到上解析到brcond的时候，所有global和local要sync，但是不
+                  * 一定dead, 普通temp要都dead, 也就是说，在向上分析指令中，不可能
+		  * 有temp作为输出提供给这里的temp作为输入，因为qemu规定普通temp
+                  * 不能垮BB使用。对于所有的EBB和const，不改变TCG寄存器状态。
                   */                                                                 
              +-> if (def->flags & TCG_OPF_BB_EXIT) {
                      la_func_end(s, nb_globals, nb_temps);
                  } else if (def->flags & TCG_OPF_COND_BRANCH) {
                      la_bb_sync(s, nb_globals, nb_temps);
+                 /*
+		  * BB_END时，也就是goto_tb、exit_tb以及set_label之前，在上面brcond
+		  * 的基础上EBB/const要dead，fixed要sync。但是原因是？
+		  */
                  } else if (def->flags & TCG_OPF_BB_END) {
                      la_bb_end(s, nb_globals, nb_temps);
+		 /* ? */
                  } else if (def->flags & TCG_OPF_SIDE_EFFECTS) {
                      la_global_sync(s, nb_globals);
                      if (def->flags & TCG_OPF_CALL_CLOBBER) {
@@ -361,12 +359,10 @@ ARM64 host汇编：
                  }
 
                  /*
-		  * 处理输入寄存器状态。
-                  *
-                  * 一个input，如果之前已经dead，作为本条指令，这个寄存器是dead
-                  * 的，因为后面没有人用了。但是，显然再往上遍历，因为这个寄存器
-                  * 在这里使用了，上面的指令就要live这个寄存器，这个就是下面一段
-                  * 代码做的事。                                              
+		  * 处理输入寄存器状态。对于输入寄存器，如果之前已经dead，对于本条
+		  * 指令，这个寄存器是dead，因为后面没有人用了，所以配置当前IR的life。
+		  * 但是再往上遍历，因为这个寄存器在这里使用了，就要激活TCG寄存器，
+		  * 这个就是下面一段代码做的事。                                              
 		  */
              +-> for (i = nb_oargs; i < nb_oargs + nb_iargs; i++) {                  
                      ts = arg_temp(op->args[i]);                                     
@@ -375,21 +371,11 @@ ARM64 host汇编：
                      }                                                               
                  }                                                                   
 
-                 /*
-		  * 改变输入寄存器活性。
-                  *
-                  * 因为是逆序遍历的，这里当然就是前面的指令了，当有一条指令的
-		  * input用了一个寄存器，那么这个寄存器当然要live了。
-                  */                                                                 
+                 /* 激活输入TCG寄存器 */
              +-> for (i = nb_oargs; i < nb_oargs + nb_iargs; i++) {                  
                      ts = arg_temp(op->args[i]);                                     
                      if (ts->state & TS_DEAD) {                                      
-                         /* For operands that were dead, initially allow             
-                            all regs for the type.  */                               
-                         /*                                                          
-                          * ts->type是? type是类似TCG_TYPE_I32的东西，找到可以用的寄 
-                          * 存器? 用来做什么？                                       
-                          */                                                         
+                         /* 得到可以使用的host寄存器的集合，为什么在这里赋值？*/
                          *la_temp_pref(ts) = tcg_target_available_regs[ts->type];    
                          ts->state &= ~TS_DEAD;                                      
                      }                                                               
@@ -398,11 +384,31 @@ ARM64 host汇编：
 		 /* todo: 寄存器传递？*/
 ```
 
+下面是单独case处理的中间码的相关TCG寄存器的分析。
+(todo: ...)
+
 后端翻译
 ---------
 
+ 进入后端翻译的主流程前在tcg_reg_alloc_start函数中先根据TCG寄存器类型(kind)得到
+ TCG寄存器的val_type域段的值，这个域段是一个动态值，指示的是TCG寄存器值对应的存储
+ 状态，比如TEMP_VAL_REG表示当前TCG寄存器的值保存在host寄存器上，TEMP_VAL_MEM表示
+ 当前TCG寄存器的值保存在内存里(cpu_env的TCG寄存器对应域段)。
+
+ TEMP_VAL_CONST, TEMP_VAL_DEAD是什么语意？
+
+ 正序遍历TB的IR链表，逐个翻译每个中间码和TCG寄存器，这个是后端翻译的主流程。可以
+ 看到，这里针对几个特殊的中间码做特殊处理，主流程在tcg_reg_alloc_op里。
+```
+ QTAILQ_FOREACH(op, &s->ops, link) {
+     case ...
+     default:
+         tcg_reg_alloc_op(s, op);
+ }
+```
+
  IR和host指令联系的定义
 
- 具体生成过程
+ 单独处理的中间码 具体生成过程
 
 
