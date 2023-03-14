@@ -2,7 +2,8 @@ qemu tcg中间码优化和后端翻译
 =============================
 
 -v0.1 2023.3.12 Sherlock init
--v0.2 2023.3.13 Sherlock 继续写
+-v0.2 2023.3.13 Sherlock 增加中间码优化和寄存器活性分析
+-v0.2 2023.3.14 Sherlock 增加后端翻译
 
 简介：本文介绍qemu tcg下中间码翻译和后端翻译的基本逻辑，代码分析基于qemu v7.1.50，
       文中涉及的测试场景，我们选择riscv作为guest、arm64作为host。
@@ -407,8 +408,121 @@ ARM64 host汇编：
  }
 ```
 
- IR和host指令联系的定义
+ 分配过程会涉及到IR定义里的args_ct域段，这个域段描述IR翻译成特定host指令的限制，
+ 我们先看IR定义里的args_ct如何初始化，明确其中的含义。IR指令的定义在qemu公共代码
+ 里初始化:
+```
+ /* tcg/tcg-common.c */
+ TCGOpDef tcg_op_defs[] = {
+ #define DEF(s, oargs, iargs, cargs, flags) \
+          { #s, oargs, iargs, cargs, iargs + oargs + cargs, flags },
+ #include "tcg/tcg-opc.h"
+ #undef DEF
+ };
+```
+ 其中的参数分别是指令名字、输出参数个数、输入参数个数、指令控制参数个数(比如brcond
+ 里的cond)、指令flag(描述指令附加的一些属性)，注意这里只静态定义了每个IR的公共部分，
+ 并没有定义args_ct，args_ct和host指令的特性有关系，所以自然定义在具体host代码里。
+ args_ct初始化的代码路径是：
+```
+ tcg_context_init
+       /* 遍历每个IR，得到host定义的针对每个IR的约束的定义 */
+   +-> process_op_defs(s);
+         /*
+	  * 如果host是riscv，tcg_target_op_def就是定义在tcg/riscv/tcg-target.c.inc，
+	  * 可以看到con_set的值是一个枚举值，对应枚举元素的定义类似：c_o1_i2_r_r_rI
+	  * 这个枚举类型定义在tcg/tcg.c，枚举元素include host上的具体定义：
+          * 
+          * typedef enum {
+          * #include "tcg-target-con-set.h"  <- 如果rv是host，就是tcg/riscv/tcg-target-con-set.h
+          * } TCGConstraintSetIndex;
+	  *
+	  * 继续从constraint_sets的到这个宏对应的字符串，这里重定义了名字相同的参数
+	  * 宏，使得名字相同的宏对应的代码不一样：
+          * 
+          * static const TCGTargetOpDef constraint_sets[] = {
+          * #include "tcg-target-con-set.h"
+          * };
+	  * 比如，还是如上的枚举元素，这里得到的tdefs是: rrrI
+	  *
+	  * 这代码写的也是风骚！具体字符的解析下面分析。
+	  */
+     +-> con_set = tcg_target_op_def(op);
+     +-> tdefs = &constraint_sets[con_set];
+           /* 解析一个IR中每个输入输出参数的限制，更新到args_ct域段 */
+       +-> for (i = 0; i < nb_args; i++) {
+	       while (*ct_str != '\0') {
+	       /* 数字的含义没有看懂，似乎是alias */
+               case '0' ... '9'
+	       /* ? */
+               case '&'
+	       /* 表示需要一个常数，但是rv上是ri */
+               case 'i':
+	       }
+	       /*
+	        * 特定host还可以自定寄存器的限制塞到这里，比如，rv在这里塞了如下
+		* 的case。从合理也可以看出，args_ct里reg表示寄存器的约束，ct表示
+		* 常量的约束。
+		*
+		* 特定host的约束在host代码里具体定义，比如，下面的ALL_GENERAL_REGS
+		* 就定义在tcg/riscv/tcg-target.c.inc，是MAKE_64BIT_MASK(0, 32)
+		*
+		* qemu里分配寄存器的公共代码的入参中就包含了这里定义的具体约束。
+		*/
+	       case 'r': def->args_ct[i].regs |= ALL_GENERAL_REGS; ct_str++; break;
+	       ...
+	       case 'I': def->args_ct[i].ct |= TCG_CT_CONST_S12; ct_str++; break;
+	       ...
+	   }
+           /* 根据特定优先级分配为输出输入参数排序 */
+       +-> sort_constraints(def, 0, def->nb_oargs);
+           sort_constraints(def, def->nb_oargs, def->nb_iargs);
+```
+ 
+ 单个IR生成host指令以及分配host寄存器的过程：
+```
+ tcg_reg_alloc_op(s, op)
+       /*
+        * 整个翻到host指令的过程，关键是分配寄存器，在一个tb里分配寄存器，那么就
+        * 要有中间变量把分配的和还没有分配的寄存器记录下来。
+        *
+        * reserved_regs是：在生成tb头时，被保留起来的host上寄存器，tb块里不能用,
+        * 所以这里直接标记为已分配。
+        */
+   +-> i_allocated_regs = s->reserved_regs;
+       o_allocated_regs = s->reserved_regs;
 
- 单独处理的中间码 具体生成过程
+       /* 处理输入参数 */
+   +-> for (k = 0; k < nb_iargs; k++) {
+	   /* 处理输入参数限制 */
+	   (todo: ...)
 
+	   /*
+	    * 给输入参数分配host寄存器，并且从cpu_env中load输入参数到host寄存器，
+	    * 为后续计算做准备。
+	    */
+           temp_load(s, ts, arg_ct->regs, i_allocated_regs, i_preferred_regs);
+       }
 
+       /* 释放输入寄存器？*/
+   +-> for (i = nb_oargs; i < nb_oargs + nb_iargs; i++) {
+            if (IS_DEAD_ARG(i)) {
+                temp_dead(s, arg_temp(op->args[i]));
+            }
+       }
+       /* 检查条件跳转、BB结尾以及side effect的情况, 处理call_clobber */
+   +-> (todo: ...) 
+
+       /* 处理输出参数 */
+   +-> for(k = 0; k < nb_oargs; k++) {
+
+       }
+
+       /* 根据参数构建指令 */
+   +-> tcg_out_op(s, op->opc, new_args, const_args);
+
+       /* 把global输出寄存器刷回cpu_env */
+   +-> for(i = 0; i < nb_oargs; i++) {
+
+       }
+```
