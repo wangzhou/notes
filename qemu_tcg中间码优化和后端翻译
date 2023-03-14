@@ -3,7 +3,7 @@ qemu tcg中间码优化和后端翻译
 
 -v0.1 2023.3.12 Sherlock init
 -v0.2 2023.3.13 Sherlock 增加中间码优化和寄存器活性分析
--v0.2 2023.3.14 Sherlock 增加后端翻译
+-v0.3 2023.3.14 Sherlock 增加后端翻译
 
 简介：本文介绍qemu tcg下中间码翻译和后端翻译的基本逻辑，代码分析基于qemu v7.1.50，
       文中涉及的测试场景，我们选择riscv作为guest、arm64作为host。
@@ -271,42 +271,42 @@ ARM64 host汇编：
    +-> la_func_end(s, nb_globals, nb_temps);                                       
        /*
         * 逆序遍历TB的中间码链表，除了几种类型的中间码要特殊处理下，剩余的都在默认
-	* 处理分支里(default)。需要单独处理的中间码有：call、insn_start、discard、
-	* 多输出的中间码(add2/sub2/mulu2/muls2_i32/i64)。
-	*
-	* 我们先关注default流程，然后再看需要单独处理的中间码。
-	*/
+        * 处理分支里(default)。需要单独处理的中间码有：call、insn_start、discard、
+        * 多输出的中间码(add2/sub2/mulu2/muls2_i32/i64)。
+        *
+        * 我们先关注default流程，然后再看需要单独处理的中间码。
+        */
    +-> QTAILQ_FOREACH_REVERSE_SAFE(op, &s->ops, link, op_prev) {                   
        +-> switch (opc) {                                                          
-	   /* call中间码相关TCG寄存器的分析下面单独来分析 */
+           /* call中间码相关TCG寄存器的分析下面单独来分析 */
            case INDEX_op_call:                                                     
-	   [...]
+           [...]
 
-	   default:
-	   /* 
-	    * 对于不是side_effect的指令，只要有输出参数不是dead，就不能去掉这条
-	    * 指令，否则，所有输出参数都dead了，这个指令就可以去掉了。
-	    */
-	   do_remove:
-	     +-> tcg_op_remove(s, op);                                               
+           default:
+           /* 
+            * 对于不是side_effect的指令，只要有输出参数不是dead，就不能去掉这条
+            * 指令，否则，所有输出参数都dead了，这个指令就可以去掉了。
+            */
+           do_remove:
+             +-> tcg_op_remove(s, op);                                               
 
-	   /* 寄存器活性分析核心逻辑在这里 */
+           /* 寄存器活性分析核心逻辑在这里 */
            do_not_remove:
-	         /*
-		  * 首先处理IR的输出寄存器，根据TCG寄存器状态更新IR的life，更新
-		  * 完后把TCG寄存器状态配置为dead，对于输出寄存器，必然不会对之前
-		  * IR的寄存器有依赖。
-		  */
-	     +-> for (i = 0; i < nb_oargs; i++) {
+                 /*
+                  * 首先处理IR的输出寄存器，根据TCG寄存器状态更新IR的life，更新
+                  * 完后把TCG寄存器状态配置为dead，对于输出寄存器，必然不会对之前
+                  * IR的寄存器有依赖。
+                  */
+             +-> for (i = 0; i < nb_oargs; i++) {
                      ts = arg_temp(op->args[i]);
-              
+
                      op->output_pref[i] = *la_temp_pref(ts);
-              
+
                      /* Output args are dead. */
                      if (ts->state & TS_DEAD) {
                          arg_life |= DEAD_ARG << i;
                      }
-              
+
                      if (ts->state & TS_MEM) {
                          arg_life |= SYNC_ARG << i;
                      }
@@ -314,14 +314,14 @@ ARM64 host汇编：
                      la_reset_pref(ts);
                  }
 
-	         /*
-	          * 处理TB结束、BB结束、条件跳转以及有side effect的指令。
-		  *
-		  * TCG_OPF_BB_EXIT是离开TB，所以temp dead，global dead和sync，
+                 /*
+                  * 处理TB结束、BB结束、条件跳转以及有side effect的指令。
+                  *
+                  * TCG_OPF_BB_EXIT是离开TB，所以temp dead，global dead和sync，
                   *
                   * 这里把条件branch指令单拿出来看，条件branch指令只是结束一个BB
-		  * 的一种情况, 结束一个BB还有goto_tb和exit_tb，开始一个BB还有
-		  * set_label。     
+                  * 的一种情况, 结束一个BB还有goto_tb和exit_tb，开始一个BB还有
+                  * set_label。     
                   *                                                               
                   * 对于条件branch指令：                                          
                   *                                                               
@@ -338,7 +338,7 @@ ARM64 host汇编：
                   *                                                               
                   * 从下到上解析到brcond的时候，所有global和local要sync，但是不
                   * 一定dead, 普通temp要都dead, 也就是说，在向上分析指令中，不可能
-		  * 有temp作为输出提供给这里的temp作为输入，因为qemu规定普通temp
+                  * 有temp作为输出提供给这里的temp作为输入，因为qemu规定普通temp
                   * 不能垮BB使用。对于所有的EBB和const，不改变TCG寄存器状态。
                   */                                                                 
              +-> if (def->flags & TCG_OPF_BB_EXIT) {
@@ -346,12 +346,12 @@ ARM64 host汇编：
                  } else if (def->flags & TCG_OPF_COND_BRANCH) {
                      la_bb_sync(s, nb_globals, nb_temps);
                  /*
-		  * BB_END时，也就是goto_tb、exit_tb以及set_label之前，在上面brcond
-		  * 的基础上EBB/const要dead，fixed要sync。但是原因是？
-		  */
+                  * BB_END时，也就是goto_tb、exit_tb以及set_label之前，在上面brcond
+                  * 的基础上EBB/const要dead，fixed要sync。但是原因是？
+                  */
                  } else if (def->flags & TCG_OPF_BB_END) {
                      la_bb_end(s, nb_globals, nb_temps);
-		 /* ? */
+                 /* ? */
                  } else if (def->flags & TCG_OPF_SIDE_EFFECTS) {
                      la_global_sync(s, nb_globals);
                      if (def->flags & TCG_OPF_CALL_CLOBBER) {
@@ -360,11 +360,11 @@ ARM64 host汇编：
                  }
 
                  /*
-		  * 处理输入寄存器状态。对于输入寄存器，如果之前已经dead，对于本条
-		  * 指令，这个寄存器是dead，因为后面没有人用了，所以配置当前IR的life。
-		  * 但是再往上遍历，因为这个寄存器在这里使用了，就要激活TCG寄存器，
-		  * 这个就是下面一段代码做的事。                                              
-		  */
+                  * 处理输入寄存器状态。对于输入寄存器，如果之前已经dead，对于本条
+                  * 指令，这个寄存器是dead，因为后面没有人用了，所以配置当前IR的life。
+                  * 但是再往上遍历，因为这个寄存器在这里使用了，就要激活TCG寄存器，
+                  * 这个就是下面一段代码做的事。                                              
+                  */
              +-> for (i = nb_oargs; i < nb_oargs + nb_iargs; i++) {                  
                      ts = arg_temp(op->args[i]);                                     
                      if (ts->state & TS_DEAD) {                                      
@@ -382,7 +382,7 @@ ARM64 host汇编：
                      }                                                               
                  }                                                                   
 
-		 /* todo: 寄存器传递？*/
+                 /* todo: 寄存器传递？*/
 ```
 
 下面是单独case处理的中间码的相关TCG寄存器的分析。
@@ -429,51 +429,51 @@ ARM64 host汇编：
        /* 遍历每个IR，得到host定义的针对每个IR的约束的定义 */
    +-> process_op_defs(s);
          /*
-	  * 如果host是riscv，tcg_target_op_def就是定义在tcg/riscv/tcg-target.c.inc，
-	  * 可以看到con_set的值是一个枚举值，对应枚举元素的定义类似：c_o1_i2_r_r_rI
-	  * 这个枚举类型定义在tcg/tcg.c，枚举元素include host上的具体定义：
+          * 如果host是riscv，tcg_target_op_def就是定义在tcg/riscv/tcg-target.c.inc，
+          * 可以看到con_set的值是一个枚举值，对应枚举元素的定义类似：c_o1_i2_r_r_rI
+          * 这个枚举类型定义在tcg/tcg.c，枚举元素include host上的具体定义：
           * 
           * typedef enum {
           * #include "tcg-target-con-set.h"  <- 如果rv是host，就是tcg/riscv/tcg-target-con-set.h
           * } TCGConstraintSetIndex;
-	  *
-	  * 继续从constraint_sets的到这个宏对应的字符串，这里重定义了名字相同的参数
-	  * 宏，使得名字相同的宏对应的代码不一样：
+          *
+          * 继续从constraint_sets的到这个宏对应的字符串，这里重定义了名字相同的参数
+          * 宏，使得名字相同的宏对应的代码不一样：
           * 
           * static const TCGTargetOpDef constraint_sets[] = {
           * #include "tcg-target-con-set.h"
           * };
-	  * 比如，还是如上的枚举元素，这里得到的tdefs是: rrrI
-	  *
-	  * 这代码写的也是风骚！具体字符的解析下面分析。
-	  */
+          * 比如，还是如上的枚举元素，这里得到的tdefs是: rrrI
+          *
+          * 这代码写的也是风骚！具体字符的解析下面分析。
+          */
      +-> con_set = tcg_target_op_def(op);
      +-> tdefs = &constraint_sets[con_set];
            /* 解析一个IR中每个输入输出参数的限制，更新到args_ct域段 */
        +-> for (i = 0; i < nb_args; i++) {
-	       while (*ct_str != '\0') {
-	       /* 数字的含义没有看懂，似乎是alias */
+               while (*ct_str != '\0') {
+               /* 数字的含义没有看懂，似乎是alias */
                case '0' ... '9'
-	       /* ? */
+               /* ? */
                case '&'
-	       /* 表示需要一个常数，但是rv上是ri */
+               /* 表示需要一个常数，但是rv上是ri */
                case 'i':
-	       }
-	       /*
-	        * 特定host还可以自定寄存器的限制塞到这里，比如，rv在这里塞了如下
-		* 的case。从合理也可以看出，args_ct里reg表示寄存器的约束，ct表示
-		* 常量的约束。
-		*
-		* 特定host的约束在host代码里具体定义，比如，下面的ALL_GENERAL_REGS
-		* 就定义在tcg/riscv/tcg-target.c.inc，是MAKE_64BIT_MASK(0, 32)
-		*
-		* qemu里分配寄存器的公共代码的入参中就包含了这里定义的具体约束。
-		*/
-	       case 'r': def->args_ct[i].regs |= ALL_GENERAL_REGS; ct_str++; break;
-	       ...
-	       case 'I': def->args_ct[i].ct |= TCG_CT_CONST_S12; ct_str++; break;
-	       ...
-	   }
+               }
+               /*
+                * 特定host还可以自定寄存器的限制塞到这里，比如，rv在这里塞了如下
+                * 的case。从合理也可以看出，args_ct里reg表示寄存器的约束，ct表示
+                * 常量的约束。
+                *
+                * 特定host的约束在host代码里具体定义，比如，下面的ALL_GENERAL_REGS
+                * 就定义在tcg/riscv/tcg-target.c.inc，是MAKE_64BIT_MASK(0, 32)
+                *
+                * qemu里分配寄存器的公共代码的入参中就包含了这里定义的具体约束。
+                */
+               case 'r': def->args_ct[i].regs |= ALL_GENERAL_REGS; ct_str++; break;
+               ...
+               case 'I': def->args_ct[i].ct |= TCG_CT_CONST_S12; ct_str++; break;
+               ...
+           }
            /* 根据特定优先级分配为输出输入参数排序 */
        +-> sort_constraints(def, 0, def->nb_oargs);
            sort_constraints(def, def->nb_oargs, def->nb_iargs);
@@ -483,46 +483,148 @@ ARM64 host汇编：
 ```
  tcg_reg_alloc_op(s, op)
        /*
-        * 整个翻到host指令的过程，关键是分配寄存器，在一个tb里分配寄存器，那么就
+        * 整个翻到host指令的过程，关键是分配寄存器，在一个TB里分配寄存器，那么就
         * 要有中间变量把分配的和还没有分配的寄存器记录下来。
         *
-        * reserved_regs是：在生成tb头时，被保留起来的host上寄存器，tb块里不能用,
-        * 所以这里直接标记为已分配。
+        * reserved_regs表示被保留起来的host上寄存器，TB块里不能用, 所以这里直接
+        * 标记为已分配。
         */
    +-> i_allocated_regs = s->reserved_regs;
        o_allocated_regs = s->reserved_regs;
 
        /* 处理输入参数 */
    +-> for (k = 0; k < nb_iargs; k++) {
-	   /* 处理输入参数限制 */
-	   (todo: ...)
+           /*
+            * 处理输入参数限制, 参数优先级排序这么不清楚? 如果是常数，并且根据host
+            * 指令可以表示常量的限制，判断是否可以直接把常量编码到指令里，如果可以，
+            * 就把信息记录在const_args和new_args，这两者都是后续生成host指令的参数。
+            *
+            * 比如，host是riscv时，addi指令里的常数。
+            */
+           if (ts->val_type == TEMP_VAL_CONST
+               && tcg_target_const_match(ts->val, ts->type, arg_ct->ct)) {
+               const_args[i] = 1;
+               new_args[i] = ts->val;
+           }
 
-	   /*
-	    * 给输入参数分配host寄存器，并且从cpu_env中load输入参数到host寄存器，
-	    * 为后续计算做准备。
-	    */
+           /* ialias这个没有看懂？*/
+           if (arg_ct->ialias) {}
+
+           /*
+            * 给输入参数分配host寄存器，并且从cpu_env中load输入参数到host寄存器，
+            * 为后续计算做准备。arg_ct->regs是host指令，在寄存器分配上的限制。
+            *
+            * 从这个函数的逻辑就可以看出TCG寄存器val_type的语意，它表示TCG寄存器
+            * 当前的存储状态。TEMP_VAL_REG表示已经在host寄存器里，所以直接返回。
+            * TEMP_VAL_CONST表示是一个常量(并且当前保存在TCG寄存器)，这里就要分配
+            * 一个host寄存器，并且生成一条host movi指令把这个常量送到host寄存器上，
+            * 并且配置ts->mem_coherent = 0，这个表示TCG寄存器和host寄存器不同步。
+            * TEMP_VAL_MEM表示TCG寄存器的值在内存里，这里要分配host寄存器，并把
+            * 对应的值load进host寄存器，同时配置ts->mem_coherent = 1。TEMP_VAL_DEAD
+            * 表示一个寄存器不需要从TCG load到host寄存器使用。tcg_reg_alloc_start
+            * 把TEMP_NORMAL/TEMP_EBB转换成TEMP_VAL_DEAD，像normal temp和ebb这种
+            * 中间计算产生的数据，显然始终产生于一个左值，用于存放临时变量(生命
+            * 周期只在一个BB内)，不需要刷回内存，更不需要从没存load进host寄存器。
+            */
            temp_load(s, ts, arg_ct->regs, i_allocated_regs, i_preferred_regs);
+                 /* 如上分析，处理各种val_type的情况 */
+             +-> switch (ts->val_type) {}
+
+                 /* 返回用掉的寄存器 */
+             +-> ts->reg = reg;
+                 /* TEMP_VAL_REG表示这个虚拟机寄存器的值已经在host寄存器里了 */
+             +-> ts->val_type = TEMP_VAL_REG;
+                 /* 表示当前物理寄存器对应的虚拟寄存器 */
+             +-> s->reg_to_temp[reg] = ts;
        }
 
-       /* 释放输入寄存器？*/
+       /* 处理dead输入寄存器 */
    +-> for (i = nb_oargs; i < nb_oargs + nb_iargs; i++) {
             if (IS_DEAD_ARG(i)) {
                 temp_dead(s, arg_temp(op->args[i]));
+                    [...]
+                    switch (ts->kind) {
+                    case TEMP_FIXED:
+                        return;
+                    case TEMP_GLOBAL:
+                    case TEMP_LOCAL:
+                        /* global、local寄存器如果dead，存储位置一定在内存？*/
+                        new_type = TEMP_VAL_MEM;
+                        break;
+                    case TEMP_NORMAL:
+                    case TEMP_EBB:
+                        /*
+                         * -1是free，1是dead, 所以normal和ebb也能被free，而且还要
+                         * 刷回内存?! 这里没有搞清楚?
+                         */
+                        new_type = free_or_dead < 0 ? TEMP_VAL_MEM : TEMP_VAL_DEAD;
+                        break;
+                    case TEMP_CONST:
+                        new_type = TEMP_VAL_CONST;
+                        break;
+                    default:
+                        g_assert_not_reached();
+                    }
+                    /*
+                     * 如果当前已经在物理寄存器里，但是dead了，那么这个物理寄存器
+                     * 就可以给其它虚拟寄存器用，所以，清理掉reg到temp的指向。
+                     */
+                    if (ts->val_type == TEMP_VAL_REG) {
+                        s->reg_to_temp[ts->reg] = NULL;
+                    }
+                    ts->val_type = new_type;
             }
        }
+
        /* 检查条件跳转、BB结尾以及side effect的情况, 处理call_clobber */
-   +-> (todo: ...) 
+   +-> if (def->flags & TCG_OPF_COND_BRANCH) {
+           [...]
+       } else if (def->flags & TCG_OPF_BB_END) {
+           [...]
+       } else {
+           if (def->flags & TCG_OPF_CALL_CLOBBER) {
+               [...]
+           }
+           if (def->flags & TCG_OPF_SIDE_EFFECTS) {
+               [...]
+           }
 
-       /* 处理输出参数 */
-   +-> for(k = 0; k < nb_oargs; k++) {
+           /* 处理输出参数 */
+   +-----> for(k = 0; k < nb_oargs; k++) {
+               /* arg_ct这段没有看懂？如下是最后一个分支 */
+               reg = tcg_reg_alloc(s, arg_ct->regs, o_allocated_regs,
+                                   op->output_pref[k], ts->indirect_base);
 
+               tcg_regset_set_reg(o_allocated_regs, reg);
+               /* 没有理解这里？*/
+               if (ts->val_type == TEMP_VAL_REG) {
+                   s->reg_to_temp[ts->reg] = NULL;
+               }
+               /* 分了一个物理寄存器，所以这个虚拟寄存器的值现在保存在物理寄存器上 */
+               ts->val_type = TEMP_VAL_REG;
+               ts->reg = reg;
+               /* TCG寄存器对应的物理寄存器和内存值当前不一致性 */
+               ts->mem_coherent = 0;
+               s->reg_to_temp[reg] = ts;
+               new_args[i] = reg;
+           }
        }
 
-       /* 根据参数构建指令 */
+
+       /* 根据参数构建指令，各个不同host实现自己的回调 */
    +-> tcg_out_op(s, op->opc, new_args, const_args);
 
        /* 把global输出寄存器刷回cpu_env */
    +-> for(i = 0; i < nb_oargs; i++) {
-
+         +-> if (NEED_SYNC_ARG(i)) {
+                 /*
+                  * TEMP_VAL_REG即当前值在host寄存器上时，才要刷回内存。为什么
+                  * TEMP_VAL_CONST有时要先load在store？？
+                  */
+                 temp_sync(s, ts, o_allocated_regs, 0, IS_DEAD_ARG(i));
+             } else if (IS_DEAD_ARG(i)) {
+                 /* 处理dead的输出寄存器？*/
+                 temp_dead(s, ts);
+             }
        }
 ```
