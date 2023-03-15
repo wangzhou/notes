@@ -1,0 +1,38 @@
+riscv 页表中的access/dirty bit
+===============================
+
+-v0.1 2023.3.15 Sherlock init
+
+简介：本文分析riscv页表中的access bit和dirty bit的基本逻辑，并进一步分析Linux内核
+      里依赖这两个bit的软件特性。
+
+
+硬件特性
+---------
+ 
+ ARM64因为历史的原因，导致其对access bit和dirty bit的支持比较绕，而riscv这里就比较
+ 简单直接。
+
+ riscv的页表项里有A bit和D bit，分别表示access bit和dirty bit，支持软件更新和硬件
+ 更新。软件更新是硬件在做page table walk的时候发现A bit为0或者D bit为0(触发ptw的是
+ 一个写数据内存的指令)就报异常给软件，软件在异常处理代码里就可以更新A或者D bit。
+ 硬件更新是硬件在做page table walk的时候发现上述的情况时，直接更新对应bit，硬件
+ 更新时需要考虑原子性的问题。(todo: qemu在原子性这里做了很多处理)
+
+ 这么看来，access bit和dirty bit只和页表项有关系，和TLB没有关系。硬件只在page table
+ walk时可以配置上这两个bit，随后通过TLB还是多次访问相关的page，而这些信息并不能
+ 体现到这两个bit上。所以，这两个bit的基本语意是page曾今被访问过或者曾今被写过。
+
+内核特性
+---------
+
+- dirty bit相关特性
+
+  (todo: ...)
+
+- access bit相关特性
+
+  riscv的access bit被封装到了pte_young这个函数里，在内核内存管理的多个子系统有在
+  使用。
+
+  (todo: vmscan, madvise, migrate_device, khugepage, rmap...)
