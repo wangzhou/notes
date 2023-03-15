@@ -26,13 +26,13 @@ riscv 页表中的access/dirty bit
 内核特性
 ---------
 
+  riscv的access bit和dirty bit被封装到了pte_young和pte_dirty里，在内核内存管理的
+  多个子系统有在使用。
+
 - dirty bit相关特性
 
   (todo: ...)
 
 - access bit相关特性
-
-  riscv的access bit被封装到了pte_young这个函数里，在内核内存管理的多个子系统有在
-  使用。
 
   (todo: vmscan, madvise, migrate_device, khugepage, rmap...)
