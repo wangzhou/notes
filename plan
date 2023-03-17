@@ -191,3 +191,6 @@ qemu编译系统			 to do
 qemu tcg中间码优化和后端翻译	 to do
 qemu tcg trans and exec	   	 repost
 rv acess/dirty bit		 to do
+重新分析下exit_tb和goto_tb的细节 to do
+riscv branch指令的整理		 to do
+c note				 repost
