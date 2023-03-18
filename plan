@@ -182,7 +182,7 @@ arm qemu模型分析		 c
 linux timer内核代码分析          todo
 qemu tlb分析			 c
 qemu bb以及temp和local temp	 c 还有代码分析没有写 4 --> 重要
-riscv 内存模型(重要)  	  	 c
+riscv 内存模型(重要)  	  	 repost
 qemu 内存模拟			 to do
 riscv vector			 to do
 riscv aia			 to do

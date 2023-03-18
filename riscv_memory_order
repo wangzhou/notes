@@ -4,6 +4,7 @@ riscv内存模型分析
 -v0.1 2023.2.23 Sherlock init
 -v0.2 2023.2.24 Sherlock 增加riscv内存序规则
 -v0.3 2023.2.24 Sherlock 规则2和其它一些增补修改
+-v0.4 2023.3.18 Sherlock acquire/release的一些修改
 
 简介：本文整理riscv的内存模型，基于riscv unprivileged ISA 20191213这个版本。其实
       对于使用弱内存序的构架，它们的内存模型都是比较相似的，无非是细节上有可能有
@@ -66,6 +67,11 @@ riscv内存序规则
  是可以跑到store之前的，不过load到的值是store缓存在store buff里的值，这个就是Intel
  TSO内存序上唯一放松的内存序。(todo: 待确定)
 
+ 再次总结下，load/store的四种可能情况是：1. load-load, 2, load-store, 3, store-store,
+ 4. store-load。规则1说的是2/3两种情况不能乱序，规则2说的是1的情况，规则3只说了
+ AMO/SC-load的情况，不能乱序，所以普通store-load的情况是可以乱序的，这种情况就是
+ 我们上面提到了TSO内存序上唯一的一个放松约束。
+
 ```
 • Explicit Synchronization 
 
@@ -94,8 +100,29 @@ riscv内存序规则
   +------| load/store  |         v
          +-------------+          
 ```
+ riscv上acquire/release的作为AMO或者lr/sc指令的属性一起使用，ARM64上则有STLR/LDAR
+ 指令，这两条指令把acquire/release和普通load/store指令结合到了一起。
+
+ 如下图所示，如果要确保地址无关的两个store不乱序，可以在其中加一个写fence，但是
+ 这样会一把拦住fence前后的所有store，当把后一个store换成带release的store时(STLR)，
+ store和STLR保序的同时，STLR后面其它的地址无关的store/load也可以提前投机执行。
+```
+         +-------------+                            +-------------+          
+         |    store    |---------+           ^      |    store    |---------+
+         +-------------+         |           |      +-------------+         |
+                                 v           |                              |
+------------- fence -------------+--       --+---------- STLR --------------+--
+  ^                                          |                              
+  |      +-------------+                     |      +------------------+
+  +------|    store    |                     +------| other store/load |         
+         +-------------+                            +------------------+
+```
+
  第七条规则中的RCsc指的是Release Consistency with sequentially-consistent synchronization
- operation。(todo: 引用了一篇经典的论文?)
+ operation，对应的概念还有RCpc，这两者是acquire/release的两种分类，描述的是，比如
+ 上图中如果“other store/load“里如果有LDAR，那么这个LDAR是否可以和STLR乱序，如果
+ acquire/release的种类是RCsc，那么不能乱序，如果是RCpc，是可以乱序的。riscv的WMO
+ 中的acquire/release的种类是RCsc。
 
  第八条规则说的a和b是一个pair，是说lr/sc指令组成的pair。
 
