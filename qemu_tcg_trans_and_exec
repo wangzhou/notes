@@ -51,7 +51,7 @@ qemu tcg 翻译执行核心逻辑分析
            +-> acc->init_machine (tcg_init_machine)
              +-> tcg_init
              | +-> tcg_context_init
-	     |       /*
+             |       /*
              |        * tcg/aarch64/tcg-target.c.inc，这个函数配置翻译时用到的host
              |        * 寄存器的信息，tcg_target_call_clobber_regs表示需要调用者
              |        * 保存的寄存器，这个函数把x19-x29(ARM64中需要被调用者保存)
@@ -63,7 +63,7 @@ qemu tcg 翻译执行核心逻辑分析
              |        * host架构上函数入参和返回值可以用的寄存器，ARM64上直接静态
              |        * 定义到了tcg-target.c.inc中。
              |        */
-	     |   +-> tcg_target_init
+             |   +-> tcg_target_init
              |     /*
              |      * tcg_ctx是TCGContext, 线程变量，是tb翻译执行的上下文. 每个
              |      * tb里都有一个段前导代码，这个代码用来在真正执行tb里的host
@@ -226,19 +226,16 @@ qemu tcg 翻译执行核心逻辑分析
  函数的定义；2. 在target/riscv/helper.h增加对应的宏，宏的参数分别是：helper函数名字、
  函数的返回值、函数的入参；3. 在中间码里用gen_helper_xxx直接调用helper函数，返回值
  保存在gen_helper_xxx的第一个参数里，常数入参需要用tcg_const_i32/i64生成下常数TCGv，
- 实际上是为这个常数分配中间码存储空间(todo)。
+ 实际上是为这个常数分配TCG寄存器存储空间。
 
  helper函数的实现逻辑是生成函数调用的上下文，然后跳转到函数的地址执行指令，也就是
  先把函数的入参放到寄存器上，然后调用跳转指令跳到函数地址执行。
-
 
 后端翻译
 --------
 
  后端翻译在tcg_gen_code里，核心是在一个循环里处理前端翻译的中间码，把中间码翻译成
- host上的汇编。
-
- (todo: 代码分析)
+ host上的汇编，具体分析可以参考[这里](https://wangzhou.github.io/qemu-tcg中间码优化和后端翻译/)。
 
 执行
 ----

@@ -17,10 +17,9 @@ qemu tcg中间码优化和后端翻译
  的难度，比如，要模拟一个新构架的CPU，只要实现guest->IR这一步就好，后续在X86或者在
  ARM64的host的机器上跑，重新编译下qemu就好，并不用去熟悉host CPU的构架。
 
- guest翻译成IR的逻辑在(这里)[https://wangzhou.github.io/xxxx]已经有介绍，这一步
- 主要靠程序员手写代码生成IR，本文主要讲中间码的优化和后端翻译，我们可以认为这两
- 部分属于翻译IR到host指令，为了看清楚IR到host指令的翻译，我们首先要明确前端翻译
- 得到的IR是怎么样的。
+ guest翻译成IR的逻辑在[这里]([https://wangzhou.github.io/qemu-tcg翻译执行核心逻辑分析/)已经有介绍，这一步主要靠程序员手写代码生成IR，本文主
+ 要讲中间码的优化和后端翻译，我们可以认为这两部分属于翻译IR到host指令，为了看清楚
+ IR到host指令的翻译，我们首先要明确前端翻译得到的IR是怎么样的。
 
  IR指令的理解是比较直白的，qemu定义了一套IR的指令，具体的定义在tcg/README里说明,
  在一个tb里，qemu前端翻译得到的IR被串联到一个链表里，中间码优化和后端翻译都靠这个
@@ -68,16 +67,18 @@ qemu tcg中间码优化和后端翻译
    [...]
 ```
  我们只挑了gpr和pc的这几行代码出来，这里分配了对应的TCG寄存器，返回值是这些寄存器
- 存储地址相对tcg_ctx的偏移。
+ 存储地址相对tcg_ctx的偏移。注意这里得到的是global寄存器的描述结构，类型是TCGTemp，
+ 而global寄存器实际存储在CPURISCVState内具体定义的地方，TCGTemp内通过mem_base和
+ mem_offset指向具体存储地址。
 
  实际上，所有TCG寄存器的分配都是在TCGContext里分配了对应的存储空间，并且配置上相关
  参数，这些参数和IR一起交给后端做IR优化和后端翻译，后端使用TCGContext的地址和具体
  寄存器的偏移可以找见具体的TCG寄存器。
 
- local temp和normal temp的分析在
- [这里](https://wangzhou.github.io/qemu中basic-block以及tcg中各种变量的基本逻辑)有说明。
- (todo: 考虑怎么整合)简而言之，normal temp只在一个BB中有效，local temp在一个TB
- 中有效。
+ local temp和normal temp的说明在[这里](https://wangzhou.github.io/qemu中basic-block以及tcg中各种变量的基本逻辑)有说明。简而言之，normal temp只在一个BB中有效，
+ local temp在一个TB中有效。
+
+ (todo: 考虑怎么整合)
 
  fixed要结合host寄存器分配来看，首先IR中分配的这些寄存器都是虚拟机寄存器，IR翻译
  到host指令都要给虚拟寄存器分配对应的host物理寄存器，当一个TCG寄存器有TEMP_FIXED
@@ -120,7 +121,11 @@ qemu tcg中间码优化和后端翻译
  如上，公共代码里还会把host的栈寄存器也reserv出来做特定的用途，这里sp就是host上
  sp自己的语意，因为host调用翻译好的host指令，就是一个host上的函数调用。
 
- ebb类型的TCG寄存器表示这个寄存器可以跨越条件跳转，但是跨越之后状态为dead。(todo: 具体用法)
+ ebb类型的TCG寄存器表示这个寄存器可以跨越条件跳转，但是跨越之后状态为dead，这种
+ 变量类型和indirect的global寄存器有关系，在liveness_pass_2中会为indirect的global
+ 寄存器新创建ebb类型的TCG寄存器，具体用法还待分析。
+
+ (todo: 具体用法)
  
 中间码优化
 -----------
@@ -193,7 +198,7 @@ ARM64 host汇编：
  指令是从0xffff9c00014c这里开始的，从上面知道x19就是cpu_env的指针，0x10是riscv sp
  对应的TCG寄存器在cpu_env的偏移，所以“ldr x20, [x19, #0x10]”就是把保存在内存里的
  guest CPU sp的值load到host寄存器x20上，下面sub指令对应的就是riscv的addi指令，然后
- 紧接着一个str指令把sp的值更新会cpu_env，注意x20还是sp的值，所以, host还是可以使用
+ 紧接着一个str指令把sp的值更新回cpu_env，注意x20还是sp的值，所以, host还是可以使用
  x20中保存的sp计算指令“sd ra,24(sp)”中sd要保存值的地址，翻译到host上的“add x21, x20, #0x18”，
  x21保存sd要保存值的地址，后面的“ldr x22, [x19, #8]”同样把riscv的ra load到host寄存器
  x22上，最后host使用“str x22, [x21, xzr]”完成“sd ra,24(sp)”的模拟。
@@ -208,10 +213,10 @@ ARM64 host汇编：
  tcg_gen_code
    +-> liveness_pass_1(s);                                                         
    /*
-    * nb_indirects的值在创建global TCG寄存器的时候更新: *tcg_global_mem_new_internal，
+    * nb_indirects的值在创建global TCG寄存器的时候更新: tcg_global_mem_new_internal，
     * 这个函数会检测base入参的TCG类型，注意不是自己的TCG类型，如果base的类型是global
     * 才会增加nb_indirects的计数。一般调用这个函数为guest gpr创建global TCG寄存器
-    * 都是用cpu_env作为base入参，所以nb_indirects的都不会增加。
+    * 都是用cpu_env作为base入参，所以nb_indirects的值都不会增加。
     *
     * 也就是qemu认为，对于global虚拟寄存器的访问，如果是通过一个fix寄存器作为指针
     * 访问，就叫direct，但是如果不是，就叫indirect。针对indirect的访问需要进行额外
@@ -268,7 +273,7 @@ ARM64 host汇编：
  liveness_pass_1的逻辑大概是这样的：
 ```
  liveness_pass_1
-       /* 遍历开始，更新TCG寄存器为初识状态 */
+       /* 遍历开始，更新TCG寄存器为初始状态 */
    +-> la_func_end(s, nb_globals, nb_temps);                                       
        /*
         * 逆序遍历TB的中间码链表，除了几种类型的中间码要特殊处理下，剩余的都在默认
@@ -395,9 +400,8 @@ ARM64 host汇编：
  进入后端翻译的主流程前在tcg_reg_alloc_start函数中先根据TCG寄存器类型(kind)得到
  TCG寄存器的val_type域段的值，这个域段是一个动态值，指示的是TCG寄存器值对应的存储
  状态，比如TEMP_VAL_REG表示当前TCG寄存器的值保存在host寄存器上，TEMP_VAL_MEM表示
- 当前TCG寄存器的值保存在内存里(cpu_env的TCG寄存器对应域段)。
-
- TEMP_VAL_CONST, TEMP_VAL_DEAD是什么语意？
+ 当前TCG寄存器的值保存在内存里(cpu_env的TCG寄存器对应域段)，TEMP_VAL_CONST表示常量，
+ TEMP_VAL_DEAD表示一个寄存器不需要从TCG load到host寄存器使用。
 
  正序遍历TB的IR链表，逐个翻译每个中间码和TCG寄存器，这个是后端翻译的主流程。可以
  看到，这里针对几个特殊的中间码做特殊处理，主流程在tcg_reg_alloc_op里。
@@ -444,7 +448,10 @@ ARM64 host汇编：
           * static const TCGTargetOpDef constraint_sets[] = {
           * #include "tcg-target-con-set.h"
           * };
-          * 比如，还是如上的枚举元素，这里得到的tdefs是: rrrI
+          *
+          * 比如，还是如上的枚举元素，这里得到的tdefs包含一个字符串数组，其中的
+          * 每个字符串是：r，r，rI，一个参数可能有多个属性的叠加，比如这里的最后
+          * 一个参数就有r和I。
           *
           * 这代码写的也是风骚！具体字符的解析下面分析。
           */
@@ -453,11 +460,11 @@ ARM64 host汇编：
            /* 解析一个IR中每个输入输出参数的限制，更新到args_ct域段 */
        +-> for (i = 0; i < nb_args; i++) {
                while (*ct_str != '\0') {
-               /* 数字的含义没有看懂，似乎是alias */
+               /* 数字的含义没有看懂，似乎表示alias */
                case '0' ... '9'
-               /* ? */
+               /* 很少用到，是需要分一个新寄存器的意思？*/
                case '&'
-               /* 表示需要一个常数，但是rv上是ri */
+               /* 表示需要一个常数，但是rv上是i */
                case 'i':
                }
                /*
