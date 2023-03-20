@@ -5,6 +5,7 @@ qemu tcg中间码优化和后端翻译
 -v0.2 2023.3.13 Sherlock 增加中间码优化和寄存器活性分析
 -v0.3 2023.3.14 Sherlock 增加后端翻译
 -v0.4 2023.3.15 Sherlock 补充后端翻译细节
+-v0.5 2023.3.20 Sherlock 
 
 简介：本文介绍qemu tcg下中间码翻译和后端翻译的基本逻辑，代码分析基于qemu v7.1.50，
       文中涉及的测试场景，我们选择riscv作为guest、arm64作为host。
@@ -77,8 +78,6 @@ qemu tcg中间码优化和后端翻译
 
  local temp和normal temp的说明在[这里](https://wangzhou.github.io/qemu中basic-block以及tcg中各种变量的基本逻辑)有说明。简而言之，normal temp只在一个BB中有效，
  local temp在一个TB中有效。
-
- (todo: 考虑怎么整合)
 
  fixed要结合host寄存器分配来看，首先IR中分配的这些寄存器都是虚拟机寄存器，IR翻译
  到host指令都要给虚拟寄存器分配对应的host物理寄存器，当一个TCG寄存器有TEMP_FIXED
@@ -391,9 +390,21 @@ ARM64 host汇编：
                  /* todo: 寄存器传递？*/
 ```
 
-下面是单独case处理的中间码的相关TCG寄存器的分析。
-(todo: ...)
+下面是单独case处理的中间码的相关TCG寄存器的分析，insn_start直接跳过，因为insn_start
+只是一个hint，discard表示这个指令标记的寄存器后面没有再使用了，所以直接配置对应
+的TCG寄存器为dead，剩下是call和一堆二输出的中间码。
 
+二输出中间码和对应的单输出的中间码的逻辑是一致的，只不过每个输入输出值是由两个TCG
+寄存器组成，一个存放低32或64bit，一个存放高32或64bit。二输出的中间码又分为加减和
+乘法两类，如果两个输出TCG都是dead，对应的IR可以删除，二输出的加减IR，如果只有高位
+输出寄存器是dead，IR可以转化成单输出加减IR，二输出的乘法IR，输出其中之一是dead时，
+IR可以分别转化为不同的单输出乘法IR(todo: 没有搞清这里的逻辑)。
+
+call中间码用来支持helper函数，对于没有副作用的函数，如果输出都dead, 就可以删去掉
+这个call中间码，也就没有对应的helper函数调用了，不能删除call，qemu单独处理这样的
+情况：
+(todo: ...)
+		 
 后端翻译
 ---------
 
@@ -401,7 +412,9 @@ ARM64 host汇编：
  TCG寄存器的val_type域段的值，这个域段是一个动态值，指示的是TCG寄存器值对应的存储
  状态，比如TEMP_VAL_REG表示当前TCG寄存器的值保存在host寄存器上，TEMP_VAL_MEM表示
  当前TCG寄存器的值保存在内存里(cpu_env的TCG寄存器对应域段)，TEMP_VAL_CONST表示常量，
- TEMP_VAL_DEAD表示一个寄存器不需要从TCG load到host寄存器使用。
+ TEMP_VAL_DEAD表示一个寄存器不需要从TCG load到host寄存器使用。所以，具体的映射初始
+ 值是：fixed -> TEMP_VAL_REG，global/local temp -> TEMP_VAL_MEM，const -> TEMP_VAL_CONST，
+ normal temp/ebb -> TEMP_VAL_DEAD。
 
  正序遍历TB的IR链表，逐个翻译每个中间码和TCG寄存器，这个是后端翻译的主流程。可以
  看到，这里针对几个特殊的中间码做特殊处理，主流程在tcg_reg_alloc_op里。
@@ -520,7 +533,7 @@ ARM64 host汇编：
 
            /*
             * 给输入参数分配host寄存器，并且从cpu_env中load输入参数到host寄存器，
-            * 为后续计算做准备。arg_ct->regs是host指令，在寄存器分配上的限制。
+            * 为后续计算做准备。arg_ct->regs是host指令在host寄存器分配上的限制。
             *
             * 从这个函数的逻辑就可以看出TCG寄存器val_type的语意，它表示TCG寄存器
             * 当前的存储状态。TEMP_VAL_REG表示已经在host寄存器里，所以直接返回。

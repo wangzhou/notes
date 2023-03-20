@@ -3,6 +3,7 @@ qemu中basic block以及tcg中各种变量的基本逻辑
 
 -v0.1 2022.8.27 Sherlock init
 -v0.2 2023.2.21 Sherlock 增加global变量的分析
+-v0.3 2023.3.20 Sherlock 增加代码分析的链接
 
 简介：在实现一个CPU架构的QEMU前端指令翻译的时候会用到各种tcg变量，本文整理这些
       变量的基本语意，分析背后的qemu代码。本文分析基于的QEMU版本是6.2.0, 基于riscv 
@@ -65,4 +66,4 @@ qemu中basic block以及tcg中各种变量的基本逻辑
 QEMU代码分析
 ------------
 
- (todo)
+ 代码分析需要涉及tcg后端翻译，具体代码分析可以参考[这里](https://wangzhou.github.io/qemu-tcg中间码优化和后端翻译/)。

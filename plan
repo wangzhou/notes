@@ -181,7 +181,6 @@ qemu内存模拟分析		 todo
 arm qemu模型分析		 c
 linux timer内核代码分析          todo
 qemu tlb分析			 c
-qemu bb以及temp和local temp	 c 还有代码分析没有写 4 --> 重要
 qemu 内存模拟			 to do
 riscv vector			 to do
 riscv aia			 c
@@ -192,3 +191,4 @@ rv acess/dirty bit		 c
 重新分析下exit_tb和goto_tb的细节 to do
 riscv branch指令的整理		 to do
 各种spinlock锁的分析		 to do
+qemu bb以及temp和local temp	 repost
