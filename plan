@@ -191,4 +191,4 @@ rv acess/dirty bit		 c
 重新分析下exit_tb和goto_tb的细节 to do
 riscv branch指令的整理		 to do
 各种spinlock锁的分析		 to do
-qemu bb以及temp和local temp	 repost
+qemu plugin分析			 to do
