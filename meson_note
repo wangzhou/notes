@@ -1,0 +1,70 @@
+如何使用meson构建程序
+=====================
+
+-v0.1 2023.3.26 Sherlock init
+
+简介：本文介绍如何使用meson构建程序，现在很多程序都是使用meson构建的，比如qemu、
+      glib库等，了解下meson的基本逻辑在使用用meson构建的程序时逻辑会更加清晰。
+      本文中的测试程序运行环境是ARM版本的ubuntu 20.04。
+
+基本逻辑
+---------
+
+meson是用python写的一个程序构建工具，meson的官网在[这里](https://mesonbuild.com/index.html)，这里有meson的使用手册，
+这个手册很好用。meson和make一样，需要写描述文件告诉meson要构建什么，这个描述文件
+就是meson.build，meson根据meson.build中的定义生成生成具体的构建定义文件build.ninja，
+ninja根据build.ninja完成具体构建。所以，不像make直接根据Makefile文件完成构建，meson
+需要和ninja配合一起完成构建。
+
+我们通过一个简单程序具体看下使用meson的方法，具体使用meson还是要学习下如上官网上
+的手册。
+
+首先在源码根目录下创建meson.build文件，文件内容：
+```
+project('learn_meson', 'c')
+executable('hello', 'test.c')
+```
+这个文件定义了一个learn_meson的工程，并且定义了hello这个构建目标，以及test.c构建
+使用的源文件。
+
+在需要构建的源码根目录运行：
+```
+ meson setup builddir
+```
+这个是告诉meson在哪个目录下构建(这里是源码根目录下的builddir目录)，meson一定要在
+一个和源码独立的目录里做构建，这样多次构建可以指定不同的构建目录和构建配置，相互
+之间不受影响，比如对于同样的程序，构建一个riscv版本可以这样指定构建目录：
+```
+ meson setup --cross-file ./rv_cross_file rv_builddir
+```
+其中，rv_cross_file是指定一些构建要用的参数，当然你的系统里要有riscv的工具链。
+rv_cross_file内容如下：
+```
+[host_machine]
+system = 'linux'
+cpu_family = 'riscv64'
+cpu = 'riscv64'
+endian = 'little'
+
+[properties]
+c_args = []
+c_link_args = []
+
+[binaries]
+c = 'riscv64-linux-gnu-gcc'
+cpp = 'riscv64-linux-gnu-g++'
+ar = 'riscv64-linux-gnu-ar'
+ld = 'riscv64-linux-gnu-ld'
+objcopy = 'riscv64-linux-gnu-objcopy'
+strip = 'riscv64-linux-gnu-strip'
+```
+
+运行如上命令后可以在源码根目录下发现对应的构建目录，里面有build.ninja文件。
+```
+sherlock@m1:~/tests/meson_test/build$ ls
+build.ninja  compile_commands.json  hello.p  meson-info  meson-logs  meson-private
+```
+
+在源码根目录运行meson compile -C builddir，在build目录下即可以看到编译好的hello。
+
+静态链接(glib例子)
