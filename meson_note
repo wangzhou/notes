@@ -2,6 +2,7 @@
 =====================
 
 -v0.1 2023.3.26 Sherlock init
+-v0.2 2023.3.27 Sherlock 补充静态链接的配置
 
 简介：本文介绍如何使用meson构建程序，现在很多程序都是使用meson构建的，比如qemu、
       glib库等，了解下meson的基本逻辑在使用用meson构建的程序时逻辑会更加清晰。
@@ -65,6 +66,17 @@ sherlock@m1:~/tests/meson_test/build$ ls
 build.ninja  compile_commands.json  hello.p  meson-info  meson-logs  meson-private
 ```
 
-在源码根目录运行meson compile -C builddir，在build目录下即可以看到编译好的hello。
+在源码根目录运行meson compile -C builddir，在build目录下即可以看到编译好的hello，
+可以看到编译好的hello是动态链接的。进入builddir，运行meson configure可以看到default_library
+一项是shared，meson configure显示构建的配置，默认为动态链接，可以使用如下命令修改
+为静态链接：(注意，要在builddir下运行)
+```
+meson configure -Ddefault_library=static
+```
+再次meson compile -C builddir即可只构建出静态链接的程序。
 
-静态链接(glib例子)
+
+
+
+
+
