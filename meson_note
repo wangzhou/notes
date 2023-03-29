@@ -3,6 +3,7 @@
 
 -v0.1 2023.3.26 Sherlock init
 -v0.2 2023.3.27 Sherlock 补充静态链接的配置
+-v0.3 2023.3.29 Sherlock 补充glib的编译
 
 简介：本文介绍如何使用meson构建程序，现在很多程序都是使用meson构建的，比如qemu、
       glib库等，了解下meson的基本逻辑在使用用meson构建的程序时逻辑会更加清晰。
@@ -75,8 +76,67 @@ meson configure -Ddefault_library=static
 ```
 再次meson compile -C builddir即可只构建出静态链接的程序。
 
+一个例子：编译glib
+--------------------
 
+如下的方式可以本地编译glib:
+```
+ cd glib_source_dir
+ meson setup build
+ meson compile -C build
+```
 
+如果要静态编译可以：
+```
+ cd build
+ meson configure -Ddefault_library=static
+ cd ../
+ meson compile -C build
+```
 
+glib库会编译出libglib/libgio/libgmodule，如果想只编译libglib，直观的办法是可以修改
+meson.build文件，我们可以把相关的模块这样注释掉，这样就可以只编译libglib：
+```
+diff --git a/meson.build b/meson.build                                          
+index 0cbc9689f..f5acd5f61 100644                                               
+--- a/meson.build                                                               
++++ b/meson.build                                                               
+@@ -82,9 +82,9 @@ darwin_versions = [current + 1, '@0@.@1@'.format(current + 1, interface_age)]
+                                                                                
+ configinc = include_directories('.')                                           
+ glibinc = include_directories('glib')                                          
+-gobjectinc = include_directories('gobject')                                    
+-gmoduleinc = include_directories('gmodule')                                    
+-gioinc = include_directories('gio')                                            
++# gobjectinc = include_directories('gobject')                                  
++# gmoduleinc = include_directories('gmodule')                                  
++# gioinc = include_directories('gio')                                          
 
+@@ -2387,11 +2387,11 @@ pkg = import('pkgconfig')                               
+ windows = import('windows')                                                    
+ subdir('tools')                                                                
+ subdir('glib')                                                                 
+-subdir('gobject')                                                              
+-subdir('gthread')                                                              
+-subdir('gmodule')                                                              
+-subdir('gio')                                                                  
+-subdir('fuzzing')                                                              
++# subdir('gobject')                                                            
++# subdir('gthread')                                                            
++# subdir('gmodule')                                                            
++# subdir('gio')                                                                
++# subdir('fuzzing')                                                            
+```
 
+我们考虑交叉编译出riscv版本的libglib，使用如上交叉编译的方法在setup过程中会自动
+下载libffi，考虑到libglib并没有依赖libffi，我们直接把meson.build中的libffi依赖描述
+这一行注释掉：
+```
+[...]
+libm = cc.find_library('m', required : false)                                   
+# libffi_dep = dependency('libffi', version : '>= 3.0.0')  <--- 注释掉这行
+                                                                                
+libz_dep = dependency('zlib')                                                   
+[...]
+```
+这样最后可以只编译出riscv版本的libglib。
