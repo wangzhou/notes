@@ -4,8 +4,9 @@
 -v0.1 2023.3.26 Sherlock init
 -v0.2 2023.3.27 Sherlock 补充静态链接的配置
 -v0.3 2023.3.29 Sherlock 补充glib的编译
+-v0.4 2023.3.30 Sherlock 补充meson特性的基本介绍
 
-简介：本文介绍如何使用meson构建程序，现在很多程序都是使用meson构建的，比如qemu、
+简介：本文是使用meson构建程序的一个笔记，现在很多程序都是使用meson构建的，比如qemu、
       glib库等，了解下meson的基本逻辑在使用用meson构建的程序时逻辑会更加清晰。
       本文中的测试程序运行环境是ARM版本的ubuntu 20.04。
 
@@ -14,7 +15,7 @@
 
 meson是用python写的一个程序构建工具，meson的官网在[这里](https://mesonbuild.com/index.html)，这里有meson的使用手册，
 这个手册很好用。meson和make一样，需要写描述文件告诉meson要构建什么，这个描述文件
-就是meson.build，meson根据meson.build中的定义生成生成具体的构建定义文件build.ninja，
+就是meson.build，meson根据meson.build中的定义生成具体的构建定义文件build.ninja，
 ninja根据build.ninja完成具体构建。所以，不像make直接根据Makefile文件完成构建，meson
 需要和ninja配合一起完成构建。
 
@@ -67,7 +68,7 @@ sherlock@m1:~/tests/meson_test/build$ ls
 build.ninja  compile_commands.json  hello.p  meson-info  meson-logs  meson-private
 ```
 
-在源码根目录运行meson compile -C builddir，在build目录下即可以看到编译好的hello，
+在源码根目录运行meson compile -C builddir，在builddir目录下即可以看到编译好的hello，
 可以看到编译好的hello是动态链接的。进入builddir，运行meson configure可以看到default_library
 一项是shared，meson configure显示构建的配置，默认为动态链接，可以使用如下命令修改
 为静态链接：(注意，要在builddir下运行)
@@ -128,7 +129,7 @@ index 0cbc9689f..f5acd5f61 100644
 +# subdir('fuzzing')                                                            
 ```
 
-我们考虑交叉编译出riscv版本的libglib，使用如上交叉编译的方法在setup过程中会自动
+我们考虑交叉编译出riscv版本的libglib，使用如上交叉编译的方法会在setup过程中会自动
 下载libffi，考虑到libglib并没有依赖libffi，我们直接把meson.build中的libffi依赖描述
 这一行注释掉：
 ```
@@ -140,3 +141,66 @@ libz_dep = dependency('zlib')
 [...]
 ```
 这样最后可以只编译出riscv版本的libglib。
+
+meson具体特性介绍
+------------------
+
+如上meson的官网有详细介绍meson的各种特性，我们这边持续的总结下，总结的思路是用类比
+的方式看看make上的特性在meson上是怎么样，然后我们看meson特有的特性。
+
+首先meson一定要像make一样，有描述构建target和构建依赖的语法，有自己的数据结构的
+定义、函数方法的定义。上面用executable()定义编译的目标文件，如果target是构建库出来，
+可以用library()，比如glib里定义libglib这个target是这样搞的：
+```
+libglib = library('glib-2.0',                                                   
+  glib_dtrace_obj, glib_dtrace_hdr,                                             
+  sources : [deprecated_sources, glib_sources],                                 
+  version : library_version,                                                    
+  soversion : soversion,                                                        
+  darwin_versions : darwin_versions,                                            
+  install : true,                                                               
+  # intl.lib is not compatible with SAFESEH                                     
+  link_args : [noseh_link_args, glib_link_flags, win32_ldflags],                
+  include_directories : configinc,                                              
+  link_with: [charset_lib, gnulib_lib],                                         
+  dependencies : [                                                              
+    gnulib_libm_dependency,                                                     
+    libiconv,                                                                   
+    libintl_deps,                                                               
+    libm,                                                                       
+    librt,                                                                      
+    libsysprof_capture_dep,                                                     
+    pcre2,                                                                      
+    platform_deps,                                                              
+    thread_dep,                                                                 
+  ],                                                                            
+  c_args : glib_c_args,                                                         
+  objc_args : glib_c_args,                                                      
+  gnu_symbol_visibility : 'hidden',                                             
+)                                                                               
+```
+其中各个域段的语法要查meson library这个函数的具体定义，其中的dependencies域段表示
+目标的依赖，而dependencies中的语段，比如，thread_dep，又是通过declare_dependency
+生成的:
+```
+thread_dep = dependency('threads')                                            
+```
+
+todo: target
+
+todo: Syntax/语法和python很像
+
+todo: dependencies
+
+todo: compiler property/检测系统信息
+
+todo: subproject/wrap
+
+todo: 生成代码
+
+todo: option
+
+todo: configuration
+
+todo: 修改build.ninja
+
