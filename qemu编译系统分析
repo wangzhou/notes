@@ -1,0 +1,64 @@
+-v0.1 2023.3.32 Sherlock init
+
+简介: qemu的编译系统是个大杂烩，它没有用Linux传统的autoconfig，确有一个configure文件，
+      而且每次还是通过这个configure文件做配置，它核心是使用meson描述依赖关系，但是转而
+      使用make做构建，它使用类似Linux内核的Kconfig文件，但是没有图形化的配置接口，除此
+      之外，它还有很多CONFIG项，你想hack一下都不知道它在哪里配置。本文分析qemu编译系统，
+      梳理其中的基础逻辑，分析基于qemu v7.1.50代码。
+
+基本逻辑
+---------
+
+ 首先qemu编译系统中，描述整个构建依赖是使用meson来做的，这个是qemu编译系统的核心。
+ meson是和make类似的构建工具，它的官网提供很好的指导文档，也可以参考[这里](https://wangzhou.github.io/如何使用meson构建程序/)快速了解下。
+
+ 配置使用的configure其实是一个shell脚本，它的主体都在解析configure的输入以及做系统
+ 环境的监测，最后使用收集到的参数调用meson setup。注意configure的那些--disable/--enable
+ 的参数都是按照字符串匹配去做检测的，所以不是随便每个参数都可以用这种方式配置。
+ 使用configure --help可以直观的看到可以在configure命令行直接可以配置的参数。
+
+ qemu根目录下有meson.build和meson_options.txt，前者除了定义构建的依赖关系，还做了
+ 大量系统监测的工作，根据监测的结果，meson使用configure这个特性直接把相关配置写到
+ config文件里，注意qemu meson生成了很多配置文件，你用“configure_file”去搜就是可以
+ 看到所有动态生成的配置文件。meson_options.txt定义了很多可选的配置项，相关的option
+ 项的type是feature，一般可以直接把value域段配置成disabled，从而关闭相关配置。
+
+ 顶层meson.build里通过一个个subdirs把下层目录包含进来，以此类推，在最底层使用source_set
+ 方法得到source set对象，调用这个对象的add方法把源文件一个一个收集起来，写入顶层
+ meson.build中定义的存放代码的字典类型的数据结构里，比如hw_arch，target_arch，
+ target_user_arch，target_softmmu_arch等。
+
+ configure执行meson setup会把依赖写入build.ninja，qemu没有直接用meson compile或者
+ ninja来构建，而是在外面又套了一层Makefile，Mafile里判断各种依赖，追后还是调用ninja
+ 来做构建。
+
+ qemu里还定义了很多Kconfig配置文件，比如hw/riscv/Kconfig、target/riscv/Kconfig等，
+ 这些Kconfig使用select定义了配置之间的一些逻辑关系，但是这个是在哪里解析的？
+
+一个故事
+---------
+
+ 基于以上的认识，我们看看如何关掉CONFIG_PTHREAD_SETNAME_NP_W_TID这个配置，我们先
+ 问下chatGPT，它的一本正经的说：./configure --enable-pthread-setname_np_w_tid
+ 根据以上的分析，它是在胡扯了，搜索可以发现这个选项定义在顶层meson.build里：
+```
+config_host_data.set('CONFIG_PTHREAD_SETNAME_NP_W_TID', cc.links(gnu_source_prefix + '''
+  #include <pthread.h>
+
+  static void *f(void *p) { return NULL; }
+  int main(void)
+  {
+    pthread_t thread;
+    pthread_create(&thread, 0, f, 0);
+    pthread_setname_np(thread, "QEMU");
+    return 0;
+  }''', dependencies: threads))
+```
+ 如上是用meson compiler property的links方法测试下面这段代码是否可以link libthreads
+ 库，如果可以link，就把这个配置写入config_host_data这个对象，这个对象后面会写到
+ 配置文件config-host.h里。
+```
+genh += configure_file(output: 'config-host.h', configuration: config_host_data)
+```
+ 所以，如果临时hack的话，可以把config-host.h里的配置改下，然后直接去make，如果要
+ 改的彻底一点，都可以把这个检查直接去掉。

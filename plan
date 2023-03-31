@@ -193,6 +193,6 @@ riscv branch指令的整理		 to do
 qemu plugin分析			 to do
 user mode也可以跑动态链接程序    to do
 
-libglib meson静态交叉编译	 to do
-qemu编译系统			 to do
+libglib meson静态交叉编译	 post
+qemu编译系统			 post
 手动交叉编译qemu user mode	 to do
