@@ -1,0 +1,63 @@
+int add(int a, int b)
+{
+	return a + b;
+}
+
+int main()
+{
+	int a = 1, b = 2, c = 5;
+
+	c += add(a, b);
+
+	return c;
+}
+
+0000000000000612 <main>:
+ 612:	1101                	addi	sp,sp,-32    开栈
+ 614:	ec06                	sd	ra,24(sp)    ra是caller save，下面638行会覆盖ra，所以这里比如caller save
+ 616:	e822                	sd	s0,16(sp)    s0 callee save, 保存完就可以用
+ 618:	1000                	addi	s0,sp,32     main函数上下文使用s0作为帧指针
+ 61a:	4785                	li	a5,1
+ 61c:	fef42223          	sw	a5,-28(s0)
+ 620:	4789                	li	a5,2
+ 622:	fef42423          	sw	a5,-24(s0)
+ 626:	4795                	li	a5,5
+ 628:	fef42623          	sw	a5,-20(s0)   a/b/c逐个入栈，其实没有必要。还有很多没有必要的入栈
+
+ 62c:	fe842703          	lw	a4,-24(s0)
+ 630:	fe442783          	lw	a5,-28(s0)
+
+ 634:	85ba                	mv	a1,a4        准备add入参
+ 636:	853e                	mv	a0,a5
+
+ 638:	fb3ff0ef          	jal	ra,5ea <add> 函数调用
+
+ 63c:	87aa                	mv	a5,a0        函数返回值a0
+ 63e:	873e                	mv	a4,a5
+ 640:	fec42783          	lw	a5,-20(s0)   从栈上读到c
+ 644:	9fb9                	addw	a5,a5,a4     c和函数返回值做加法
+ 646:	fef42623          	sw	a5,-20(s0)
+ 64a:	fec42783          	lw	a5,-20(s0)
+ 64e:	853e                	mv	a0,a5        准备main的返回值
+ 650:	60e2                	ld	ra,24(sp)    恢复caller save的ra，为ret做准备
+ 652:	6442                	ld	s0,16(sp)    恢复callee save的s0
+ 654:	6105                	addi	sp,sp,32     退栈
+ 656:	8082                	ret                  函数返回
+
+00000000000005ea <add>:
+ 5ea:	1101                	addi	sp,sp,-32    开栈
+ 5ec:	ec22                	sd	s0,24(sp)    callee save, 然后在函数上下文才能用s0做帧指针
+ 5ee:	1000                	addi	s0,sp,32     上面保存了s0，所以这里把s0用做帧指针
+ 5f0:	87aa                	mv	a5,a0        
+ 5f2:	872e                	mv	a4,a1
+ 5f4:	fef42623          	sw	a5,-20(s0)
+ 5f8:	87ba                	mv	a5,a4
+ 5fa:	fef42423          	sw	a5,-24(s0)
+ 5fe:	fec42703          	lw	a4,-20(s0)
+ 602:	fe842783          	lw	a5,-24(s0)
+ 606:	9fb9                	addw	a5,a5,a4
+ 608:	2781                	sext.w	a5,a5
+ 60a:	853e                	mv	a0,a5
+ 60c:	6462                	ld	s0,24(sp)    恢复callee save寄存器
+ 60e:	6105                	addi	sp,sp,32     退栈
+ 610:	8082                	ret                  函数返回
