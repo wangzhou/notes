@@ -61,3 +61,47 @@ int main()
  60c:	6462                	ld	s0,24(sp)    恢复callee save寄存器
  60e:	6105                	addi	sp,sp,32     退栈
  610:	8082                	ret                  函数返回
+
+
+int add(int a, int b, int c, int d, int e, int f, int g, int h, int i, int j)
+{
+	return a + b + c + d + e + f + g + h + i + j;
+}
+
+int main()
+{
+	int a = 1, b = 2, c = 5;
+	
+	c += add(a, b, 3, 4, 5, 6, 7, 8, 9, 10);
+
+	return c;
+}
+
+0000000000000680 <main>:
+ 680:	7179                	addi	sp,sp,-48
+ 682:	f406                	sd	ra,40(sp)
+ 684:	f022                	sd	s0,32(sp)
+ 686:	1800                	addi	s0,sp,48
+ 688:	4785                	li	a5,1
+ 68a:	fef42223          	sw	a5,-28(s0)
+ 68e:	4789                	li	a5,2
+ 690:	fef42423          	sw	a5,-24(s0)
+ 694:	4795                	li	a5,5
+ 696:	fef42623          	sw	a5,-20(s0)
+ 69a:	fe842583          	lw	a1,-24(s0)
+ 69e:	fe442503          	lw	a0,-28(s0)
+ 6a2:	47a9                	li	a5,10
+ 6a4:	e43e                	sd	a5,8(sp)
+ 6a6:	47a5                	li	a5,9
+ 6a8:	e03e                	sd	a5,0(sp)   <--- 可以看出超过入参寄存器的参数
+ 6aa:	48a1                	li	a7,8            放到被函数栈一开始的位置
+ 6ac:	481d                	li	a6,7
+ 6ae:	4799                	li	a5,6
+ 6b0:	4715                	li	a4,5
+ 6b2:	4691                	li	a3,4
+ 6b4:	460d                	li	a2,3
+ 6b6:	f35ff0ef          	jal	ra,5ea <add>
+ 6ba:	87aa                	mv	a5,a0
+ 6bc:	873e                	mv	a4,a5
+ 6be:	fec42783          	lw	a5,-20(s0)
+ [...]
