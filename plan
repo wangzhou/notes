@@ -198,3 +198,8 @@ qemu编译系统			 c
 手动交叉编译qemu user mode	 to do
 
 qemu_tcg_trans_and_exec		 repost
+arm memory order		 to do
+head.s				 repost
+splitwx				 to do
+qemu ld和ld的不同		 to do
+qemu user下gpa和hva的偏移	 to do
