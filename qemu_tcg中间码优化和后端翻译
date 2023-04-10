@@ -560,92 +560,96 @@ BB的划分，另外qemu提供了一组call_flag，程序员可以用call_flag�
         *
         * reserved_regs表示被保留起来的host上寄存器，TB块里不能用, 所以这里直接
         * 标记为已分配。
+        *
+        * 这个函数只是翻译一个IR，几个核心的数据结构的含义是：new_args[]、con_args[]
+        * 指的是当前这个IR翻译到host指令时，分配得到的host物理寄存器。s中的reserved_regs、
+        * reg_to_temp[]指的是tb翻译上下文host寄存器的分配情况，所以，当一个host
+        * 物理寄存器被分配或释放时需要更新s中的reg_to_temp[]对应元素。
         */
    +-> i_allocated_regs = s->reserved_regs;
        o_allocated_regs = s->reserved_regs;
 
        /* 处理输入参数 */
    +-> for (k = 0; k < nb_iargs; k++) {
-           /*
-            * 处理输入参数限制, 参数优先级排序这么不清楚? 如果是常数，并且根据host
-            * 指令可以表示常量的限制，判断是否可以直接把常量编码到指令里，如果可以，
-            * 就把信息记录在const_args和new_args，这两者都是后续生成host指令的参数。
-            *
-            * 比如，host是riscv时，addi指令里的常数。
-            */
-           if (ts->val_type == TEMP_VAL_CONST
-               && tcg_target_const_match(ts->val, ts->type, arg_ct->ct)) {
-               const_args[i] = 1;
-               new_args[i] = ts->val;
-           }
+       /*
+        * 处理输入参数限制, 参数优先级排序还不清楚? 如果是常数，并且根据host
+        * 指令可以表示常量的限制，判断是否可以直接把常量编码到指令里，如果可以，
+        * 就把信息记录在const_args和new_args，这两者都是后续生成host指令的参数。
+        *
+        * 比如，host是riscv时，addi指令里的常数。
+        */
+       if (ts->val_type == TEMP_VAL_CONST
+           && tcg_target_const_match(ts->val, ts->type, arg_ct->ct)) {
+           const_args[i] = 1;
+           new_args[i] = ts->val;
+       }
 
-           /* ialias这个没有看懂？*/
-           if (arg_ct->ialias) {}
+       /* ialias这个没有看懂？*/
+       if (arg_ct->ialias) {}
 
-           /*
-            * 给输入参数分配host寄存器，并且从cpu_env中load输入参数到host寄存器，
-            * 为后续计算做准备。arg_ct->regs是host指令在host寄存器分配上的限制。
-            *
-            * 从这个函数的逻辑就可以看出TCG寄存器val_type的语意，它表示TCG寄存器
-            * 当前的存储状态。TEMP_VAL_REG表示已经在host寄存器里，所以直接返回。
-            * TEMP_VAL_CONST表示是一个常量(并且当前保存在TCG寄存器)，这里就要分配
-            * 一个host寄存器，并且生成一条host movi指令把这个常量送到host寄存器上，
-            * 并且配置ts->mem_coherent = 0，这个表示TCG寄存器和host寄存器不同步。
-            * TEMP_VAL_MEM表示TCG寄存器的值在内存里，这里要分配host寄存器，并把
-            * 对应的值load进host寄存器，同时配置ts->mem_coherent = 1。TEMP_VAL_DEAD
-            * 表示一个寄存器不需要从TCG load到host寄存器使用。tcg_reg_alloc_start
-            * 把TEMP_NORMAL/TEMP_EBB转换成TEMP_VAL_DEAD，像normal temp和ebb这种
-            * 中间计算产生的数据，显然始终产生于一个左值，用于存放临时变量(生命
-            * 周期只在一个BB内)，不需要刷回内存，更不需要从没存load进host寄存器。
-            */
-           temp_load(s, ts, arg_ct->regs, i_allocated_regs, i_preferred_regs);
-                 /* 如上分析，处理各种val_type的情况 */
-             +-> switch (ts->val_type) {}
+       /*
+        * 给输入参数分配host寄存器，并且从cpu_env中load输入参数到host寄存器，
+        * 为后续计算做准备。arg_ct->regs是host指令在host寄存器分配上的限制。
+        *
+        * 从这个函数的逻辑就可以看出TCG寄存器val_type的语意，它表示TCG寄存器
+        * 当前的存储状态。TEMP_VAL_REG表示已经在host寄存器里，所以直接返回。
+        * TEMP_VAL_CONST表示是一个常量(并且当前保存在TCG寄存器)，这里就要分配
+        * 一个host寄存器，并且生成一条host movi指令把这个常量送到host寄存器上，
+        * 并且配置ts->mem_coherent = 0，这个表示TCG寄存器和host寄存器不同步。
+        * TEMP_VAL_MEM表示TCG寄存器的值在内存里，这里要分配host寄存器，并把
+        * 对应的值load进host寄存器，同时配置ts->mem_coherent = 1。TEMP_VAL_DEAD
+        * 表示一个寄存器不需要从TCG load到host寄存器使用。tcg_reg_alloc_start
+        * 把TEMP_NORMAL/TEMP_EBB转换成TEMP_VAL_DEAD，像normal temp和ebb这种
+        * 中间计算产生的数据，显然始终产生于一个左值，用于存放临时变量(生命
+        * 周期只在一个BB内)，不需要刷回内存，更不需要从没存load进host寄存器。
+        */
+       temp_load(s, ts, arg_ct->regs, i_allocated_regs, i_preferred_regs);
+             /* 如上分析，处理各种val_type的情况 */
+         +-> switch (ts->val_type) {}
 
-                 /* 返回用掉的寄存器 */
-             +-> ts->reg = reg;
-                 /* TEMP_VAL_REG表示这个虚拟机寄存器的值已经在host寄存器里了 */
-             +-> ts->val_type = TEMP_VAL_REG;
-                 /* 表示当前物理寄存器对应的虚拟寄存器 */
-             +-> s->reg_to_temp[reg] = ts;
+             /* 返回用掉的寄存器 */
+         +-> ts->reg = reg;
+             /* TEMP_VAL_REG表示这个虚拟机寄存器的值已经在host寄存器里了 */
+         +-> ts->val_type = TEMP_VAL_REG;
+             /* 表示当前物理寄存器对应的虚拟寄存器 */
+         +-> s->reg_to_temp[reg] = ts;
        }
 
        /* 处理dead输入寄存器 */
    +-> for (i = nb_oargs; i < nb_oargs + nb_iargs; i++) {
-            if (IS_DEAD_ARG(i)) {
-                temp_dead(s, arg_temp(op->args[i]));
-                    [...]
-                    switch (ts->kind) {
-                    case TEMP_FIXED:
-                        return;
-                    case TEMP_GLOBAL:
-                    case TEMP_LOCAL:
-                        /* global、local寄存器如果dead，存储位置一定在内存？*/
-                        new_type = TEMP_VAL_MEM;
-                        break;
-                    case TEMP_NORMAL:
-                    case TEMP_EBB:
-                        /*
-                         * -1是free，1是dead, 所以normal和ebb也能被free，而且还要
-                         * 刷回内存?! 这里没有搞清楚?
-                         */
-                        new_type = free_or_dead < 0 ? TEMP_VAL_MEM : TEMP_VAL_DEAD;
-                        break;
-                    case TEMP_CONST:
-                        new_type = TEMP_VAL_CONST;
-                        break;
-                    default:
-                        g_assert_not_reached();
-                    }
-                    /*
-                     * 如果当前已经在物理寄存器里，但是dead了，那么这个物理寄存器
-                     * 就可以给其它虚拟寄存器用，所以，清理掉reg到temp的指向。
-                     */
-                    if (ts->val_type == TEMP_VAL_REG) {
-                        s->reg_to_temp[ts->reg] = NULL;
-                    }
-                    ts->val_type = new_type;
+          if (IS_DEAD_ARG(i)) {
+            temp_dead(s, arg_temp(op->args[i]));
+            [...]
+            switch (ts->kind) {
+            case TEMP_FIXED:
+                return;
+            case TEMP_GLOBAL:
+            case TEMP_LOCAL:
+                /* global、local寄存器如果dead，一定要刷回cpu_env内存 */
+                new_type = TEMP_VAL_MEM;
+                break;
+            case TEMP_NORMAL:
+            case TEMP_EBB:
+                /*
+                 * -1是free，1是dead, 所以normal和ebb也能被free，而且还要刷回内存?!
+                 */
+                new_type = free_or_dead < 0 ? TEMP_VAL_MEM : TEMP_VAL_DEAD;
+                break;
+            case TEMP_CONST:
+                new_type = TEMP_VAL_CONST;
+                break;
+            default:
+                g_assert_not_reached();
             }
+            /*
+             * 如果当前已经在物理寄存器里，但是dead了，那么这个物理寄存器
+             * 就可以给其它虚拟寄存器用，所以，清理掉reg到temp的指向。
+             */
+            if (ts->val_type == TEMP_VAL_REG) {
+                s->reg_to_temp[ts->reg] = NULL;
+            }
+            ts->val_type = new_type;
+          }
        }
 
        /* 检查条件跳转、BB结尾以及side effect的情况, 处理call_clobber */
@@ -663,23 +667,23 @@ BB的划分，另外qemu提供了一组call_flag，程序员可以用call_flag�
 
            /* 处理输出参数 */
    +-----> for(k = 0; k < nb_oargs; k++) {
-               /* arg_ct这段没有看懂？如下是最后一个分支 */
-               reg = tcg_reg_alloc(s, arg_ct->regs, o_allocated_regs,
-                                   op->output_pref[k], ts->indirect_base);
+           /* arg_ct这段没有看懂？如下是最后一个分支 */
+           reg = tcg_reg_alloc(s, arg_ct->regs, o_allocated_regs,
+                               op->output_pref[k], ts->indirect_base);
 
-               tcg_regset_set_reg(o_allocated_regs, reg);
-               /* 没有理解这里？*/
-               if (ts->val_type == TEMP_VAL_REG) {
-                   s->reg_to_temp[ts->reg] = NULL;
-               }
-               /* 分了一个物理寄存器，所以这个虚拟寄存器的值现在保存在物理寄存器上 */
-               ts->val_type = TEMP_VAL_REG;
-               ts->reg = reg;
-               /* TCG寄存器对应的物理寄存器和内存值当前不一致性 */
-               ts->mem_coherent = 0;
-               s->reg_to_temp[reg] = ts;
-               new_args[i] = reg;
+           tcg_regset_set_reg(o_allocated_regs, reg);
+           /* 没有理解这里？*/
+           if (ts->val_type == TEMP_VAL_REG) {
+               s->reg_to_temp[ts->reg] = NULL;
            }
+           /* 分了一个物理寄存器，所以这个虚拟寄存器的值现在保存在物理寄存器上 */
+           ts->val_type = TEMP_VAL_REG;
+           ts->reg = reg;
+           /* TCG寄存器对应的物理寄存器和内存值当前不一致性 */
+           ts->mem_coherent = 0;
+           s->reg_to_temp[reg] = ts;
+           new_args[i] = reg;
+         }
        }
 
 
@@ -688,16 +692,16 @@ BB的划分，另外qemu提供了一组call_flag，程序员可以用call_flag�
 
        /* 把global输出寄存器刷回cpu_env */
    +-> for(i = 0; i < nb_oargs; i++) {
-         +-> if (NEED_SYNC_ARG(i)) {
-                 /*
-                  * TEMP_VAL_REG即当前值在host寄存器上时，才要刷回内存。为什么
-                  * TEMP_VAL_CONST有时要先load在store？？
-                  */
-                 temp_sync(s, ts, o_allocated_regs, 0, IS_DEAD_ARG(i));
-             } else if (IS_DEAD_ARG(i)) {
-                 /* 处理dead的输出寄存器？*/
-                 temp_dead(s, ts);
-             }
+         if (NEED_SYNC_ARG(i)) {
+             /*
+              * TEMP_VAL_REG即当前值在host寄存器上时，才要刷回内存。为什么
+              * TEMP_VAL_CONST有时要先load在store？？
+              */
+             temp_sync(s, ts, o_allocated_regs, 0, IS_DEAD_ARG(i));
+         } else if (IS_DEAD_ARG(i)) {
+             /* 处理dead的输出寄存器？*/
+             temp_dead(s, ts);
+         }
        }
 ```
 
