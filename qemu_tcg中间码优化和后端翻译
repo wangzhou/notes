@@ -370,7 +370,7 @@ ARM64 host汇编：
       */
      } else if (def->flags & TCG_OPF_SIDE_EFFECTS) {
          la_global_sync(s, nb_globals);
-	 /* 这里没有搞明白？*/
+         /* 这里没有搞明白？*/
          if (def->flags & TCG_OPF_CALL_CLOBBER) {
              la_cross_call(s, nb_temps);
          }
