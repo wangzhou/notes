@@ -3,12 +3,61 @@ qemu insn_start中间码分析
 
 -v0.1 2023.4.12 Sherlock init
 
-简介：之前没有意识到insn_start这个中间码尽然是每个IR之间都要插入一个，本文分析下
+简介：之前没有意识到insn_start这个中间码尽然是每个guest指令之间都要插入一个，本文分析下
       qemu insn_start这个中间码的逻辑，分析依赖qemu v7.1.50版本。
 
+qemu在每一个guest指令的中间码实现之间都要插入一条insn_start的中间码：
+```
+ translator_loop
+   +-> while () {
+          ops->insn_start(db, cpu);                                               
 
-todo: host/target各种概念澄清下。
+	  /* 循环翻译一个tb里的guest指令 */
+	  [...]
+       }
+```
+插入insn_start的行为靠guest相关的一个回调函数完成，riscv上是riscv_tr_insn_start,
+不通构架下基本都是插入一条insn_start指令，只不过insn_start指令带的参数个数有可能
+是不一样的。riscv上带来pc和0两个参数。
 
+qemu在后端翻译的时候解析insn_start并把guest pc等信息保存在TCGContext的gen_insn_end_off
+和gen_insn_data表项里，其中前者保存的是每条guest指令对应的host指令的地址，后者保
+存的是每条guest指令对应的guest pc以及其它信息。
+```
+ tcg_gen_code
+   +-> case INDEX_op_insn_start:
+
+       /* 比如，如果是第一条guest指令，num_insns为0的位置记录的就是0 */
+       size_t off = tcg_current_code_size(s);                          
+       s->gen_insn_end_off[num_insns] = off;                           
+
+       /* guest pc以及可能的其它参数记录在如下表里 */
+       s->gen_insn_data[num_insns][i] = a;                             
+```
+qemu在翻译完一个tb后，根据如上保存的信息，在生成代码的尾部生成对应的信息:
+```
+ tb_gen_code
+   +-> tcg_gen_code
+   +-> encode_search
+```
+
+如上的准备是为了guest产生异常的时候可以精确的找到guest pc，还是用riscv举例，像ecall
+这种主动产生的异常，在模拟触发异常时同步更新下guest pc就好:
+```
+ trans_ecall
+   +-> generate_exception(ctx, RISCV_EXCP_U_ECALL)
+     +-> tcg_gen_movi_tl(cpu_pc, ctx->base.pc_next)
+     +-> gen_helper_raise_exception(cpu_env, tcg_constant_i32(excp))
+```
+注意qemu在模拟的时候为了性能不会每条guest指令都更新cpu_env的guest cpu，只是在需要
+的时候才更新。
+
+但是除了ecall指令触发的U_ECALL这种异常，CPU上其它的异常都是被动产生的，比如下面的
+图上，guest insn0/insn1就可能触发各种被动的异常，比如guest insn1是存储指令，那么
+在执行它对应的host指令时就可能跑到模拟触发缺页异常，qemu会跳出当前的翻译执行大循环，
+跳到异常模拟的地方，异常模拟的地方会把异常上下文报告给软件，其中就包括guest insn1
+的pc。被动异常可能发生在各种guest指令上，所以qemu就记录了如上guest pc和host pc的
+对照表，被动异常发生时通过host pc反查到guest pc并更新到guest cpu_env上。
 ```
   pc_0:   guest insn0       IR0       host insn0
                             IR1       host insn1
@@ -19,5 +68,18 @@ todo: host/target各种概念澄清下。
                             IR5       host insn5
                                       host insn6
 ```
-
-todo: 比如，当执行到insn5时，需要模拟guest的异常，那就需要把guest insn1的pc更新到cpu_env
+如下是相关的代码逻辑：
+```
+ cpu_loop_exit_restore(CPUState *cpu, uintptr_t pc)                         
+   +-> cpu_restore_state(cpu, pc, true);                                       
+     +-> cpu_restore_state_from_tb
+       /* 反查guest pc */
+       [...]
+       /* 更新guest pc */
+       restore_state_to_opc()
+   +-> cpu_loop_exit(cpu);                                                         
+```
+                                                                            
+todo: ld/sd按说也可以直接拿到guest pc?
+todo: host/target各种概念澄清下。
+todo: 相关算法在顺序运行的时候才成了，那么中间码里反向跳转的话怎么办？
