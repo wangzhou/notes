@@ -1,0 +1,23 @@
+qemu insn_start中间码分析
+==========================
+
+-v0.1 2023.4.12 Sherlock init
+
+简介：之前没有意识到insn_start这个中间码尽然是每个IR之间都要插入一个，本文分析下
+      qemu insn_start这个中间码的逻辑，分析依赖qemu v7.1.50版本。
+
+
+todo: host/target各种概念澄清下。
+
+```
+  pc_0:   guest insn0       IR0       host insn0
+                            IR1       host insn1
+                                      host insn2
+
+  pc_1:   guest insn1       IR3       host insn3
+                            IR4       host insn4
+                            IR5       host insn5
+                                      host insn6
+```
+
+todo: 比如，当执行到insn5时，需要模拟guest的异常，那就需要把guest insn1的pc更新到cpu_env
