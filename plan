@@ -185,9 +185,7 @@ qemu 内存模拟			 to do
 riscv vector			 to do
 riscv aia			 c
 riscv pmp		   	 to do
-qemu tcg中间码优化和后端翻译	 repost
 rv acess/dirty bit		 c
-重新分析下exit_tb和goto_tb的细节 to do
 riscv branch指令的整理		 to do
 各种spinlock锁的分析		 to do
 qemu plugin分析			 to do
@@ -199,9 +197,9 @@ qemu编译系统			 c
 
 arm memory order		 to do
 splitwx				 to do
-qemu ld和ld的不同		 to do
-qemu user下gpa和hva的偏移	 to do
+qemu load store			 repost
 rv call convertion		 c
 rv 各种跳转分析			 to do
 current的值，以及内核线程current里mm的值   to do
-qemu insn_start			 post
+重新分析下exit_tb和goto_tb的细节 to do
+riscv vector			 to do

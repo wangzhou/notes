@@ -2,14 +2,20 @@
 -v0.2 2023.1.19 增加tlb框架、慢速路径
 -v0.3 2023.1.20 page walk细节
 -v0.4 2023.2.19 增加取指令的超链接
+-v0.5 2023.4.13 增加qemu里host ld/sd的分析，以及user mode下guest PA和host VA的区别。
 
 简介：本文分析qemu tcg里关于load/store的流程，以riscv平台为分析对象。qemu的版本是5.1.50。
       CPU访存主要有使用load/store的显示访存也有隐式访存，比如CPU取指令就属于一种
       隐式访存，qemu对CPU取指令的模拟逻辑可以参考: htts://wangzhou.github.io/qemu-tcg取指令逻辑分析/
       
 
-load/store基本流程模拟
------------------------
+qemu load/store基本流程模拟
+----------------------------
+
+qemu里load/store分两种，一种是load/store guest地址，对应的中间码是qemu_ld/st_xxx，
+另一种是load/store的是host地址，对应的中间码是ld/st_xxx，这一节中我们讨论的是前者。
+qemu里load/store在system mode和user mode下的模拟又是不一样的，到了具体地方，我们
+会具体说明下。
 
 我们从一个普通的load指令的模拟代码入手分析。
 /* qemu/target/riscv/insn_trans/trans_rvi.c.inc */
@@ -31,12 +37,17 @@ tcg/riscv/tcg-target.c.inc里的tcg_out_qemu_ld_slow_path。
   tcg_gen_code
        /* tcg/riscv/tcg-target.c.inc, 这里我们假设host平台也是riscv */
     -> tcg_out_op
-         /* 可以看到这里分了有MMU和没有MMU的情况 */
+         /* 可以看到这里分了有MMU和没有MMU的情况，一般user mode是没有MMU的 */
       -> tcg_out_qemu_ld
            /*
             * 有MMU的情况，tlb_load这个函数检测是否tlb可以直接命中，如果命中，直接
-            * 就load数据了, 没有有MMU的情况, 计算地址后直接用tcg_out_qemu_ld_direct
-            * 生成的host指令load数据。
+            * 就load数据了。没有MMU的情况, 计算地址后直接用tcg_out_qemu_ld_direct
+            * 生成的host指令load数据，需要注意的是没有MMU的时候，必然也没有tlb了,
+            * 另一个需要注意的点是，没有MMU的时候，qemu会直接load/store guest PA，
+            * 但是guest PA和host VA逻辑上并不相等，两者之差保存在全局变量guest_base
+            * 中，并在tcg_target_qemu_prologue里传递给TCG_GUEST_BASE_REG寄存器，
+            * 所以可以看到这里会结合TCG_GUEST_BASE_REG计算出对应的host VA，然后
+            * 针对host VA做load。
             *
             * tlb查找直接用tb里生成的host汇编指令做了，得到pa放到TMP0寄存器里,
             * 如下生成的host汇编里插入了跳转指令，如果tlb有命中就继续执行
@@ -131,3 +142,22 @@ riscv page walk分析
 --------------------
 
  qemu riscv page walk基本逻辑可以参考[这里](https://wangzhou.github.io/qemu-tcg中riscv-page-table-walk分析/)。
+
+load/store host地址
+--------------------
+
+ 我们分析riscv上的ld_i64的实现，它对应的中间码是INDEX_op_ld_i64。可以看见qemu后端
+ 会直接把中间码翻译成host load/store指令，当中间码里的offset参数和host load/store
+ 指令里的offset立即数的位宽不匹配的时候，qemu后端会做必要的调整。
+```
+ /* tcg/riscv/tcg-target.c.inc */
+ tcg_out_ldst
+   /*
+    * 根据load/store的基地址寄存器的分配情况决定host load/store offset立即数位宽
+    * 不够的时候该怎么办: 基地址寄存器分配了0寄存器时要加入auipc计算地址，基地址
+    * 寄存器可用时，只要重新调整下基地址寄存器里的数值就好。
+    */
+   [...]
+   /* 直接生成host load/store指令 */
+   tcg_out_opc_store()/tcg_out_opc_imm()
+```
