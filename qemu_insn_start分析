@@ -12,8 +12,8 @@ qemu在每一个guest指令的中间码实现之间都要插入一条insn_start�
    +-> while () {
           ops->insn_start(db, cpu);                                               
 
-	  /* 循环翻译一个tb里的guest指令 */
-	  [...]
+          /* 循环翻译一个tb里的guest指令 */
+          [...]
        }
 ```
 插入insn_start的行为靠guest相关的一个回调函数完成，riscv上是riscv_tr_insn_start,
@@ -79,7 +79,10 @@ qemu在翻译完一个tb后，根据如上保存的信息，在生成代码的�
        restore_state_to_opc()
    +-> cpu_loop_exit(cpu);                                                         
 ```
-                                                                            
-todo: ld/sd按说也可以直接拿到guest pc?
-todo: host/target各种概念澄清下。
-todo: 相关算法在顺序运行的时候才成了，那么中间码里反向跳转的话怎么办？
+
+注意，load/store操纵的guest va不要和load/store指令的地址搞混，load/store指令本身
+的地址还是要靠如上的方式获得。
+
+qemu里host和target的概念比较绕，这里再次明确下，qemu/tcg/README其实有澄清。对于
+qemu这个大的范围target指的就是被模拟的CPU构架，host就是qemu进程运行的CPU，但是
+TCG里，target表示生成代码的CPU构架，就是qemu里的host。
