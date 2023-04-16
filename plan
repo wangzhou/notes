@@ -182,7 +182,6 @@ arm qemu模型分析		 c
 linux timer内核代码分析          todo
 qemu tlb分析			 c
 qemu 内存模拟			 to do
-riscv vector			 to do
 riscv aia			 c
 riscv pmp		   	 to do
 rv acess/dirty bit		 c
@@ -197,9 +196,15 @@ qemu编译系统			 c
 
 arm memory order		 to do
 splitwx				 to do
-qemu load store			 repost
-rv call convertion		 c
-rv 各种跳转分析			 to do
-current的值，以及内核线程current里mm的值   to do
-重新分析下exit_tb和goto_tb的细节 to do
+
+c协程实现			 to do 1
+rv call convertion		 c     2
+rv 各种跳转分析			 to do 3
+qemu set_labe			 to do
+qemu tlb同步逻辑	         to do
+
 riscv vector			 to do
+riscv上各种锁的实现，rcu	 to do
+
+current的值，以及内核线程current里mm的值   to do
+vstime/hstime		         to do

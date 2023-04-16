@@ -1,3 +1,42 @@
+riscv call conversion速览
+==========================
+
+-v0.1 2023.4.14 Sherlock init
+-v0.2 2023.4.16 Sherlock 增加寄存器约定
+
+简介：本文是对riscv call conversion的一个速记，其中会反汇编简单的代码，然后分析
+      和call conversion相关的地方。
+
+基本逻辑
+---------
+
+riscv call conversion的协议在[这里](https://github.com/riscv-non-isa/riscv-elf-psabi-doc/releases/download/v1.0/riscv-abi.pdf)。所谓call conversion是指函数调用过程中二进制
+接口的定义。如果一个程序都相同的编译器构建，自然二进制的接口是一样，但是，程序难免
+要使用各种库，这样程序构建的时候就是直接链接库的二进制，双方的二进制接口就要对齐。
+
+其实，只要是不同的二进制程序之间有相互关联都存在二进制接口对齐的问题，必须定义相关
+的准则，比如一个内核模块和内核之间的ABI问题，在一个内核版本上编译好的内核模块在不
+同的内核上可能就不能使用，这就需要发行版(这里讨论的是Linux的发行版)在一定版本内
+ABI是要做到兼容的，比如redhat的发行版在大版本是一定会做到ABI兼容的。
+
+call conversion定义的就是函数调用之间的准则，比如函数调用的时候怎么传递函数入参，
+怎么保存寄存器等等。下面的章节逐一介绍下。
+
+寄存器相关的约定
+-----------------
+
+函数调用到了新函数，要使用通用寄存器进行计算，但是这些寄存器上还有发起调用函数的
+数据，必须把通用寄存器上的值先保存起来，等新函数使用完寄存器后，返回发起调用函数
+执行后续代码的时候再恢复回来原先寄存器上的值。这就有两种办法，一种是发起调用的函
+数负责恢复和保存寄存器，一种是在被调函数里使用寄存器之前先保存旧值，使用完再把把
+寄存器的旧值恢复回去，一般CPU都会把整个通用寄存器(GPR)分成这两种寄存器，前者叫作
+caller saved registers, 后者叫做callee saved registers。从被调函数看，它可以放心
+的使用caller saved registers，因为调用函数已经做了保存，调用函数负责在调用被调函
+数之前保存caller saved registers(是否全部要保存?)，被调函数只需要保存以及恢复它使
+用的calleesaved registers就好。
+
+todo: 参数传递寄存器。
+
 int add(int a, int b)
 {
 	return a + b;
@@ -105,6 +144,3 @@ int main()
  6bc:	873e                	mv	a4,a5
  6be:	fec42783          	lw	a5,-20(s0)
  [...]
-
-riscv abi link:
-https://github.com/riscv-non-isa/riscv-elf-psabi-doc/releases/download/v1.0/riscv-abi.pdf
