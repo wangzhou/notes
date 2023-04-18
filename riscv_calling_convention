@@ -3,6 +3,7 @@ riscv call conversion速览
 
 -v0.1 2023.4.14 Sherlock init
 -v0.2 2023.4.16 Sherlock 增加寄存器约定
+-v0.3 2023.4.18 Sherlock 增加caller/callee以及参数传递的约定
 
 简介：本文是对riscv call conversion的一个速记，其中会反汇编简单的代码，然后分析
       和call conversion相关的地方。
@@ -30,13 +31,30 @@ call conversion定义的就是函数调用之间的准则，比如函数调用�
 执行后续代码的时候再恢复回来原先寄存器上的值。这就有两种办法，一种是发起调用的函
 数负责恢复和保存寄存器，一种是在被调函数里使用寄存器之前先保存旧值，使用完再把把
 寄存器的旧值恢复回去，一般CPU都会把整个通用寄存器(GPR)分成这两种寄存器，前者叫作
-caller saved registers, 后者叫做callee saved registers。从被调函数看，它可以放心
-的使用caller saved registers，因为调用函数已经做了保存，调用函数负责在调用被调函
-数之前保存caller saved registers(是否全部要保存?)，被调函数只需要保存以及恢复它使
-用的calleesaved registers就好。
+caller saved registers, 后者叫做callee saved registers。
 
-todo: 参数传递寄存器。
+我们先看caller saved registers，从被调函数看，它可以放心的使用caller saved registers，
+因为调用函数已经做了保存，调用函数负责在调用被调函数之前保存caller saved registers，
+调用函数并不需要保存所有的caller saved registers，它只要保存自己使用的caller saved
+registers。
 
+被调函数只需要保存以及恢复它使用的callee saved registers就好，对于callee saved
+registers需要先保存再使用。
+
+riscv定义的caller saved register有ra、t0-t6、a0-a7，定义的callee saved register
+有sp、s0-s11，浮点也有对应的caller/callee saved registers。t0-t6、a0-a7和s0-s11
+的属性是直接定义的，但是ra和sp的属性是天然自带的。ra保存函数的返回地址，涉及到的
+指令是: jal rd, offset或者jalr rd, offset(rs1)，比如用jal ra, offset实现函数调用，
+jal把pc跳到pc + offset，并把jal的下一条指令的地址保存到ra，子函数要靠ra返回到父
+函数的调用点，同理父函数的ra保存的是父函数的返回地址，所以在父函数在调用子函数之
+前要保存父函数自己的返回地址。sp是栈指针，进入函数首先就要开栈，为函数的临时变量
+准备存储空间，离开函数之前退栈，撤销函数的临时变量存储空间。
+
+riscv定义的函数参数传递方式是使用a0-a7作为入参，使用a0-a1传递返回值，如果函数入参
+寄存器放不下，使用调用函数栈传递参数，多余的参数从栈顶到栈底依此排列。
+
+写个小程序，然后反汇编后对照的看下：
+```
 int add(int a, int b)
 {
 	return a + b;
@@ -62,15 +80,11 @@ int main()
  622:	fef42423          	sw	a5,-24(s0)
  626:	4795                	li	a5,5
  628:	fef42623          	sw	a5,-20(s0)   a/b/c逐个入栈，其实没有必要。还有很多没有必要的入栈
-
  62c:	fe842703          	lw	a4,-24(s0)
  630:	fe442783          	lw	a5,-28(s0)
-
  634:	85ba                	mv	a1,a4        准备add入参
  636:	853e                	mv	a0,a5
-
  638:	fb3ff0ef          	jal	ra,5ea <add> 函数调用
-
  63c:	87aa                	mv	a5,a0        函数返回值a0
  63e:	873e                	mv	a4,a5
  640:	fec42783          	lw	a5,-20(s0)   从栈上读到c
@@ -100,8 +114,10 @@ int main()
  60c:	6462                	ld	s0,24(sp)    恢复callee save寄存器
  60e:	6105                	addi	sp,sp,32     退栈
  610:	8082                	ret                  函数返回
+```
 
-
+函数参数用栈传递的情况：
+```
 int add(int a, int b, int c, int d, int e, int f, int g, int h, int i, int j)
 {
 	return a + b + c + d + e + f + g + h + i + j;
@@ -133,7 +149,7 @@ int main()
  6a4:	e43e                	sd	a5,8(sp)
  6a6:	47a5                	li	a5,9
  6a8:	e03e                	sd	a5,0(sp)   <--- 可以看出超过入参寄存器的参数
- 6aa:	48a1                	li	a7,8            放到被函数栈一开始的位置
+ 6aa:	48a1                	li	a7,8            放到调用函数(caller)栈一开始的位置
  6ac:	481d                	li	a6,7
  6ae:	4799                	li	a5,6
  6b0:	4715                	li	a4,5
@@ -144,3 +160,4 @@ int main()
  6bc:	873e                	mv	a4,a5
  6be:	fec42783          	lw	a5,-20(s0)
  [...]
+```

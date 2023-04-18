@@ -564,7 +564,11 @@ BB的划分，另外qemu提供了一组call_flag，程序员可以用call_flag�
         * 要有中间变量把分配的和还没有分配的寄存器记录下来。
         *
         * reserved_regs表示被保留起来的host上寄存器，TB块里不能用, 所以这里直接
-        * 标记为已分配。
+        * 标记为已分配。注意对于reserved_regs这里有一个独立的逻辑，拿riscv后端举
+        * 例，除了sp/tp/gp/zero寄存器，riscv还会把reserve出几个gpr临时使用，公共
+        * 的寄存器分配已经基本完成了host物理寄存器的分配，但是在具体创建host指令
+        * 的时候有的IR可能还需要插入新host指令，这样就需要分配新的host物理寄存器，
+        * 提前reserve出的host gpr就是用来做这个。
         *
         * 这个函数只是翻译一个IR，几个核心的数据结构的含义是：new_args[]、con_args[]
         * 指的是当前这个IR翻译到host指令时，分配得到的host物理寄存器。s中的reserved_regs、
