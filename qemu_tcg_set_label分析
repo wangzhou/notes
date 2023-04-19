@@ -1,0 +1,92 @@
+qemu set_label中间码分析
+=========================
+
+-v0.1 2023.4.19 Sherlock init
+
+简介：本文分析qemu tcg中set_label这个中间码的qemu后端支持，分析基于的qemu版本是
+      v7.1.50，分析涉及到具体的guest/host CPU构架时，我们均采用riscv。
+
+set_label功能介绍
+------------------
+
+qemu tcg在使用中间码实现跳转时要使用label打一个跳转目的地址的标记，然后就可以使用
+br或者brcond跳转到label标记的地方。
+
+我们具体看一个例子，比如，riscv的qemu前端是这样支持jalr的：
+```
+static bool trans_jalr(DisasContext *ctx, arg_jalr *a)
+{
+    TCGLabel *misaligned = NULL;
+
+    tcg_gen_addi_tl(cpu_pc, get_gpr(ctx, a->rs1, EXT_NONE), a->imm);
+    tcg_gen_andi_tl(cpu_pc, cpu_pc, (target_ulong)-2);
+
+    gen_set_pc(ctx, cpu_pc);
+    if (!has_ext(ctx, RVC)) {
+        TCGv t0 = tcg_temp_new();
+
+        misaligned = gen_new_label();
+        tcg_gen_andi_tl(t0, cpu_pc, 0x2);
+        tcg_gen_brcondi_tl(TCG_COND_NE, t0, 0x0, misaligned);
+        tcg_temp_free(t0);
+    }
+
+    gen_set_gpri(ctx, a->rd, ctx->pc_succ_insn);
+    tcg_gen_lookup_and_goto_ptr();
+
+    if (misaligned) {
+        gen_set_label(misaligned);
+        gen_exception_inst_addr_mis(ctx);
+    }
+    ctx->base.is_jmp = DISAS_NORETURN;
+
+    return true;
+}
+```
+如上，它先定义一个TCGLabel的变量的指针，使用之前创建一个label变量，并使用之前定义
+的指针引用label变量，在需要跳转的地方使用gen_set_labe放置一个set_label中间码，使用
+br或者brcond就可以跳到set_label的地址上。
+
+set_label qemu后端实现
+-----------------------
+
+gen_new_label会创建label结构，并把它放入TCGContext的labels链表，注意label结构内
+还包含一个relocs(重定位)链表。TCGContext的labels链表保存的是当前TB翻译上下文里的
+所有label，而label里的relocs链表保存的是指向这个label的所有br/brcond对应host的跳转
+指令的信息。
+
+qemu在翻译如上jalr指令，当解析到brcondi_tl时，它只知道满足条件时要跳到misaligned
+这个label标界的地址上，但是现在它并不知道实际要跳转的地址，所以在qemu后端翻译的时候
+把brcondi_tl这个信息记录在misaligned label的relocs链表里：
+```
+ /* tcg/riscv/tcg-target.c.inc */
+ tcg_out_op
+   +-> case INDEX_op_br:
+        /*
+         * 这个地方并不生成host指令，而是记录需要更新跳转地址的host跳转指令的信息，
+         * 比如，host跳转指令的地址、类型以及参数等信息。这样后面才能利用这些信息
+         * 更新跳转指令的目的地址。
+         */
+        tcg_out_reloc(s, s->code_ptr, R_RISCV_JAL, arg_label(a0), 0);
+        tcg_out_opc_jump(s, OPC_JAL, TCG_REG_ZERO, 0);
+```
+
+qemu解析到set_label中间码时，才知道label标记的具体地址，显然set_label标记的是一个
+host VA。set_label中间码的翻译把这个具体地址记录在label结构里:
+```
+ /* tcg/tcg.c */
+ tcg_gen_code
+   +-> case INDEX_op_set_label:
+        tcg_reg_alloc_bb_end(s, s->reserved_regs);
+        /* 把当前要填充的host指令的地址存入label结构 */
+        tcg_out_label(s, arg_label(op->args[0]));
+```
+
+等到TB里的全部指令都翻译完成了，qemu在TB翻译的最后会扫描labels链表，为TB里每个label
+更新它所对应的br/brcond翻译后的跳转指令的目的地址:
+```
+ /* tcg/tcg.c */
+ tcg_gen_code
+   [...]
+   +-> tcg_resolve_relocs(s)
+```
