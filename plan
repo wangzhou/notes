@@ -174,7 +174,6 @@ opensbi再次整理			 to do
 rv全部异常定义分析		 to do
 ELF/PE启动			 continue(uboot EFI)
 unix编程艺术读书笔记		 todo
-IPI详细分析			 todo
 csr寄存器整理		         todo
 qemu goto tb再分析		 c(制造tb清理) -- 自修改代码分析 5
 qemu内存模拟分析		 todo
@@ -201,11 +200,11 @@ splitwx				 to do
 
 c协程实现			 to do 1
 rv 各种跳转分析			 to do 3
-qemu set_label			 post
 qemu tlb同步逻辑	         to do
-
 riscv vector			 to do
-riscv上各种锁的实现，rcu	 to do  重点
+riscv上各种锁的实现，rcu	 to do 重点
+IPI详细分析			 to do
+qemu 后端翻译基本模型		 to do
 
 current的值，以及内核线程current里mm的值   to do
 vstime/hstime		         to do
