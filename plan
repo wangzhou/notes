@@ -204,7 +204,7 @@ qemu tlb同步逻辑	         to do
 riscv vector			 to do
 riscv上各种锁的实现，rcu	 to do 重点
 IPI详细分析			 to do
-qemu 后端翻译基本模型		 to do
+qemu后端翻译基本模型		 c
 
 current的值，以及内核线程current里mm的值   to do
 vstime/hstime		         to do

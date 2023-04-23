@@ -2,6 +2,8 @@ qemu tcg后端翻译基本模型
 ========================
 
 -v0.1 2023.4.21 Sherlock init
+-v0.2 2023.4.22 Sherlock 补充sync的逻辑
+-v0.3 2023.4.23 Sherlock 补充BB end也要sync的逻辑
 
 简介：之前写了一个《qemu tcg中间码优化和后端翻译》的分析文章，这个文章涉及的细节
       太多，本篇想要描述的是一个东西，但是我们不提代码，着重分析qemu tcg后端翻译
@@ -142,9 +144,24 @@ qemu在这里还需要插入host store指令把数据刷回guest CPU。qemu在�
 会把需要做同步的虚拟寄存器打上sync的标记，生成host指令的时候遇见sync标记就可以直接
 插入host指令做同步。
 
-其实并不需要每个guest指令执行完都要把信息刷回guest CPU数据结构，可以想象只要对应
-的guest寄存器已经dead或者guest指令可能触发异常，都需要把guest GPR的状态同步回guest
-CPU数据结构里。
+并不需要每个guest指令执行完都要把信息刷回guest CPU数据结构，虽然guest CPU的信息
+是定义在guest CPU数据结构中的，但是我们是模拟guest CPU，只要不破坏模拟的逻辑，host
+物理寄存器上的值就可以先不刷回guest CPU数据结构。那什么时候需要刷回guest CPU，整个
+TB执行完时，虚拟寄存器需要被同步回guest CPU，当中间码可能导致guest CPU异常时，需要
+做同步，因为触发异常后，guest CPU跳转到异常处理地址，并且向软件报告异常处理的上下
+文，其中guest CPU的通用寄存器就都是从guest CPU数据结构获取。
 
-todo: ... 但是log解释不通啊。
+加入BB的概念
+-------------
+
+上面讲的寄存器分配和状态同步其实还不完整，如上的中间码里是没有跳转的(br/brcond)，
+qemu的一个翻译块(TB)里是可以存在跳转中间码的，在有跳转中间码的情况下，上面逆序遍
+历确定虚拟寄存器活性的办法就会有问题。为此qemu中在TB的基础上又引入了Basic Block(BB)
+的概念，简单讲在一个BB内中间码都是顺序执行的，这样如上的逻辑在BB内还是成立的。所以，
+在BB的结尾就要dead全部虚拟寄存器，并且把guest CPU对应的虚拟寄存器向guest CPU数据
+结构做同步。
+
+
+
+
 
