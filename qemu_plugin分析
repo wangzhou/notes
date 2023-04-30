@@ -1,0 +1,40 @@
+qemu plugin分析
+================
+
+-v0.1 2023.4.30 Sherlock init
+
+简介：本文分析qemu plugin的实现机制，了解qemu plugin的机制后，我们可以很容易的写
+      一个plugin出来，用qemu plugin的方式为qemu增加新的功能。分析基于的qemu版本是
+      v7.1.50。
+
+
+qemu plugin基本概念以及使用
+----------------------------
+
+qemu tcg支持用插件的方式为qemu新增功能，qemu源码里作为示例自带了几个插件，我们先
+编译使用下qemu自带的cache插件。
+
+一般情况下qemu tcg是不模拟cache的，qemu自带了一个简单模拟cache的插件。我们在配置
+qemu的时候要带上--enable-plugins，编译完qemu后，进入qemu/build/contrib/plugins/,
+在这个目录下运行make，之后可以看见qemu的自带的plugin都编译出了，其中就有cache的
+plugin: libcache.so。
+
+按如下运行命令，可以带着cache plugin运行qemu，-d plugin输出plugin里的打印信息，
+-D指定打印信息输出的文件：
+```
+qemu-system-riscv64 -m 256m -nographic -machine virt \
+-kernel ~/repos/linux/arch/riscv/boot/Image \
+-append "console=ttyS0 root=/dev/ram rdinit=/init" \
+-initrd ~/repos/buildroot/output/images/rootfs.cpio.gz \
+-plugin ~/repos/qemu/build/contrib/plugins/libcache.so \
+-d plugin -D ~/qemu_cache_plugin_log
+```
+如上运行qemu后，linux内核启动从1s到了30s，可见qemu带plugin运行的速度是很慢的。
+
+qemu plugin机制分析
+--------------------
+
+
+写一个自己的qemu plugin
+------------------------
+
