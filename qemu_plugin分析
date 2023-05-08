@@ -2,6 +2,7 @@ qemu plugin分析
 ================
 
 -v0.1 2023.4.30 Sherlock init
+-v0.2 2023.5.01 Sherlock
 
 简介：本文分析qemu plugin的实现机制，了解qemu plugin的机制后，我们可以很容易的写
       一个plugin出来，用qemu plugin的方式为qemu增加新的功能。分析基于的qemu版本是
@@ -33,6 +34,10 @@ qemu-system-riscv64 -m 256m -nographic -machine virt \
 
 qemu plugin机制分析
 --------------------
+
+我们从qemu user mode入手看下plugin的原理。
+
+todo: qemu主流程怎么调用plugin的？
 
 
 写一个自己的qemu plugin
