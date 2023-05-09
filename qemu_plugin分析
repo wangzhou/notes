@@ -2,7 +2,7 @@ qemu plugin分析
 ================
 
 -v0.1 2023.4.30 Sherlock init
--v0.2 2023.5.09 Sherlock
+-v0.2 2023.5.09 Sherlock 加入plugin机制分析
 
 简介：本文分析qemu plugin的实现机制，了解qemu plugin的机制后，我们可以很容易的写
       一个plugin出来，用qemu plugin的方式为qemu增加新的功能。分析基于的qemu版本是
@@ -117,11 +117,109 @@ void qemu_plugin_register_vcpu_mem_cb(struct qemu_plugin_insn *insn,
 保存了相关注册函数信息，被注册的函数还没有和qemu主流程关联在一起，和qemu主流程关
 联的过程还是在qemu主流程里实现。
 
+整个qemu翻译的主流程中被插入了plugin的桩函数以及桩函数的替换逻辑:
 ```
+/* qemu/accel/tcg/translator.c */
+translator_loop
+  +-> plugin_enabled = plugin_gen_tb_start()
+  +-> while (true) {
+          if (plugin_enabled) {                                                   
+              plugin_gen_insn_start(cpu, db);                                     
+                +-> plugin_gen_empty_callback(PLUGIN_GEN_FROM_INSN)
+                  +-> gen_wrapped(from, PLUGIN_GEN_ENABLE_MEM_HELPER, gen_empty_mem_helper)
+                    +-> gen_plugin_cb_start(from, type, 0);                                         
+                    +-> func();                                                                     
+                    +-> tcg_gen_plugin_cb_end();                                                    
+                  +-> gen_wrapped(from, PLUGIN_GEN_CB_UDATA, gen_empty_udata_cb);             
+                  +-> gen_wrapped(from, PLUGIN_GEN_CB_INLINE, gen_empty_inline_cb);           
+          }                                                                       
+
+          ops->translate_insn(db, cpu);                                       
+
+          if (plugin_enabled) {                                                   
+              plugin_gen_insn_end();                                              
+          }                                                                       
+      }
+
+  +-> if (plugin_enabled) {                                                       
+          plugin_gen_tb_end(cpu);                                                 
+      }                                                                           
 ```
+plugin_gen_tb_start/plugin_gen_insn_start/plugin_gen_insn_end用来插入桩函数，
+plugin_gen_tb_end主要用来做桩函数的替换。
+
+我们顺序看一个plugin_gen_insn_start的处理。可以看见，这里插入了一些中间码，大概的
+情况是：
+```
+plugin_cb_start PLUGIN_GEN_FROM_INSN, PLUGIN_GEN_ENABLE_MEM_HELPER
+st_i64 0 cpu_env, offset of plugin_mem_cbs
+plugin_cb_end
+
+plugin_cb_start PLUGIN_GEN_FROM_TB, PLUGIN_GEN_CB_UDATA
+ld_i32 cpu_index cpu_env, offset of cpu_index
+call plugin_vcpu_udata_cb cpu_index, udata
+plugin_cb_end
+
+plugin_cb_start PLUGIN_GEN_FROM_TB, PLUGIN_GEN_CB_INLINE
+ld_i64 val, ptr, 0
+addi_i64 val, val, 0xdeadface
+st_i64 val, val, 0
+plugin_cb_end
+```
+如上的plugin_vcpu_udata_cb是一个空的桩函数。
+
+```
+plugin_gen_tb_end
+  +-> qemu_plugin_tb_trans_cb(cpu, ptb);                                          
+                                                                           
+  +-> plugin_gen_inject(ptb);                                                     
+```
+qemu_plugin_tb_trans_cb扫描qemu全局的plugin，针对每个plugin，调用之前注册的
+QEMU_PLUGIN_EV_VCPU_TB_TRANS event对应的回调函数。具体到上面的cache plugin就是
+其中的vcpu_tb_trans函数。
+
+我们就用cache的vcpu_tb_trans继续分析，这个函数里最主要的针对tb里的每个guest指令
+调用qemu plugin API注册回调函数，其实这里的注册就是把回调函数保存到guest指令insn
+结构体里，我们具体看其中一个：
+```
+qemu_plugin_register_vcpu_mem_cb(insn, vcpu_mem_access, QEMU_PLUGIN_CB_NO_REGS, rw, data);
+  +-> plugin_register_vcpu_mem_cb(&insn->cbs[PLUGIN_CB_MEM][PLUGIN_CB_REGULAR], cb, flags, rw, udata);
+```
+
+plugin_gen_inject用注册的回调函数替换掉如上call中间码里的函数地址，并对输入参数做
+必要的调整：
+```
+plugin_gen_inject(ptb)
+
+  QTAILQ_FOREACH(op, &tcg_ctx->ops, link)
+    switch (op->opc)
+    [...]
+    case INDEX_op_plugin_cb_start:                                          
+
+      enum plugin_gen_from from = op->args[0];                            
+      enum plugin_gen_cb type = op->args[1];                              
+                                                                          
+      switch (from)
+      [...]
+      case PLUGIN_GEN_FROM_INSN:                                          
+        switch (type)
+        case PLUGIN_GEN_CB_UDATA:                                       
+          plugin_gen_insn_udata(plugin_tb, op, insn_idx);             
+          break;                                                      
+        case PLUGIN_GEN_CB_INLINE:                                      
+          plugin_gen_insn_inline(plugin_tb, op, insn_idx);            
+          break;                                                      
+        case PLUGIN_GEN_ENABLE_MEM_HELPER:                              
+          plugin_gen_enable_mem_helper(plugin_tb, op, insn_idx);      
+          break;                                                      
+```
+如上代码识别plugin_tb_start开头的一段中间码，然后做匹配位置的函数替换以及参数生成
+...
+ 
+ todo: 分析细节
 
 写一个自己的qemu plugin
 ------------------------
 
-
+ todo: ...
 
