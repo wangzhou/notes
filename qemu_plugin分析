@@ -2,7 +2,7 @@ qemu plugin分析
 ================
 
 -v0.1 2023.4.30 Sherlock init
--v0.2 2023.5.01 Sherlock
+-v0.2 2023.5.09 Sherlock
 
 简介：本文分析qemu plugin的实现机制，了解qemu plugin的机制后，我们可以很容易的写
       一个plugin出来，用qemu plugin的方式为qemu增加新的功能。分析基于的qemu版本是
@@ -35,11 +35,93 @@ qemu-system-riscv64 -m 256m -nographic -machine virt \
 qemu plugin机制分析
 --------------------
 
-我们从qemu user mode入手看下plugin的原理。
+qemu要实现plugin就必然向外，也就是向plugin提供一组API接口，plugin使用这组API向qemu
+注册以及获取qemu模拟的guest的信息。qemu内部为了支持plugin机制也会增加plugin的核心
+实现代码。
 
-todo: qemu主流程怎么调用plugin的？
+首先我们从qemu user mode入手看下qemu是如何解析命令行里输入的plugin so的。
+```
+main
+  +-> handle_arg_plugin(const char *arg)
+    +-> qemu_plugin_opt_parse(const char *optarg, QemuPluginList *head)
+```
+可以看见qemu user mode会把解析到的每个plugin的信息放到qemu_plugin_desc，再把所有
+的qemu_plugin_desc保存到一个叫plugins的全局链表里。
 
+main函数里随后会使用qemu_plugin_load_list加载plugin so:
+```
+qemu_plugin_load_list()
+  +-> plugin_load()
+    +-> ctx->handle = g_module_open(desc->path, G_MODULE_BIND_LOCAL);
+    +-> g_module_symbol(ctx->handle, "qemu_plugin_install", &sym));
+        install = (qemu_plugin_install_func_t) sym;                                 
+    +-> g_hash_table_lookup(plugin.id_ht, &ctx->id);
+    +-> QTAILQ_INSERT_TAIL(&plugin.ctxs, ctx, entry);
+    +-> install(ctx->id, info, desc->argc, desc->argv);                        
+```
+qemu内部对一个plugin的信息保存在qemu_plugin_ctx里，qemu全局的plugin信息保存到
+struct qemu_plugin_state plugin里，注意上面的qemu_plugin_desc保存的只是plugin对应
+的文件路径、参数等信息。struct qemu_plugin_state plugin里会用链表和哈希表分别记录
+所有plugin。
+
+qemu针对每个plugin，打开对应的动态库，执行动态库里名为qemu_plugin_install的函数。
+每个plugin必须实现这个注册接口。
+
+我们以libcache看看plugin怎么实现qemu_plugin_install。
+```
+/* qemu/contrib/plugins/cache.c */
+qemu_plugin_install(qemu_plugin_id_t id, const qemu_info_t *info, int argc, char **argv)
+  [...]
+  +-> qemu_plugin_register_vcpu_tb_trans_cb(id, vcpu_tb_trans);                   
+    +-> plugin_register_cb(id, QEMU_PLUGIN_EV_VCPU_TB_TRANS, cb);                   
+  +-> qemu_plugin_register_atexit_cb(id, plugin_exit, NULL);                      
+```
+这个函数做了一些自己plugin的初始化后，调用了qemu plugin API注册了vcpu_tb_trans和
+plugin_exit两个函数。所谓注册，就是把这两个函数保存到了plugin对应qemu_plugin_ctx
+(后面简称ctx)的qemu_plugin_cb(后面简称cb)里，注意ctx里的cb是个数组，不同的数组项
+描述不同的event，比如如上的QEMU_PLUGIN_EV_VCPU_TB_TRANS就是一个event，qemu在翻译
+执行主流程里会调用这些注册的回调函数。
+
+我们可以先观察下如上vcpu_tb_trans的行为，去掉其中业务相关的逻辑，其主逻辑如下：
+```
+vcpu_tb_trans()
+  +-> n_insns = qemu_plugin_tb_n_insns(tb);                                       
+  +-> for (i = 0; i < n_insns; i++) {                                             
+      struct qemu_plugin_insn *insn = qemu_plugin_tb_get_insn(tb, i);         
+      effective_addr = (uint64_t) qemu_plugin_insn_vaddr(insn);
+      [...]
+      qemu_plugin_register_vcpu_mem_cb(insn, vcpu_mem_access, QEMU_PLUGIN_CB_NO_REGS, rw, data);
+      qemu_plugin_register_vcpu_insn_exec_cb(insn, vcpu_insn_exec, QEMU_PLUGIN_CB_NO_REGS, data);
+  +-> }                                                                           
+```
+这个函数对于一个tb，调用qemu plugin的API得到guest指令数目、每个指令相关信息，并
+针对每条guest指令使用qemu plugin API注册相关的回调函数，比如这里对每条guest指令
+注册了vcpu_mem_access和vcpu_insn_exec两个函数。不同注册函数注册的回调函数在qemu
+翻译执行主循环的不同位置被触发，plugin需要根据API的语意使用API注册回调函数。
+
+我们进一步分析qemu内部是怎么实现回调函数的注册和触发的。
+```
+void qemu_plugin_register_vcpu_mem_cb(struct qemu_plugin_insn *insn,            
+                                      qemu_plugin_vcpu_mem_cb_t cb,             
+                                      enum qemu_plugin_cb_flags flags,          
+                                      enum qemu_plugin_mem_rw rw,               
+                                      void *udata)                              
+{                                                                               
+    plugin_register_vcpu_mem_cb(&insn->cbs[PLUGIN_CB_MEM][PLUGIN_CB_REGULAR],   
+                                    cb, flags, rw, udata);                      
+}                                                                               
+```
+从qemu_plugin_insn的内部结构可以看出来，针对一个guest指令，plugin可以注册两大类
+回调函数：PLUGIN_CB_MEM和PLUGIN_CB_INSN，每一类里又分: PLUGIN_CB_REGULAR和PLUGIN_CB_INLINE。
+被注册的函数以及相关的参数统统保存在insn的对应cb里(qemu_plugin_dyn_cb)。这里只是
+保存了相关注册函数信息，被注册的函数还没有和qemu主流程关联在一起，和qemu主流程关
+联的过程还是在qemu主流程里实现。
+
+```
+```
 
 写一个自己的qemu plugin
 ------------------------
+
+
 
