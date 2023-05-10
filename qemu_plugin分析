@@ -3,6 +3,7 @@ qemu plugin分析
 
 -v0.1 2023.4.30 Sherlock init
 -v0.2 2023.5.09 Sherlock 加入plugin机制分析
+-v0.3 2023.5.10 Sherlock 补充plugin机制分析
 
 简介：本文分析qemu plugin的实现机制，了解qemu plugin的机制后，我们可以很容易的写
       一个plugin出来，用qemu plugin的方式为qemu增加新的功能。分析基于的qemu版本是
@@ -152,11 +153,13 @@ plugin_gen_tb_end主要用来做桩函数的替换。
 情况是：
 ```
 plugin_cb_start PLUGIN_GEN_FROM_INSN, PLUGIN_GEN_ENABLE_MEM_HELPER
-st_i64 0 cpu_env, offset of plugin_mem_cbs
+movi_64 ptr, 0
+/* 清空CPUState里plugin_mem_cbs保存的memory相关的回调函数 */
+st_i64 ptr CPUState, offset of plugin_mem_cbs
 plugin_cb_end
 
 plugin_cb_start PLUGIN_GEN_FROM_TB, PLUGIN_GEN_CB_UDATA
-ld_i32 cpu_index cpu_env, offset of cpu_index
+ld_i32 cpu_index CPUState, offset of cpu_index
 call plugin_vcpu_udata_cb cpu_index, udata
 plugin_cb_end
 
@@ -171,7 +174,6 @@ plugin_cb_end
 ```
 plugin_gen_tb_end
   +-> qemu_plugin_tb_trans_cb(cpu, ptb);                                          
-                                                                           
   +-> plugin_gen_inject(ptb);                                                     
 ```
 qemu_plugin_tb_trans_cb扫描qemu全局的plugin，针对每个plugin，调用之前注册的
@@ -213,10 +215,97 @@ plugin_gen_inject(ptb)
           plugin_gen_enable_mem_helper(plugin_tb, op, insn_idx);      
           break;                                                      
 ```
-如上代码识别plugin_tb_start开头的一段中间码，然后做匹配位置的函数替换以及参数生成
-...
+如上代码识别plugin_tb_start开头的一段中间码，然后做匹配位置的函数替换以及参数生成。
+还是看如上PLUGIN_GEN_FROM_INSN对应的处理(语意是获取指令执行之前的信息)，如上插入
+了三段以plugin_cb_start开头的中间码，这里的三个case分别处理相关的中间码。
+
+我们深入看下plugin_gen_enable_mem_helper的处理。
+```
+plugin_gen_enable_mem_helper
+  +-> inject_mem_enable_helper(insn, begin_op);                                   
+        /*
+	 * 如果对这个指令没有注册memory类型的回调, 或者没有calls_helpers? 就删掉
+	 * 之前的中间码桩。不做任何操作直接返回了。
+	 */
+    +-> plugin_insn->mem_helper = plugin_insn->calls_helpers && n_cbs;              
+        if (likely(!plugin_insn->mem_helper)) {                                     
+            rm_ops(begin_op);                                                       
+            return;                                                                 
+        }                                                                           
+	/* 把注册的回调插入plugin的dyn_cb_arr_ht哈希表里 */
+    +-> qemu_plugin_add_dyn_cb_arr(arr);                                            
+        /* 通过改变中间码插入回调函数 */
+    +-> inject_mem_helper(begin_op, arr);                                           
+      /*                                                                          
+       * 在end后插入op，copy begin后的op到新op上，并做必要的修改，返回的begin_op
+       * 指向后一个节点，op指向最新的"end"。比如，这里了是新加了mov IR, 并修改mov
+       * 的输入为注册回调描述结构的地址:
+       *
+       * begin -> mov -> st -> end -> op(mov)
+       */
+      op = copy_const_ptr(&begin_op, end_op, arr);                                
+                                                                                  
+      /*                                                                          
+       * 用上面同样的方法修改store指令：
+       * begin -> mov -> st -> end -> mov -> st                                 
+       */                                                                         
+      op = copy_st_ptr(&begin_op, op);                                            
+                                                                                  
+      /*                                                                          
+       * 把中间码的桩都删去，只留下修改后的mov和st
+       * begin -> mov -> st -> end -> mov -> st                                 
+       * <-------- remove -------> 
+       */                                                                         
+      rm_ops_range(orig_op, end_op);                                              
+```
+经过上述操作，最终结果是把plugin中注册的回调函数保存到了CPUState的plugin_mem_cbs。
+
+原来的中间码序列：
+```
+plugin_cb_start PLUGIN_GEN_FROM_INSN, PLUGIN_GEN_ENABLE_MEM_HELPER
+movi_64 ptr, 0
+st_i64 ptr CPUState, offset of plugin_mem_cbs
+plugin_cb_end
+```
+变成了：
+```
+movi_64 ptr, arr地址
+st_i64 ptr CPUState, offset of plugin_mem_cbs
+```
+
+在load/store的实现里(其中调用helper函数里)，qemu调用qemu_plugin_vcpu_mem_cb的到
+CPUState中保存的memory相关回调，并执行。
+
+如上我们分析了一个qemu处理plugin的特例情况，其它plugin插桩以及替换的原理也是一样
+的，比如对于plugin_cb_start PLUGIN_GEN_FROM_TB, PLUGIN_GEN_CB_UDATA的情况，qemu
+直接用call IR插入了一个空helper函数，后面的替换直接修改call IR里保存的函数地址以及
+函数入参就好了。
+
+如上我们大致根据plugin的执行流程分析其工作原理，下面在横向的维度上把plugin的基本
+概念再展开下。
+
+从plugin_gen_from的定义上看，qemu plugin的插桩点包括：
+```
+ /* TB翻译前 */                                                              
+ PLUGIN_GEN_FROM_TB,                                                         
+
+ /* guest指令翻译前 */                                                       
+ PLUGIN_GEN_FROM_INSN,                                                       
+
+ /* memory操作相关的点 */
+ PLUGIN_GEN_FROM_MEM,                                                        
  
- todo: 分析细节
+ /* guest指令翻译后 */                                                       
+ PLUGIN_GEN_AFTER_INSN,                                                      
+```
+指令和TB的插桩点在qemu翻译执行的主循环里，如上的分析中已经有涉及。PLUGIN_GEN_FROM_MEM
+在load/store的公共实现代码里插桩时会用到，在qemu/tcg/tcg-op.c里load/store IR的实现
+tcg_gen_qemu_ld/st_i32/i64会调用plugin_gen_mem_callbacks插入参数为PLUGIN_GEN_FROM_MEM
+的plugin_cb_start/end，以及空的helper桩函数。
+
+可以看到，qemu对应中间码使用插入helper桩函数再替换的方式支持plugin。对于helper函数
+里需要支持plugin时，qemu把回调函数先保存到CPUState里，然后在helper里直接调用回调
+函数，这个就是我们上面重点分析的例子里的情形。
 
 写一个自己的qemu plugin
 ------------------------

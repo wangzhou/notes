@@ -210,3 +210,4 @@ vstime/hstime		         to do
 qemu usr mode运行动态链接程序	 to do
 qemu call IR实现分析		 to do
 qemu plugin分析			 to do
+cmake				 post
