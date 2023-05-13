@@ -344,11 +344,22 @@ qemu_plugin_register_vcpu_mem_inline
 qemu_plugin_register_vcpu_insn_exec_cb
 qemu_plugin_register_vcpu_insn_exec_inline
 ```
+对于指令执行相关的回调，qemu会在每个指令执行前调用，对于内存读写相关的回调，qemu
+会在访存指令的helper实现函数以及访存指令完成时调用。cb类型的回调是plugin里实现回调
+函数，qemu主流程里调用plugin里定义的函数来实现信息记录的，而所谓inline并没有调用
+helper函数记录信息，而是在plugin里定义操作指令和操作的目的地址，qemu主流程里每当
+到了调用点就对目的地址做相关的操作，目前qemu定义的操作还只有add，可以看出，inline
+是一种轻量级的记录方式，qemu内部实现上，只需要根据plugin提供的操作地址稍微调整下
+主流程里的桩中间码就可以做到。
 
+qemu针对tb执行也提供了可以注册回调的入口：
+```
 qemu_plugin_register_vcpu_tb_exec_cb
 qemu_plugin_register_vcpu_tb_exec_inline
+```
+使用如上API注册回调，qemu会在执行tb前调用回调或者像上面分析中提到的那样更新注册
+地址上的数据。
 
-基于guest指令或者tb的信息获取辅助函数。
-
-qemu/build/qemu-bundle/usr/local/include/qemu-plugin.h
-
+qemu plugin里需要获得guest指令或者tb的一些参数，为此qemu还对外提供了一组获取guest
+指令或者tb的信息的辅助函数。这些辅助函数以及上述所提到的API在include/qemu/qemu-plugin.h
+里均有定义。
