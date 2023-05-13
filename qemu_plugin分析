@@ -4,6 +4,7 @@ qemu plugin分析
 -v0.1 2023.4.30 Sherlock init
 -v0.2 2023.5.09 Sherlock 加入plugin机制分析
 -v0.3 2023.5.10 Sherlock 补充plugin机制分析
+-v0.4 2023.5.13 Sherlock 补充plugin API介绍
 
 简介：本文分析qemu plugin的实现机制，了解qemu plugin的机制后，我们可以很容易的写
       一个plugin出来，用qemu plugin的方式为qemu增加新的功能。分析基于的qemu版本是
@@ -171,6 +172,8 @@ plugin_cb_end
 ```
 如上的plugin_vcpu_udata_cb是一个空的桩函数。
 
+qemu在plugin_gen_tb_end把plugin注册的回调函数插入qemu翻译执行逻辑里，使用的基本方
+法就是使用qemu_plugin_insn中保存的回调函数替换如上的桩函数。
 ```
 plugin_gen_tb_end
   +-> qemu_plugin_tb_trans_cb(cpu, ptb);                                          
@@ -181,8 +184,8 @@ QEMU_PLUGIN_EV_VCPU_TB_TRANS event对应的回调函数。具体到上面的cach
 其中的vcpu_tb_trans函数。
 
 我们就用cache的vcpu_tb_trans继续分析，这个函数里最主要的针对tb里的每个guest指令
-调用qemu plugin API注册回调函数，其实这里的注册就是把回调函数保存到guest指令insn
-结构体里，我们具体看其中一个：
+调用qemu plugin API注册回调函数，如上，其实这里的注册就是把回调函数保存到guest指
+令insn结构体里，我们具体看其中一个：
 ```
 qemu_plugin_register_vcpu_mem_cb(insn, vcpu_mem_access, QEMU_PLUGIN_CB_NO_REGS, rw, data);
   +-> plugin_register_vcpu_mem_cb(&insn->cbs[PLUGIN_CB_MEM][PLUGIN_CB_REGULAR], cb, flags, rw, udata);
@@ -224,9 +227,9 @@ plugin_gen_inject(ptb)
 plugin_gen_enable_mem_helper
   +-> inject_mem_enable_helper(insn, begin_op);                                   
         /*
-	 * 如果对这个指令没有注册memory类型的回调, 或者没有calls_helpers? 就删掉
-	 * 之前的中间码桩。不做任何操作直接返回了。
-	 */
+         * 如果对这个指令没有注册memory类型的回调, 或者没有calls_helpers? 就删掉
+         * 之前的中间码桩。不做任何操作直接返回了。
+         */
     +-> plugin_insn->mem_helper = plugin_insn->calls_helpers && n_cbs;              
         if (likely(!plugin_insn->mem_helper)) {                                     
             rm_ops(begin_op);                                                       
@@ -245,14 +248,11 @@ plugin_gen_enable_mem_helper
        */
       op = copy_const_ptr(&begin_op, end_op, arr);                                
                                                                                   
-      /*                                                                          
-       * 用上面同样的方法修改store指令：
-       * begin -> mov -> st -> end -> mov -> st                                 
-       */                                                                         
+      /* 用上面同样的方法修改store指令：begin -> mov -> st -> end -> mov -> st */                                                                         
       op = copy_st_ptr(&begin_op, op);                                            
-                                                                                  
+
       /*                                                                          
-       * 把中间码的桩都删去，只留下修改后的mov和st
+       * 把中间码的桩都删去，只留下修改后的mov和st:
        * begin -> mov -> st -> end -> mov -> st                                 
        * <-------- remove -------> 
        */                                                                         
@@ -310,5 +310,45 @@ tcg_gen_qemu_ld/st_i32/i64会调用plugin_gen_mem_callbacks插入参数为PLUGIN
 写一个自己的qemu plugin
 ------------------------
 
- todo: ...
+如上分析了qemu plugin的逻辑，我们再从plugin的角度看看qemu都提供的那些API出来，以
+及他们的大概用法。我们还是从cache plugin入手，然后横向展开看看。
+
+如上分析里，cache plugin首先使用qemu_plugin_register_vcpu_tb_trans_cb注册了在tb
+翻译结束会调用的回调函数(vcpu_tb_trans)，这个回调函数可以得到tb里guest指令的句柄，
+从而plugin里可以继续针对guest指令注册回调函数。
+
+我们先看下第一层，也就是除了tb翻译完成可以注册回调，还有那些地方可以注册回调。qemu
+里还提供了如下注册plugin的地方：
+```
+ QEMU_PLUGIN_EV_VCPU_INIT
+ QEMU_PLUGIN_EV_VCPU_EXIT
+ QEMU_PLUGIN_EV_VCPU_TB_TRANS
+ QEMU_PLUGIN_EV_VCPU_IDLE
+ QEMU_PLUGIN_EV_VCPU_RESUME
+ QEMU_PLUGIN_EV_VCPU_SYSCALL
+ QEMU_PLUGIN_EV_VCPU_SYSCALL_RET
+ QEMU_PLUGIN_EV_FLUSH
+ QEMU_PLUGIN_EV_ATEXIT
+```
+如上的每个地方，qemu都提供了一个API来注册回调，比如QEMU_PLUGIN_EV_VCPU_INIT对应
+的API就是qemu_plugin_register_vcpu_init_cb。如上回调点大概意思可以猜出来，但是要
+知道确切意思还的去看qemu的代码，qemu并没有把自己执行的模型表述的很清楚。
+
+cache plugin里针对tb里的每个guest指令注册了vcpu_mem_access和vcpu_insn_exec，我们
+看看针对指令都可以怎么注册回调函数。针对guest指令可以注册内存读写相关的回调和指令
+执行相关的回调，每种类型又分为cb和inline:
+```
+qemu_plugin_register_vcpu_mem_cb
+qemu_plugin_register_vcpu_mem_inline
+
+qemu_plugin_register_vcpu_insn_exec_cb
+qemu_plugin_register_vcpu_insn_exec_inline
+```
+
+qemu_plugin_register_vcpu_tb_exec_cb
+qemu_plugin_register_vcpu_tb_exec_inline
+
+基于guest指令或者tb的信息获取辅助函数。
+
+qemu/build/qemu-bundle/usr/local/include/qemu-plugin.h
 
