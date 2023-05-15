@@ -1,0 +1,70 @@
+qemu QSIMPLEQ速记
+
+-v0.1 2023.5.15 Sherlock init
+
+简介：本文是看qemu代码里QSIMPLEQ的一个速记，这个是qemu里自带的一个简单链表的实现。
+
+
+数据结构
+---------
+
+核心的数据结构是：链表头和链表元素，链表头就两个数据：sqh_first和sqh_last，sqh_first
+是第一个链表元素的指针，sqh_last是链表最后一个元素里指向下一个元素的指针。
+
+链表元素类型用户自定义，但是里面必须用QSIMPLEQ_ENTRY定义一个链表元素的指针。整体
+示意图如下：
+```
+ list head              list elm                 list elm
+ +------------+         +--------------+         +--------------+
+ | sqh_first -+-------->| ...          |    +--->| ...          |
+ |            |         |              |    |    |              |
+ | sqh_last  -+---+     | entry/field: |    |    | entry/field: |
+ +------------+   |     |              |    |    |              |
+                  |     |   sqe_next --+----+    |   sqe_next   |
+                  |     |              |         |      ^       |
+                  |     +--------------+         +------+-------+
+                  +-------------------------------------+        
+```
+
+370 #define QSIMPLEQ_LAST(head, type, field)                                \       
+371     (QSIMPLEQ_EMPTY((head)) ?                                           \       
+372         NULL :                                                          \       
+373             ((struct type *)(void *)                                    \       
+374         ((char *)((head)->sqh_last) - offsetof(struct type, field))))           
+
+344 #define QSIMPLEQ_FOREACH(var, head, field)                              \       
+345     for ((var) = ((head)->sqh_first);                                   \       
+346         (var);                                                          \       
+347         (var) = ((var)->field.sqe_next))                                        
+
+289 #define QSIMPLEQ_INIT(head) do {                                        \       
+290     (head)->sqh_first = NULL;                                           \       
+291     (head)->sqh_last = &(head)->sqh_first;                              \       
+292 } while (/*CONSTCOND*/0)                                                        
+293                                                                                 
+294 #define QSIMPLEQ_INSERT_HEAD(head, elm, field) do {                     \       
+295     if (((elm)->field.sqe_next = (head)->sqh_first) == NULL)            \       
+296         (head)->sqh_last = &(elm)->field.sqe_next;                      \       
+297     (head)->sqh_first = (elm);                                          \       
+298 } while (/*CONSTCOND*/0)                                                        
+299                                                                                 
+300 #define QSIMPLEQ_INSERT_TAIL(head, elm, field) do {                     \       
+301     (elm)->field.sqe_next = NULL;                                       \       
+302     *(head)->sqh_last = (elm);                                          \       
+303     (head)->sqh_last = &(elm)->field.sqe_next;                          \       
+304 } while (/*CONSTCOND*/0)                                                        
+305                                                                                 
+306 #define QSIMPLEQ_INSERT_AFTER(head, listelm, elm, field) do {           \       
+307     if (((elm)->field.sqe_next = (listelm)->field.sqe_next) == NULL)    \       
+308         (head)->sqh_last = &(elm)->field.sqe_next;                      \       
+309     (listelm)->field.sqe_next = (elm);                                  \       
+310 } while (/*CONSTCOND*/0)                                                        
+311                                                                                 
+312 #define QSIMPLEQ_REMOVE_HEAD(head, field) do {                          \       
+313     typeof((head)->sqh_first) elm = (head)->sqh_first;                  \       
+314     if (((head)->sqh_first = elm->field.sqe_next) == NULL)              \       
+315         (head)->sqh_last = &(head)->sqh_first;                          \       
+316     elm->field.sqe_next = NULL;                                         \       
+317 } while (/*CONSTCOND*/0)                                                        
+
+
