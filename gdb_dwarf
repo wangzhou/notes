@@ -1,3 +1,8 @@
 git clone git://sourceware.org/git/binutils-gdb.git
 ./configure --enable-targets=riscv64-linux-gnu,aarch64-linux-gnu
 make
+
+sudo apt-get install libmpfr-dev
+
+gdb中的struct gdbarch在gdb/gdbarch.c里定义，gdbarch.c是用python生成的文件。
+虽然有写权限，但是写不进去东西，奇怪?
