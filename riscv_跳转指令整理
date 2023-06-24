@@ -16,7 +16,7 @@ riscv跳转指令
 - 直接跳转
 
 直接跳转中，跳转的偏移直接编码在指令里，所以跳转地址是固定的。因为指令编码只有
-32bit，除去指令op code，用于编码偏移的位数是有限的，所以跳转的举例也是有限的。
+32bit，除去指令op code，用于编码偏移的位数是有限的，所以跳转的距离也是有限的。
 
 比如，jal rd, offset指令的格式是:
 ```
@@ -65,8 +65,6 @@ imm做符号扩展并左移12bit后和PC相加，结果保存到rd。可以见im
   label: xxx
 ```
 
-
-
 - 条件跳转
 
 条件跳转根据两个输入寄存器和判断条件决定是否跳转，可见条件跳转可以实现高级语言里
@@ -81,17 +79,9 @@ imm做符号扩展并左移12bit后和PC相加，结果保存到rd。可以见im
 ```
 它的偏移编码是12bit，所有支持跳转的范围是+/-4KB。
 
-
- j offset (jal x0, offset)
- jr rs1 (jalr x0, 0(rs1))
-
-
- la rd,symbol
-
- auipc rd, offset_hi
- ld rd, offset_lo(rd)
- addi rd, rd, offset_lo
-
+riscv里的条件跳转指令还有如下，可见有些比较的模式是相互之间做等价的，比如，大于
+和小于的比较用一个指令就好，只要交换一下两个比较寄存器就好。
+```
  beq rs1, rs2, offset
  bne rs1, rs2, offset
 
@@ -103,10 +93,7 @@ imm做符号扩展并左移12bit后和PC相加，结果保存到rd。可以见im
  blt rs1, rs2, offset
  bltu rs1, rs2, offset
 
-
  beqz rs2, offset
  bltz rs2, offset
  blez rs2, offset
- ...
-
- 不用全有，可以做等价。
+```
