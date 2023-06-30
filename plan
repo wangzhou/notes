@@ -169,8 +169,8 @@ linux调度的细节分析		 to do
 per-cpu				 to do
 kvm虚拟机和host进程统一调度	 to do
 arm spec笔记			 continue
-opensbi再次整理			 to do
-多核启动整理                     # hsm
+
+
 rv全部异常定义分析		 to do
 ELF/PE启动			 continue(uboot EFI)
 unix编程艺术读书笔记		 todo
@@ -209,11 +209,11 @@ qemu call IR实现分析		 to do
 
 qemu usr mode运行动态链接程序	 to do
 
-riscv branch指令的整理		 to do
+riscv branch指令的整理		 #
 
-cpu rename			 doing
+cpu rename			 #
 cpu bp			 	 doing
-cpu execute(侧重load/store lsu)  to do
+cpu execute(侧重load/store lsu)  doing
 
 cpu issue			 to do
 cpu commit			 to do
