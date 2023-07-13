@@ -48,7 +48,7 @@ vim使用技巧
     在再\~/.vim/bundle下git clone https://github.com/VundleVim/Vundle.vim.git
     后者是一个vim插件的管理器，可以用来安装easymotion。之后，按照Vundle.vim里
     README.md的提示, 把“3. Configure Plugins”的一段配置copy到.vimrc里，把其中
-    的Plugin xxx都删了，改成Plugin 'easymotion/vim-easymotion'。代开vim run:
+    的Plugin xxx都删了，改成Plugin 'easymotion/vim-easymotion'。打开vim run:
     PluginInstall, 会有easymotion安装提示出来，并显示已经装好了。打开vim run:
     help easymotion.txt, 可以看到easymotion的help文档。
 
