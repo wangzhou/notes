@@ -31,7 +31,7 @@ list是链表，这个链表还支持逆序遍历，需要使用反向迭代器�
 
 当有一个如下的list时，它的front是链表头，靠A的这边，就是先加入list的一边，back是
 链表尾。所以list.pop_front是把A移除list, list.pop_back是把D移除list, list.push_back
-是在D后添加新元素。
+是在D后添加新元素，list.push_front是在最头上插入元素。
 ```
   front                          back
 
@@ -44,7 +44,6 @@ list是链表，这个链表还支持逆序遍历，需要使用反向迭代器�
 的迭代器就可能失效。反向迭代器用base方法可以得到后一个元素的基础迭代器，比如一个
 反向迭代器reverse_iter指向C，reverse_iter.bash()是指向D的迭代器，使用list.insert(reverse_iter.bash(), E)
 可以把E插入到D之间，也就是把E插入C/D之间。
-
 
 
 - map
@@ -68,3 +67,4 @@ auto变量
 
 模版
 -----
+
