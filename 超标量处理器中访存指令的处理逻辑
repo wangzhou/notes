@@ -1,4 +1,5 @@
 -v0.1 2023.7.17 Sherlock init
+-v0.2 2023.7.18 Sherlock 增加RAW/WAR的分析
 
 简介：本文对超标量处理器里load/store指令的实现做一个梳理，其中的信息来自各个地方，
       再加上作者自己的逻辑分析。所以，本文只是自己对load/store指令实现的一个总结。
@@ -57,16 +58,20 @@ B的指令也可以投机执行，当A处的store指令执行时，需要检查�
 ```
 allocate到B的指令可以立即做flush也可以等到B提交的时候再做flush，其中的不同在于，
 flush指令不只是释放ROB的资源，被flush指令在CPU里各个部件上占用的资源都要释放，立即
-做flush可以及时释放错误占用的硬件资源，但是需要增加而外的检测电路，从CPU的各个部件
+做flush可以及时释放错误占用的硬件资源，但是需要增加额外的检测电路，从CPU的各个部件
 里把flush指令挑出来，等到B提交时，比B老的指令都已经退休，流水线里都是需要被flush
-掉的指令，flush逻辑实现会比较简单。
+掉的指令(检测到RAW违例要停止fetch指令)，flush逻辑实现会比较简单, 但是因为处理器一
+直在等B到提交状态，性能就会比较差。
 
 从上面的分析得到，我们想象的LSU里至少需要有：load queue、store queue、store buffer，
 其中load queue是一个无序的容器，store queue和store buffer是FIFO。
 
+LSU和MMU的关系。load/store通过LSU进行访存操作，当系统里开启虚拟地址时，load/store
+指令使用的地址是虚拟地址，这时就需要先通过MMU把虚拟地址翻译为物理地址，随后使用物理
+地址访问内存。这个过程中TLB作为地址翻译的cache，可以大大加速地址翻译效率。当MMU无法
+把虚拟地址翻译为物理地址时，对应的load/store需要报异常。
 
-LSU和MMU的关系。
+LSU和cache的关系。cache作为存储系统的最前端直接和LSU做交互，当store的值缓存在store
+buffer里时，外部不可见，当写入cache时，外部可见，CPU无法撤销。
 
-LSU和cache的关系。
-
-多核系统下的LSU。
+todo: 多核系统下的LSU。
