@@ -5,7 +5,6 @@
 简介：本文对超标量处理器里load/store指令的实现做一个梳理，其中的信息来自各个地方，
       再加上作者自己的逻辑分析。所以，本文只是自己对load/store指令实现的一个总结。
 
-
 load/store指令被取入处理器内部后，进过各级流水线的处理，最终会到达LSU部件(load store unit)，
 之前的各级流水只是对load/store指令做一些通用的处理，比如，decode，rename等。
 
@@ -27,9 +26,9 @@ load/store在没有计算出访问地址之前投机执行，就需要冲突检�
 令在取入数据时会先搜索如上的处理器内部buffer，但是这里因为store指令比load新，所以
 load不能用处理器内部buffer(store buffer)里的值，load需要从cache里取数据进来。
 ```
-    A:	load x0, (x1)	
-	...
-    B:	store x2, (x3)
+    A:  load x0, (x1)	
+        ...
+    B:  store x2, (x3)
 
   +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+  old
   |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  
@@ -45,9 +44,9 @@ B的指令也可以投机执行，当A处的store指令执行时，需要检查�
 的load指令已经执行，如果有，那么就检测到了RAW违例。发生RAW违例时，load指令以及比
 它年轻的指令的运算都可能使用错误的数据，所以都要被flush掉。
 ```
-    A:	store x2, (x3)
-	...
-    B:	load x0, (x1)	
+    A:  store x2, (x3)
+        ...
+    B:  load x0, (x1)	
     C:  add x4, x0, x5
 
   flush  <--------------+
@@ -79,8 +78,8 @@ flush指令不只是释放ROB的资源，被flush指令在CPU里各个部件上�
 
 需要注意的是如上提到的两个store buffer逻辑上是独立的，实现中可以合并在一个buffer。
 这个在《超标量处理器设计》中有提及，就是给store buffer上的每个位置设置三种状态:
-1. no-complete store指令进入store buffer，地址和数据还在计算中；2. complete store
-指令的地址和数据都准备好了；3. retired store已经被提交处于retired状态。需要注意的
+(1) no-complete store指令进入store buffer，地址和数据还在计算中；(2) complete store
+指令的地址和数据都准备好了；(3) retired store已经被提交处于retired状态。需要注意的
 是1/2还是处理器内部状态，处于1/2的store是可能被flush掉的，3已经是CPU外部状态，而且
 如上所述，必须成功写入存储器。
 
