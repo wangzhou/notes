@@ -1,6 +1,7 @@
 -v0.1 2023.7.17 Sherlock init
 -v0.2 2023.7.18 Sherlock 增加RAW/WAR的分析
 -v0.3 2023.7.19 Sherlock 增加了commit store和多核store buffer的分析
+-v0.4 2023.7.21 Sherlock 增加了invalid queue的逻辑
 
 简介：本文对超标量处理器里load/store指令的实现做一个梳理，其中的信息来自各个地方，
       再加上作者自己的逻辑分析。所以，本文只是自己对load/store指令实现的一个总结。
@@ -110,3 +111,10 @@ store进store buffer的原因都是防止核被挂住，在多核情况下，一
 的store操作依然是顺序的，就不会出问题，如果对于不同地址的store是可以乱序的，就会
 出现文章里错误执行的行为。只不过文章里，对于可以直接写cache的操作就直接写cache了，
 这个和所有commit store都进store buffer，store buffer里可以乱序是一样的行为。
+
+考虑把invalid queue的逻辑也一起整合进来。CPU里的一个core(B)收到另一个core(A)发给
+它的一个invalid cache请求，core B自己还有一堆事要做，于是core B把这个invalid cache
+请求放到自己的invalid queue里，回响应给core A，随后core B再去做invalid queue中的请求。
+但是，正如上面所提到的，core B会投机执行它自己核上的load指令，如果投机执行正确，
+Core B完全可能提交的是invalid cache之前就拿到的cache上的数据，这样load提交的结果
+就错了。

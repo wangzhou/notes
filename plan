@@ -213,9 +213,9 @@ riscv branch指令的整理		 #
 
 cpu rename			 #
 cpu bp			 	 doing
-cpu execute(侧重load/store lsu)  doing
+cpu execute(侧重load/store lsu)  #
 
-cpu issue			 to do
-cpu commit			 to do
-C++				 to do
-cpu flush			 to do
+cpu issue			 doing
+cpu commit/rob			 #
+C++				 doing
+cpu flush			 #
