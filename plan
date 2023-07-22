@@ -215,7 +215,7 @@ cpu rename			 #
 cpu bp			 	 doing
 cpu execute(侧重load/store lsu)  #
 
-cpu issue			 doing
+cpu issue			 #
 cpu commit/rob			 #
 C++				 doing
 cpu flush			 #
