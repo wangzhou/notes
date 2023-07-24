@@ -203,8 +203,6 @@ IPI详细分析			 to do
 current的值，以及内核线程current里mm的值   to do
 vstime/hstime		         to do
 
-qemu tlb同步逻辑	         to do
-qemu内存模拟分析		 todo
 qemu call IR实现分析		 to do
 
 qemu usr mode运行动态链接程序	 to do
@@ -219,3 +217,6 @@ cpu issue			 #
 cpu commit/rob			 #
 C++				 doing
 cpu flush			 #
+qemu tlb同步逻辑	         to do
+qemu内存模拟分析		 todo
+cpu mmu/cache/tlb		 to do
