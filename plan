@@ -11,7 +11,6 @@
 12. cache MESI协议
 15. binding cpu related: numactl --cpubind=0 --membind=0 
     taskset -c cpu, irq binding: irq_set_affinity_hint, pci_alloc_irq_vectors_affinity?
-16. spinlock实现分析
 17. autotools, Makefile.am, vim terminal, 编译连接库
 
 20. pthread
@@ -198,7 +197,6 @@ splitwx				 to do
 c协程实现			 to do 1
 riscv vector			 to do
 riscv上各种锁的实现，rcu	 to do 重点
-IPI详细分析			 to do
 
 current的值，以及内核线程current里mm的值   to do
 vstime/hstime		         to do
@@ -219,4 +217,10 @@ C++				 doing
 cpu flush			 #
 qemu tlb同步逻辑	         to do
 qemu内存模拟分析		 todo
-cpu mmu/cache/tlb		 to do
+cpu mmu/cache/tlb		 c  tlb里access bit和dirty bit。
+rcu使用和原理			 3. to do 何时可以释放读指针内容/为啥要都调度一次？
+spinlock实现分析		 2. to do (普通spinlock/ticket/mcs/qspinlock)
+协程的使用和原理		 1. to do 
+IPI详细分析			 to do
+io_uring分析			 4. to do
+glib事件框架			 to do

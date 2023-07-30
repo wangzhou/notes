@@ -1,0 +1,48 @@
+-v0.1 2023.7.29 Sherlock init
+
+简介：本文梳理glibc中ucontext协程的使用方法和实现代码。
+
+有很多实现协程的方式，glibc里实现的协程叫做ucontext。我们可以先从相关的头文件里
+看下ucontext的基本数据结构和API。
+
+glibc代码的glibc/stdlib/ucontext.h是ucontext的几个API，ucontext数据结构是构架相关
+的，定义在sys/ucontext.h，比如对于riscv的定义在：sysdeps/unix/sysv/linux/riscv/sys/ucontext.h。
+
+具体看API之间，先看下协程(coroutine)的基本概念。协程可以在用户态实现执行上下文的
+切换，可以看成一个轻量级的线程，但是，线程是系统层面实现的机制，没办法自己控制调度，
+线程本身的调度就是内核调度，线程自己看不到调度，而协程API可以控制程序执行流直接
+跳到一个上下文上执行。
+
+在用户态一个上下文的定义就寄存器集合+栈(严格讲还要加上内存)，协程在两个用户态上下
+文上切换也就是要：1. 定义用户态上下文；2. 给出相关的用户态上下文获取、修改、配置以及
+切换的API。
+
+ucontext_t描述一个用户态上下文。
+
+如下函数就是所有ucontext_t相关的API，头文件的注释写的比较清楚了，我们后面只做补充解释。
+```
+/* Get user context and store it in variable pointed to by UCP.  */
+extern int getcontext (ucontext_t *__ucp) __THROWNL;
+
+/* Set user context from information of variable pointed to by UCP.  */
+extern int setcontext (const ucontext_t *__ucp) __THROWNL;
+
+/* Save current context in context variable pointed to by OUCP and set
+   context from variable pointed to by UCP.  */
+extern int swapcontext (ucontext_t *__restrict __oucp,
+			const ucontext_t *__restrict __ucp)
+  __THROWNL __INDIRECT_RETURN;
+
+/* Manipulate user context UCP to continue with calling functions FUNC
+   and the ARGC-1 parameters following ARGC when the context is used
+   the next time in `setcontext' or `swapcontext'.
+
+   We cannot say anything about the parameters FUNC takes; `void'
+   is as good as any other choice.  */
+extern void makecontext (ucontext_t *__ucp, void (*__func) (void),
+			 int __argc, ...) __THROW;
+```
+makecontext是对__ucp的配置，当下次触发__ucp运行时，使用__ucp的上下文，但是要执行
+__func，__argc是__func的入参个数，后面依次是每个入参。
+
+函数定义没有入参？
