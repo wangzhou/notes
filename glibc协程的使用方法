@@ -1,4 +1,5 @@
 -v0.1 2023.7.29 Sherlock init
+-v0.2 2023.7.31 Sherlock 增加makecontext/swapcontext的说明
 
 简介：本文梳理glibc中ucontext协程的使用方法和实现代码。
 
@@ -17,7 +18,33 @@ glibc代码的glibc/stdlib/ucontext.h是ucontext的几个API，ucontext数据结
 文上切换也就是要：1. 定义用户态上下文；2. 给出相关的用户态上下文获取、修改、配置以及
 切换的API。
 
-ucontext_t描述一个用户态上下文。
+ucontext_t描述一个用户态上下文，显示是体系结构相关的，程序员可以直接操作里面的数据。
+riscv下这个结构大概是这样的：
+```
+typedef struct ucontext_t
+  {
+    unsigned long int  __uc_flags;
+    struct ucontext_t *uc_link;
+    /* 其中有stack的基地址(ss_sp)，大小(ss_size)和flag(ss_flags) */
+    stack_t            uc_stack;
+    sigset_t           uc_sigmask;
+    /* There's some padding here to allow sigset_t to be expanded in the
+       future.  Though this is unlikely, other architectures put uc_sigmask
+       at the end of this structure and explicitly state it can be
+       expanded, so we didn't want to box ourselves in here.  */
+    char               __glibc_reserved[1024 / 8 - sizeof (sigset_t)];
+    /* We can't put uc_sigmask at the end of this structure because we need
+       to be able to expand sigcontext in the future.  For example, the
+       vector ISA extension will almost certainly add ISA state.  We want
+       to ensure all user-visible ISA state can be saved and restored via a
+       ucontext, so we're putting this at the end in order to allow for
+       infinite extensibility.  Since we know this will be extended and we
+       assume sigset_t won't be extended an extreme amount, we're
+       prioritizing this.  */
+    /* 其中定义riscv的通用寄存器和浮点寄存器 */
+    mcontext_t uc_mcontext;
+  } ucontext_t;
+```
 
 如下函数就是所有ucontext_t相关的API，头文件的注释写的比较清楚了，我们后面只做补充解释。
 ```
@@ -43,6 +70,29 @@ extern void makecontext (ucontext_t *__ucp, void (*__func) (void),
 			 int __argc, ...) __THROW;
 ```
 makecontext是对__ucp的配置，当下次触发__ucp运行时，使用__ucp的上下文，但是要执行
-__func，__argc是__func的入参个数，后面依次是每个入参。
+__func，__argc是__func的入参个数，后面依次是每个入参。这里__func的定义是没有参数，
+但是后面确给了入参信息，使用的时候可以定义带入参的函数，传给makecontext时强制转换
+成void (* __func)(void)。
 
-函数定义没有入参？
+程序员可以直接通过makecontext构造一个新的执行上下文，而不仅仅是通过getcontext获取
+当前程序的上下文:
+```
+typedef void (* task_t) (void);
+ucontext_t nc;
+
+void new_context(ctx);
+void *stack = malloc(4096);
+
+nc.uc_stack.ss_sp = stack;
+nc.uc_stack.ss_size = 4096;
+nc.uc_link = NULL;
+
+makecontext(&uc, (task_t)new_context, 1, ctx);
+```
+
+程序在必要的时候可以直接使用swapcontext执行makecontext构造的上下文：
+```
+ucontext_t curr;
+
+swapcontext(&curr, &nc);
+```
