@@ -1,5 +1,6 @@
 -v0.1 2023.7.24 Sherlock init
--v0.1 2023.7.25 Sherlock
+-v0.2 2023.7.25 Sherlock 完成地址翻译章节
+-v0.3 2023.7.31 Sherlock 补充access/dirty bit的基本逻辑
 
 简介：本文是《超标量处理器》一书第二章Cache和第三章虚拟存储器的笔记。之前也整理过
       有关cache和页表的东西，本文从硬件实现的角度再次整理下，这次整理重点在整体思路
@@ -81,7 +82,16 @@ TLB是页表项的cache，这个定义里包含着这些逻辑：页表项的所
 的属性，比如access bit和dirty bit就是可以被硬件动态改变的，硬件对页表项的写操作
 应该也作用到TLB上，同时TLB和页表项之间应该有同步逻辑。
 
-todo: TLB具体的写入和同步逻辑分析。
+这里我们想象下页表项里的access bit和dirty bit的基本逻辑。首先，我们定义在页表项里
+有access bit和dirty bit这两个bit，当CPU访问一个page时，对应的access bit会被硬件
+配置成1，当CPU写一个page时，对应的dirty bit会被硬件配置成1。access/dirty bit的定义
+描述是基于页表项的，所以不管怎么说，满足条件时页表项上的对应bit是一定要更新的。
+当TLB里有access/dirty bit相关的信息时，硬件可以优化更新页表项上对应bit的行为，如果
+TLB里相关的bit已经是1，硬件就可以不去更新页表项的对应bit，因为TLB和页表项里的内容
+是一样的。可以看出以上逻辑成立的基础是TLB和页表项需要保持同步，这个同步可以软件来
+做也可以硬件来做，最终会表现为软硬件接口的不同。如果软件来做，那么软件在更新页表
+项上的access/dirty bit时，需要flush掉对应的TLB，软硬件接口定义上也要明确指出这个
+问题。
 
 页表的操作主体有：通过store/load修改和读取；通过MMU硬件隐式的访问和修改。store/load
 会和cache系统交互，把页表保存到cache或内存上，所以MMU对页表的隐式操作也会和cache
