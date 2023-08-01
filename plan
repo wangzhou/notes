@@ -165,7 +165,6 @@ ecall srst的分析		 to do
 
 hsm stop和cpu stop的同步行为	 to do
 linux调度的细节分析		 to do
-per-cpu				 to do
 kvm虚拟机和host进程统一调度	 to do
 arm spec笔记			 continue
 
@@ -224,3 +223,4 @@ spinlock实现分析		 2. to do (普通spinlock/ticket/mcs/qspinlock)
 IPI详细分析			 to do
 io_uring分析			 4. to do
 glib事件框架			 to do
+per-cpu				 to do
