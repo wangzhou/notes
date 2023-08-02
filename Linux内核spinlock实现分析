@@ -1,9 +1,10 @@
 -v0.1 2023.7.31 Sherlock init
 -v0.2 2023.8. 1 Sherlock 增加代码分析
+-v0.3 2023.8. 2 Sherlock 增加qspinlock的分析
 
 简介：本文简介Linux内核里spinlock实现逻辑，这里会总结下spinlock各种实现的基础逻辑。
-      代码分析基于内核v6,5-rc5。知乎上有一个系列的文章已经把这块讲的很好，他的位置
-      在这里：https://zhuanlan.zhihu.com/p/100546935
+      代码分析基于内核v6,5-rc5，涉及到和体系结构相关的部分，我们采用ARM64来分析。
+      知乎上有一个系列的文章已经把这块讲的很好，他的位置在这里：https://zhuanlan.zhihu.com/p/100546935
 
 基本逻辑
 ---------
@@ -124,10 +125,16 @@ MCS spinlock
 解锁就是把当前锁节点的下一个节点的owner配置成1，这样，spin的core检测到owner为1，
 就知道现在自己拥有锁了。
 
-MCS锁可以解决上面的两个问题，但是占用的内存比较多了。
+MCS锁可以解决上面的两个问题，但是占用的内存比较多了。我们考虑MCS的实际实现问题，
+一个MCS锁需要一个lock tail以及每个core上的mcs node结构，占用内存比较大，实际上
+在现在的Linux内核中只有MCS node的定义，并没有MCS锁的实现，只所以MCS的定义还在，
+是因为qspinlock里要复用MCS node的定义。
 
 qspinlock
 ----------
+
+当前的内核里，各个体系构架下的spinlock基本上都使用了qspinlock的实现。我们重点分析
+下qspinlock的基本逻辑和代码实现。
 
 spinlock_t的定义在linux/include/linux/spinlock_types.h，封装的数据结结构是struct raw_spinlock，
 进一步到arch_spinlock_t, 对于支持qspinlock的构架，arch_spinlock_t的定义就是struct qspinlock。
