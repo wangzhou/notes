@@ -1,10 +1,11 @@
 -v0.1 2023.7.31 Sherlock init
 -v0.2 2023.8. 1 Sherlock 增加代码分析
--v0.3 2023.8. 2 Sherlock 增加qspinlock的分析
+-v0.3 2023.8. 2 Sherlock 增加qspinlock的逻辑分析
+-v0.4 2023.8. 4 Sherlock 增加qspinlock的代码分析
 
 简介：本文简介Linux内核里spinlock实现逻辑，这里会总结下spinlock各种实现的基础逻辑。
       代码分析基于内核v6,5-rc5，涉及到和体系结构相关的部分，我们采用ARM64来分析。
-      知乎上有一个系列的文章已经把这块讲的很好，他的位置在这里：https://zhuanlan.zhihu.com/p/100546935
+      知乎上有一个系列的文章已经把这块讲的很好，它的位置在这里：https://zhuanlan.zhihu.com/p/100546935
 
 基本逻辑
 ---------
@@ -55,7 +56,7 @@ static inline void self_unspinlock(struct self_spinlock *lock)
 对于第二个问题，我们展开看下，在有cache的系统里，系统大概的样子如上，如果CPU0占有
 锁，cach0为1(cache0/1/2/3是Flag在各个core上的cache)，CPU1/2/3的cache也会在各个core
 读Flag时被设置为1，CPU0释放锁的时候，cache0被写成0，同时CPU1/2/3上对应的cach被无效
-化，随后那个core抢先把Flag写成1，对应的cache就是1。后面重复之前的逻辑。可以看出，
+化，随后哪个core抢先把Flag写成1，对应的cache就是1。后面重复之前的逻辑。可以看出，
 本来在unlock core和lock core之间的通行行为被扩展到了所有参与竞争锁的core，不但锁的
 请求顺序和实际获得锁的顺序不一致，而且做了很多无用功。
 
@@ -139,7 +140,7 @@ qspinlock
 spinlock_t的定义在linux/include/linux/spinlock_types.h，封装的数据结结构是struct raw_spinlock，
 进一步到arch_spinlock_t, 对于支持qspinlock的构架，arch_spinlock_t的定义就是struct qspinlock。
 
-我们只看小端下的定义，基于此分析lock和unlock的逻辑细节。
+我们只看小端下qspinlock的定义，基于此分析lock和unlock的逻辑细节。
 ```
 typedef struct qspinlock {
 	union {
@@ -158,7 +159,7 @@ typedef struct qspinlock {
 
 kernel/locking/qspinlock.c中一个CPU上静态分配一个size是4的struct qnode数组，每个
 qnode元素是struct mcs_spinlock的封装，每个core上的一个qnode对应一种内核上下文，
-所以4个qnode分别对应task, hardirq, softirq, NMI上下文。
+所以4个qnode分别对应task, hardirq, softirq, NMI内核上下文。
 
 我们再整理下qspinlock的相关数据结构。如下是qspinlock的位域结构, val状态按照如下描述
 (tail, pending, locked):
@@ -195,7 +196,7 @@ MCS核心的不同在于，qspinlock把锁占用与否的信息放到了qspinloc
 
 如果已经有一个core占有锁并且一个core在排队，就在mcs node上排队，并在pending/locked
 上spin等待，直到pending也释放锁，才占有锁。 我们把第二个排队节点，也就是这里的mcs node0
-的处理展开看下，这一节描述的是mcs node0强锁的逻辑。
+的处理展开看下，这一节描述的是mcs node0抢锁的逻辑。
 ```
                +-----------+---------+
                |           |         |
@@ -210,7 +211,7 @@ MCS核心的不同在于，qspinlock把锁占用与否的信息放到了qspinloc
 ```
 
 如果系统里有两个节点在排队，就是如上第三个core还在mcs node0排队的情况，这时如果
-又有core想占有锁，那么它们都在各自的mcs node上排队，并逐个加入mcs node的链表：
+又有core想占有锁，那么它们都在各自的mcs node上spin，并逐个加入mcs node的链表：
 ```
                      +-----------+---------+
                      |           |         |
@@ -251,12 +252,11 @@ static __always_inline void queued_spin_lock(struct qspinlock *lock)
 }
 ```
 如果val是0，对lock->val原子写入_Q_LOCKED_VAL(0x1)，否则把lock->val的值写入val，
-有写入lock->val函数返回true。可见对于没有写入的slowpath拿到lock val当前状态的值，
-基于此在slowpath里做处理。如果写入成功val的状态变成(0, 0, 1)。
+有写入lock->val函数返回true。可见对于没有写入的slowpath拿到lock->val当前状态的值，
+基于此在slowpath里做处理。如果写入成功val的状态变成(0, 0, 1)。这里acquire的语意是
+后续操作不能越过当前操作先执行。
 
-(这里acquire的语意？)
-
-unlock函数没有用原子写，这里对么?  这里release的语意?
+这里release的语意是之前的指令不能乱序到当前操作之后执行。
 ```
 static __always_inline void queued_spin_unlock(struct qspinlock *lock)
 {
@@ -267,15 +267,4 @@ static __always_inline void queued_spin_unlock(struct qspinlock *lock)
 }
 ```
 
-```
-void __lockfunc queued_spin_lock_slowpath(struct qspinlock *lock, u32 val)
-{
-	struct mcs_spinlock *prev, *next, *node;
-	u32 old, tail;
-	int idx;
-
- 	[...]
-        
-        todo...
-}
-```
+qspinlock的加锁逻辑的代码细节分析直接写到代码注释里了在[这个位置]()

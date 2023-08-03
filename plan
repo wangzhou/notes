@@ -217,10 +217,10 @@ cpu flush			 #
 qemu tlb同步逻辑	         to do
 qemu内存模拟分析		 todo
 cpu mmu/cache/tlb		 c  tlb里access bit和dirty bit。
-rcu使用和原理			 3. to do 何时可以释放读指针内容/为啥要都调度一次？
-spinlock实现分析		 2. to do (普通spinlock/ticket/mcs/qspinlock)
+rcu使用和原理			 3. c
+spinlock实现分析		 2. c
 协程的使用和原理		 1. c
 IPI详细分析			 to do
 io_uring分析			 4. to do
 glib事件框架			 to do
-per-cpu				 to do
+per-cpu				 to do cache上也要配合上啊
