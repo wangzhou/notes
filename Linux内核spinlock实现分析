@@ -266,4 +266,5 @@ static __always_inline void queued_spin_unlock(struct qspinlock *lock)
 	smp_store_release(&lock->locked, 0);
 }
 ```
-qspinlock的加锁逻辑的代码细节分析直接写到代码注释里了在[这个位置](https://github.com/wangzhou/linux/blob/bc23a8bd93823eae0cc92dc1f9668558cd4d14f3/kernel/locking/qspinlock.c#L317)
+
+qspinlock的加锁逻辑的代码细节分析直接写到代码注释里了, 在[这个位置](https://github.com/wangzhou/linux/blob/bc23a8bd93823eae0cc92dc1f9668558cd4d14f3/kernel/locking/qspinlock.c#L317)

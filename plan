@@ -216,7 +216,7 @@ C++				 doing
 cpu flush			 #
 qemu tlb同步逻辑	         to do
 qemu内存模拟分析		 todo
-cpu mmu/cache/tlb		 c  tlb里access bit和dirty bit。
+cpu mmu/cache/tlb		 #
 rcu使用和原理			 3. c
 spinlock实现分析		 2. c
 协程的使用和原理		 1. c
