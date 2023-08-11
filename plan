@@ -156,7 +156,6 @@ linux/kernel/hung_task.c	 to do
 my bios				 draft
 riscv 内存相关指令	         continue
 riscv cache(CMO)		 to do      7
-qemu tlb广播的模拟		 to do
 修改head.S里多核启动的分析，lottery只用在spinwait boot上
 opensbi里关于HSM的补充分析
 virtio				 to do
@@ -214,13 +213,17 @@ cpu issue			 #
 cpu commit/rob			 #
 C++				 doing
 cpu flush			 #
-qemu tlb同步逻辑	         to do
 qemu内存模拟分析		 todo
 cpu mmu/cache/tlb		 #
-rcu使用和原理			 3. c
+rcu使用和原理			 3. 太复杂，需要有好的讲解文档
 spinlock实现分析		 2. c
 协程的使用和原理		 1. c
 IPI详细分析			 to do
-io_uring分析			 4. to do
+io_uring分析			 4. c
+per-cpu				 to do
+
 glib事件框架			 to do
-per-cpu				 to do cache上也要配合上啊
+qemu tlb同步逻辑	         to do
+qemu arm casp实现逻辑		 to do
+pthread spinlock/mutex lock      to do
+用户态rcu lock			 to do

@@ -1,5 +1,5 @@
 -v0.1 2023.8.3 Sherlock init
--v0.2 2023.8.7 Sherlock 增加基本逻辑
+-v0.2 2023.8.7 Sherlock 增加基本逻辑，Linux内核实现
 
 简介：本文描述RCU锁的基本原始和使用。
 

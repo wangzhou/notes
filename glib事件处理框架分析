@@ -1,0 +1,57 @@
+-v0.1 2023.8.8  Sherlock ini
+-v0.2 2023.8.10 Sherlock 增加基本逻辑
+-v0.3 2023.8.11 Sherlock 增加代码分析
+
+简介：本文分析glib中事件处理框架的基本逻辑，知乎上的这篇文章简单demo了下glib事件
+      处理的使用https://zhuanlan.zhihu.com/p/512939620，这篇文章写的不错，本文在
+      次基础上，具体看看glib是如何实现相关功能的。
+
+
+基本逻辑
+---------
+
+glib库提供了一个事件处理框架，用户可以向这个框架上注册需要处理的事件，事件处理框架
+可以不断检测是否有注册时间发生，如果有事件发生就去调用注册的处理函数处理。
+
+glib库中和事件处理框架相关的概念有：上下文(GMainContext)，处理事件的循环(GMainLoop)，
+事件源(GSource)，事件源对应的处理函数(GSourceFuncs)，dispatch后的处理函数(GSourceFunc)，
+IO的封装(GIOChannel)，poll fd的封装(GPollFD)。
+
+基本的使用逻辑是，GMainContext是一个基础的上下文配置，各种GSource可以添加到一个
+GMainContext中，每个GSource都可以配置自己的GSourceFuncs处理函数，这几个处理函数
+主要关注事件处理的基本流程，就是事件处理的四个基本阶段：prepare/check/dispatch/finalize，
+用户还可以注册dispatch后的主业务处理函数，就是上面的GSourceFunc。
+
+用户可以把GPollFD封装的poll fd和GSource绑定起来，这样事件处理框架就可以主动的去
+poll对应的fd。以fd做入参创建的GIOChannel后，用户还可以调用glib提供的GIOChannel API
+进行各种IO操作。
+
+如上配置好一个GMainContext相关的事件处理模型后，用户可以创建一个GMainLoop，把这个
+loop和GMainContext绑定后，就可以调用g_main_loop_run叫这个loop运行起来。这个loop
+运行的基本逻辑就是不断的监控GMainContext里的所有source，对于准备好的source，依次
+调用prepare/check/dispatch/finalize以及主业务处理函数，这个调用过程是一个批量处理
+的过程，就是对于一次循环里准备好的所有source调用prepare等函数。
+
+todo: prepare等函数返回值？
+
+glib里额外增加了超时事件(timeout)和idle事件的接口，这两个事件源的底层也是依赖上述
+基本部件实现的。
+
+代码分析
+---------
+
+我看大概看下glib里的相关代码逻辑。
+```
+g_main_loop_run (GMainLoop *loop)
+  +-> while (g_atomic_int_get (&loop->is_running))
+        g_main_context_iterate (loop->context, TRUE, TRUE, self);
+          +-> g_main_context_prepare (context, &max_priority); 
+          +-> g_main_context_poll (context, timeout, max_priority, fds, nfds);
+          +-> g_main_context_check (context, max_priority, fds, nfds);
+          +-> g_main_context_dispatch (context);
+```
+
+使用demon
+----------
+
+https://zhuanlan.zhihu.com/p/512939620
