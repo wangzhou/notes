@@ -227,3 +227,9 @@ qemu tlb同步逻辑	         to do
 qemu arm casp实现逻辑		 to do
 pthread spinlock/mutex lock      to do
 用户态rcu lock			 to do
+
+arm casp指令			 to do
+arm sevl/wfe/sev/wfi指令	 to do
+arm customized instruction	 to do
+qemu helper函数中的store/load    to do (cpu_stq_data/cpu_memory_rw_debug)
+qemu 内存模拟			 to do
