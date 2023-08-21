@@ -213,11 +213,10 @@ cpu issue			 #
 cpu commit/rob			 #
 C++				 doing
 cpu flush			 #
-qemu内存模拟分析		 todo
 cpu mmu/cache/tlb		 #
 rcu使用和原理			 3. 太复杂，需要有好的讲解文档
-spinlock实现分析		 2. c
-协程的使用和原理		 1. c
+spinlock实现分析		 #
+协程的使用和原理		 #
 IPI详细分析			 to do
 io_uring分析			 4. c
 per-cpu				 to do
@@ -229,6 +228,7 @@ pthread spinlock/mutex lock      to do
 用户态rcu lock			 to do
 
 arm casp指令			 to do
+arm st64b/ld64指令		 to do
 arm sevl/wfe/sev/wfi指令	 to do
 arm customized instruction	 to do
 qemu helper函数中的store/load    to do (cpu_stq_data/cpu_memory_rw_debug)
