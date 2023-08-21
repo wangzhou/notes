@@ -28,7 +28,7 @@ ARM上使用LDXR/STXR的例子可以查看内核的这个位置：linux/arch/arm
 ARM上LDXR和WFE结合还有一个巧妙的用法，LDXR会设置一个exclusive的标记，当有其它store
 操作把这个标记去掉时，ARM规定系统会触发event register的set操作，这个操作是解开WFE
 的其中一个信号。这样，一个core反复读一个地址直到读到特定值的条件读操作可以使用
-LDXR+WFE的方式实现，内核里的实现代码如下，我们把注释直接写在下面的代码里。
+LDXR+WFE的方式实现，内核里的核心实现代码如下，我们把注释直接写在下面的代码里。
 ```
 /* linux/arch/arm64/include/asm/cmpxchg.h */
 #define __CMPWAIT_CASE(w, sfx, sz)					\
@@ -39,7 +39,7 @@ static inline void __cmpwait_case_##sz(volatile void *ptr,		\
 									\
 	asm volatile(							\
 
-	/* sevl和紧接着的wfe去掉之前可能的exclusive标记 */
+	/* sevl和紧接着的wfe去掉之前可能已经set的event register */
 
 	"	sevl\n"							\
 	"	wfe\n"							\
@@ -53,7 +53,11 @@ static inline void __cmpwait_case_##sz(volatile void *ptr,		\
 	"	eor	%" #w "[tmp], %" #w "[tmp], %" #w "[val]\n"	\
 	"	cbnz	%" #w "[tmp], 1f\n"				\
 
-	/* 否则睡眠等待 */
+	/*
+	 * 否则睡眠等待, 当其它core写被检测的地址时，会触发这个地址的global monitor
+	 * 被清理，从何触发WFE wakeup event唤醒WFE。注意，这里并不需要stxr之类的
+	 * 条件写指令，只要普通store指令就可以触发global monitor被清理。
+	 */
 
 	"	wfe\n"							\
 	"1:"								\
@@ -61,9 +65,8 @@ static inline void __cmpwait_case_##sz(volatile void *ptr,		\
 	: [val] "r" (val));						\
 }
 ```
-
-todo: ...
-
+在循环中反复调用如上的检测逻辑即可以完成条件读的功能，条件读在qspinlock的实现里
+有大量的使用。
 
 LSE(Large System Extensions)中的原子指令
 -----------------------------------------
@@ -71,7 +74,7 @@ LSE(Large System Extensions)中的原子指令
 ARMv8.1的LSE里新增加了单指令的原子操作，大概分为：1. 对内存里的值做原子运算的指令；
 2. 把一个值和内存里的值做交换的指令；3. CAS原子指令。
 
-第一类指令数量庞大，命名逻辑是LD/ST + 运行种类，LD前缀表示有返回值，返回值是内存
+第一类指令数量庞大，命名逻辑是LD/ST + 运算种类，LD前缀表示有返回值，返回值是内存
 里的旧值，ST表示没有返回值。比如LDADD x1, x2, [x3]表示，把x2和x3地址上值相加的和
 写入x3地址，x3地址上的旧值写入x1，STADD x1, [x3]只有原子加这个操作，没有返回旧值。
 
@@ -103,17 +106,36 @@ ST64BV/ST64BV0，这些指令只能操作Non-cacheable或者device的地址空�
 WFI/WFE/SEV/SEVL
 -----------------
 
-如上提到了WFE指令，这里把相关的指令都展开看下。 todo
+如上提到了WFE指令，这里把相关的指令都展开看下。 ARM里一开始只有WFI，顾名思义WFI
+会使core进入低功耗模式，直到core上有中断，才唤醒core继续运行。
 
+WFE(wait for event)是睡眠core等待event发生，这里的event的定义就有很多了，WFE里还
+定义了一个event register的概念，这个是一个虚拟register，只能由特定的指令或硬件行为
+set。spec里规定set event register的行为有：SEV/SEVL指令，前者set全部PE，后者set
+当前PE；异常返回；清理PE的global monitor; Generic Timer event stream。event register
+只能由WFE指令清理掉。
+
+event register如果没有set，WFE正常进入低功耗状态，event register如果已经被set，
+WFE指令并不能触发core进入低功耗，而且event register会被清理掉。可以看到LDXR/STXR
+这一节提到使用sevl + wfe清理掉之前可能set的event register，这里不管之前event register
+有没有set，这样操作总能把event register清理掉。
+
+唤醒WFE的evnet有: SEV指令; 当前core收到并可以处理中断；asynchronous external request
+debug event; timer event stream; global monitor被清理掉。其中最后一种event就是我们
+上面在LDXR/STXR一节中提到的情况。
+
+如上，SEV(send Event)和SEVL(send Event Local)，都可以set event register，只不过
+作用core的范围不一样。SEV还可以一把唤醒所有core上WFE，如果一个core已经WFE了，语意
+上就不可能再执行SEVL唤醒，所以可以看到spec里也没有相关的定义。
 
 PRFM
 -----
 
-CASP指令的示例代码里提到了PRFM，这里把预取相关的指令都展开看下。todo
-
+CASP指令的示例代码里提到了PRFM，这里把预取相关的指令都展开看下。PRFM完成对地址上
+数据的预取，具体硬件可以把它实现成提前加载数据到cache，这个指令可以带不同的参数。
 
 customized instruction
 -----------------------
 
-ARM支持其它厂商可以子定义指令，相关的预留指令空间的定义可以查看ARM用户手册的这个
+ARM支持其它厂商可以自定义指令，相关的预留指令空间的定义可以查看ARM用户手册的这个
 位置：Reserved encoding space for IMPLEMENTATION DEFINED instructions

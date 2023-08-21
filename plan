@@ -192,19 +192,10 @@ qemu IR分析			 c
 arm memory order		 to do
 splitwx				 to do
 
-c协程实现			 to do 1
 riscv vector			 to do
-riscv上各种锁的实现，rcu	 to do 重点
-
 current的值，以及内核线程current里mm的值   to do
 vstime/hstime		         to do
-
-qemu call IR实现分析		 to do
-
-qemu usr mode运行动态链接程序	 to do
-
 riscv branch指令的整理		 #
-
 cpu rename			 #
 cpu bp			 	 doing
 cpu execute(侧重load/store lsu)  #
@@ -214,7 +205,6 @@ cpu commit/rob			 #
 C++				 doing
 cpu flush			 #
 cpu mmu/cache/tlb		 #
-rcu使用和原理			 3. 太复杂，需要有好的讲解文档
 spinlock实现分析		 #
 协程的使用和原理		 #
 IPI详细分析			 to do
@@ -223,13 +213,16 @@ per-cpu				 to do
 
 glib事件框架			 to do
 qemu tlb同步逻辑	         to do
-qemu arm casp实现逻辑		 to do
 pthread spinlock/mutex lock      to do
 用户态rcu lock			 to do
 
-arm casp指令			 to do
-arm st64b/ld64指令		 to do
-arm sevl/wfe/sev/wfi指令	 to do
-arm customized instruction	 to do
+arm casp指令			 #
+arm st64b/ld64指令		 #
+arm sevl/wfe/sev/wfi指令	 #
+arm customized instruction	 #
+
+qemu arm casp实现逻辑		 to do
 qemu helper函数中的store/load    to do (cpu_stq_data/cpu_memory_rw_debug)
-qemu 内存模拟			 to do
+qemu 内存模拟			 1
+qemu call IR实现分析		 2
+rcu使用和原理			 3. 太复杂，需要有好的讲解文档
