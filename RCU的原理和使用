@@ -1,5 +1,6 @@
--v0.1 2023.8.3 Sherlock init
--v0.2 2023.8.7 Sherlock 增加基本逻辑，Linux内核实现
+-v0.1 2023.8.3  Sherlock init
+-v0.2 2023.8.7  Sherlock 增加基本逻辑，Linux内核实现
+-v0.3 2023.8.21 Sherlock
 
 简介：本文描述RCU锁的基本原始和使用。
 
@@ -59,10 +60,12 @@ Linux内核中的RCU API
 程序里用一个指针struct data __rcu *p 访问这个全局变量，那么这个变量的访问、修改
 代码大概是：
 ```
+/* 访问数据 */
 rcu_read_lock();
 struct data *d = rcu_dereference(p);
 rcu_read_unlock();
 
+/* 修改数据 */
 struct data *new = kmalloc(sizeof(*p), GFP_KERNEL);
 new->value = 10;
 rcu_assign_pointer(p, new);
@@ -77,7 +80,7 @@ synchronize_rcu();
 如果为0，表示没有reader访问了，就可以把对应这个版本的data释放掉。
 
 显然内核里不是按如上的逻辑实现的，这样实现每个RCU锁使用的资源太多了。
-todo: 实现逻辑。何时释放读指针，为啥要都调度一次。
+todo: 实现逻辑。何时释放读指针，为啥要都调度一次?
 
 我们这里看下内核里RCU保护的链表的实现逻辑，相关代码的位置在linux/include/linux/rculist.h。
 
@@ -85,5 +88,3 @@ RCU用户态库
 ------------
 
 liburcu
-
-qemu里的RCU
