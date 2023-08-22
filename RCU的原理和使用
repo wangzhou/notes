@@ -1,8 +1,8 @@
 -v0.1 2023.8.3  Sherlock init
 -v0.2 2023.8.7  Sherlock 增加基本逻辑，Linux内核实现
--v0.3 2023.8.21 Sherlock
+-v0.3 2023.8.22 Sherlock 补了一些疑问，代码随后看吧
 
-简介：本文描述RCU锁的基本原始和使用。
+简介：本文描述RCU锁的基本原始和使用。详细代码分析需要合适的时机再补进来，太复杂了。
 
 基本逻辑
 ---------
@@ -79,12 +79,29 @@ synchronize_rcu();
 计数加1，在unlock的时候引用计数减1，在synchronize_rcu里定期扫描全部指针的引用计数，
 如果为0，表示没有reader访问了，就可以把对应这个版本的data释放掉。
 
-显然内核里不是按如上的逻辑实现的，这样实现每个RCU锁使用的资源太多了。
-todo: 实现逻辑。何时释放读指针，为啥要都调度一次?
+显然内核里不是按如上的逻辑实现的，这样实现每个RCU锁使用的资源太多了。经典的内核RCU
+实现中，lock/unlock只是做关内核抢占/开内核抢占的操作，synchronize_rcu中使用cpu_mask
+记录每个CPU的调度情况，当每个CPU都调度过一次后，之前做RCU read的CPU一定已经离开
+关抢占的临界区，这样可以认为所有对新版本数据的读者都已经离开临界区了。
 
-我们这里看下内核里RCU保护的链表的实现逻辑，相关代码的位置在linux/include/linux/rculist.h。
+有几个问题还没有想明白：对一个RCU保护数据的读操作可能发生在synchronize_rcu之后，
+在这个间隙内，可以先发生一次调度，再进行RCU read，synchronize_rcu不会错误的检测到
+已经调度过，就认为没有RCU reader么？
+```
+    CPU0                            CPU1
+
+    rcu_assign_pointer(p, new);
+    synchronize_rcu
+                                    schedule
+                                    RCU read p
+```
+RCU检测所有CPU都调度一次，有的CPU并没有做RCU read，那么理论上都不需要检测，如何
+做到这个？有些CPU下线了或者进入低功耗状态，应该在做检测的CPU集合中去掉这些CPU。
+
+内核里提供了基于RCU的基础数据结构，比如，内核里RCU保护的链表的实现逻辑的代码位置在:
+linux/include/linux/rculist.h。
 
 RCU用户态库
 ------------
 
-liburcu
+有各种RCU用户态库支持在用户态使用RCU，比如，liburcu。
