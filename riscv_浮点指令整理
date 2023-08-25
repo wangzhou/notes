@@ -1,5 +1,5 @@
 -v0.1 2023.8.23 Sherlock init
--v0.2 2023.8.24 Sherlock
+-v0.2 2023.8.25 Sherlock finish
 
 简介：本文整理riscv上的浮点指令。整理依赖的spec版本是20191213，以来的qemu版本是v8.1.0-rc3。
 
@@ -34,13 +34,13 @@ riscv浮点指令再从功能上细分，大概可以分为：计算相关，IO�
 |           fmin.s    fmin.d                                         |
 |           fmax.s    fmax.d                                         |
 |          fmadd.s   fmadd.d    乘加，两数相乘再加上一个数           |
-|         fnmsub.s  fnmsub.d                                         |
+|         fnmsub.s  fnmsub.d    相乘的结果取反后再减去一个数         |
 |                                                                    |
 |      符号注入：                                                    |
 |                                                                    |
-|          fsgnj.s   fsgnj.d    改变一个数的符号                     |
-|         fsgnjn.s  fsgnjn.d                                         |
-|         fsgnjx.s  fsgnjx.d                                         |
+|          fsgnj.s   fsgnj.d    符号注入都是取rs1绝对值, 取rs2的符号 |
+|         fsgnjn.s  fsgnjn.d    取rs2的符号再取反                    |
+|         fsgnjx.s  fsgnjx.d    取rs2/rs1的符号的异或作为符号        |
 |                                                                    |
 |      比较：                                                        |
 |                                                                    |
@@ -52,7 +52,7 @@ riscv浮点指令再从功能上细分，大概可以分为：计算相关，IO�
 |                                                                    |
 |     寄存器数据移动：                                               |
 |                                                                    |
-|            fmv.sx              这转换的两个寄存器都是后一个是源，  |
+|            fmv.sx              转换指令的两个寄存器都是后一个是源，|
 |            fmv.xs              前一个是目的，比如sx是，s <- x。    |
 |                                                                    |
 |     数据格式转换：                                                 |

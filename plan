@@ -211,7 +211,6 @@ IPI详细分析			 to do
 io_uring分析			 4. c
 per-cpu				 to do
 
-glib事件框架			 to do
 qemu tlb同步逻辑	         to do
 pthread spinlock/mutex lock      to do
 用户态rcu lock			 to do
@@ -220,9 +219,14 @@ arm casp指令			 #
 arm st64b/ld64指令		 #
 arm sevl/wfe/sev/wfi指令	 #
 arm customized instruction	 #
+rcu使用和原理			 c
 
 qemu arm casp实现逻辑		 to do
 qemu helper函数中的store/load    to do (cpu_stq_data/cpu_memory_rw_debug)
 qemu 内存模拟			 1
 qemu call IR实现分析		 2
-rcu使用和原理			 3. 太复杂，需要有好的讲解文档
+glib事件框架			 to do
+
+riscv float			 #
+inkscape逻辑空间		 to do
+动态链接原理分析		 to do
