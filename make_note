@@ -2,6 +2,8 @@ Makefile再学习
 ==============
 
 -v0.1 2021.9.12 Sherlock init
+-v0.2 2023.9.2  Sherlock 补充变量展开，函数。
+-v0.3 2023.9.4  Sherlock 补充define的一个小例子。
 
 简介：本文是《跟我一起学Makefile》的一个学习笔记，N年前看过这个材料，现在再回头
       看下，温故而知新。然后在拿pciutils里手写的Makefile逐行对照着看下。本文也用于
@@ -30,18 +32,44 @@ make和Makefile的基本逻辑
  可以想象要支持复杂的功能，make会定义自己的变量语法，流程控制的语法和函数。这些
  语法的定义都和shell的里的定义长的差不多。学习Makefile也就是对这些语法的学习。
 
+ make的官方指导文档在[这里](https://www.gnu.org/software/make/manual/html_node/)。
+
 变量
 ----
 
- 变量在makefile里可以理解为一个宏，make在运行之前先做变量替换。一般变量直接定义，
- 使用$()来引用，比如：
+ 变量在makefile里可以理解为一个宏，make在运行时会做变量展开，这个变量展开的逻辑里
+ 有立即展开(immediate)和延后展开(deferred)两个概念，我们后面再具体看变量展开的细节。
+ 一般变量直接定义，使用$()来引用，比如：
 ```
 PREFIX=/usr/local
 SBINDIR=$(PREFIX)/sbin
 ```
  
- 变量的定义方式还可以用 := , ?= 和 +=。
+ 变量的定义方式还可以用 := , ?= 和 +=。这些变量定义的方式定义变量的行为都有所
+ 不同，=定义变量，变量的右值可以出现在定义的后面，:=中变量的右值只能在定义之前，
+ 否则右值相当于是空的，?=会看下之前有没有定义过变量，如果有就覆盖掉之前的，覆盖的
+ 逻辑和=一样(和:=不一样)，+=是在变量上做追加。
 
+ 上面讲的各种不同定义变量的方式看起来有点神叨叨的，不过我们继续看下变量展开的内在
+ 逻辑，就可以理解这里的关键了。Makefile的运行逻辑大体分两个步骤，第一步是把Makefile
+ 文件读进来进行依赖解析，第二步是根据依赖关系执行对应的命令，所以变量的展开也分如上
+ 提到的立即展开和延后展开，立即展开是在第一步解析时就展开，延后展开是在随后的执行
+ 过程中展开。
+
+ 举个例子：
+```
+ B = C
+ A := $(B)
+```
+ 如果如上第二个定义的右值是延后展开的话，第一步解析完A的值就是$(B)这个字符串本身，
+ 注意不是C。
+
+ 整个Makefile文件中，各个地方都可能定义变量，那每个地方的变量是立即展开还是延后
+ 展开? make具体定义了各种情况的展开方式，具体可以查make的[文档](https://www.gnu.org/software/make/manual/make.html/#Reading-Makefiles)。可以看到变量的不同定义中
+ 展开方式是不一样的: immediate = deferred, immediate := immediate, immediate += deferred or immediate。
+ 可以看到=的方式中右值一定是deferred，而:=的右值一定是immediate，所以上面的例子里
+ A会在第一步解析后是C。
+ 
  变量有其相关的作用域。一般定义的变量的作用域就是本makefile。使用export可以把所有
  当前makefile中的变量export到子makefile中，也可以export A只把A变量export到子makefile中。
  makefile里的变量，如果和环境变量一样，就会覆盖环境变量。还可以使用目标变量，把
@@ -50,6 +78,37 @@ SBINDIR=$(PREFIX)/sbin
 
  自动变量，$@, $<, $^, 其中$@表示target的集合，$<表示依赖中的第一个名字，$^表示
  依赖目标的集合。
+
+ make里的函数也可以看成是自定义的变量，和变量一样有各种定义形式，对应的是不同定义
+ 的展开方式不一样，比如=的定义rule是immediate，内容是deferred。
+```
+define rule=
+xxxx
+xxxx
+endef
+```
+ 因为可以给自定义的函数传参，这种方式可以结合循环可以批量的定义规则。这里我们放
+ 一个makefile的小例子：
+```
+_all=a b c d
+__all=$(patsubst %, %_lib, $(_all))
+
+all: $(_all) $(__all)
+
+define test_rule=
+$(1): test.o
+	gcc test.o -o $(1)
+$(1)_lib: test.o lib.o
+	gcc test.o lib.o -DLIB -o $(1)_lib
+endef
+
+$(foreach n,$(_all),$(eval $(call test_rule,$(n))))
+
+.PHONY: clean
+clean:
+	rm $(_all) $(__all) *.o
+```
+ 可以看见这里用一个自定义的函数，对a/b/c/d每一个字符都生成了x和x_lib的目标。
 
 流程控制
 --------
@@ -71,10 +130,40 @@ files := $(foreach n,$(names),$(n).o)
 ```
  $(files)的值是 a.o b.o c.o d.o
 
+ make还有条件语句的支持，大概可以分为：1. 判断变量有无定义的条件语句(#ifdef-#else-#endif)，
+ 2. 判断两个变量关系的条件语句(#ifeq ($(xxx), $(xxx))-#else-#endif)。
+
 函数
 ----
 
- 这里列出下面pciutils makefile里用的函数。
+ 我们把Makefile里常用的函数收集在这里。
+
+ patsubst
+
+  $(patsubst <pattern>,<replacement>,<text>)，语意是把text里的符合pattern模式的
+  单词替换成replacement，其中pattern/replacement里可以用通配符%表示任意字符串。
+
+  比如，$(patsubst %.o, %.c, a.o b.o c.o)替换后的结果是a.c b.c c.c
+
+ call
+
+  $(call expression,para1,para2,para3)，语意是把参数para1/2/3传给表达式里的$(1)/$(2)/$(3)。
+  注意这里看起来是函数，其实就是自定义的一个表达式而已。关于自定义表达式的语法，
+  可以参考上面的介绍。
+
+ eval
+
+  $(eval expression)，展开变量或者函数。
+
+ foreach
+
+  $(foreach var,list,text)，语意是从list里依次取出一个变量赋给var，然后进行text里
+  定义的运算，返回运算的结果。比如，$(foreach n,a b c,$(n).o)返回a.o b.o c.o。
+
+ info/error/warning
+
+  $(info xxx)，这样使用可以在打印xxx的内容，error/warning的用法类似。似乎info是在
+  第一步解析Makefile时做打印的。
 
 一些高级用法
 ------------
@@ -83,16 +172,26 @@ files := $(foreach n,$(names),$(n).o)
  写法的省略表示。比如，对于.o的target，make自动推导依赖里有相同名字的.c存在，自动
  可以自动推导出基本的编译命令。
 
- 隐含规则
+ 比如，如果编译链条中需要通过file.c编译生成file.o，这个规则是全部不用写的，make
+ 会使用隐含规则自动都补上，但是make补齐的时候是按照一定的模版来的，比如这里make
+ 使用$(CC) $(CFLAGS) -c file.c -o file.o生成命令，所以如果你期望的编译命令不是这样
+ 的，就需要自己定义。
 
- 持续增加...
+ 你也可以自定义模版，就是自己定义规则，自己定义的规则还可以覆盖make的隐含规则。
+ 比如，可以把.c到.o的规则定义成如下，这样这个makefile里对应的隐含规则就被覆盖了。
+```
+%.o: %.c
+	gcc --static -g -c $< -o $@
+```
+
+ (持续增加...)
 
 pciutils Makefile分析
 ---------------------
 
- 我们把pciutils Makefile copy到这里，然后逐行分析下。pciutils的github地址在：
- https://github.com/pciutils/pciutils.git。我们直接用注释的方式写分析。
- 用这个makefile做例子分析，有个缺点，是这个里面没有使用make的函数。
+ 我们把pciutils Makefile copy到这里，然后逐行分析下。pciutils的github地址在[这里](https://github.com/pciutils/pciutils.git)。
+ 我们直接用注释的方式写分析。用这个makefile做例子分析，有个缺点，是这个里面没有
+ 使用make的函数。
 ```
 # Makefile for The PCI Utilities
 # (c) 1998--2020 Martin Mares <mj@ucw.cz>

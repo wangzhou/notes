@@ -1,0 +1,18 @@
+-v0.1 2023.8.27 Sherlock init
+
+简介：inkscape是一个开源的矢量图绘制软件，在windows和linux下都有对应的版本，inkscape
+      和viso这样的矢量图工具相比灵活性太大，这导致inkscape的功能强大，但是也不好
+      掌握。本文是对inkscape里一些基本概念的介绍，具体操作细节可以参考inkscape的
+      官方指导文档或者网上的介绍视屏。
+
+对象
+
+填充
+
+笔刷
+
+路径
+
+
+
+备注：B站上[这个](https://www.bilibili.com/video/BV1B54y1X7iX/?spm_id_from=333.337.search-card.all.click&vd_source=5884f210ac07dc1f53b40a7ee158a604)UP主的inkscape系列介绍讲的很好。
