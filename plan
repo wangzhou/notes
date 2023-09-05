@@ -231,6 +231,6 @@ inkscape逻辑空间		 to do
 动态链接原理分析		 to do 重要
 qemu user mode不能跑多进程	 to do
 qemu call IR实现分析		 2
-手工拼指令的方法		 to do 补在c里，还有用宏定函数
-qemu特定版本需要依赖capstone库	 to do 做反汇编
+手工拼指令的方法		 to post
+用宏定函数			 to do
 makefile高级用法		 to post

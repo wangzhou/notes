@@ -1,0 +1,8 @@
+-v0.1 2023.9.4 Sherlock init
+
+qemu高版本，至少8.1.0里有这个问题。qemu依赖capstone库做反汇编，所以如果系统里没有
+capstone库，qemu做反汇编的时候会看到一堆二进制，而看不到反汇编。
+
+比如，qemu-aarch64 -d in_asm test，这个对guest指令做反汇编，就会出现这个问题。
+
+在ubuntu下安装capstone的方法是：apt-get install libcapstone-dev。
