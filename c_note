@@ -2,6 +2,7 @@ C语言note
 =========
 
  -v0.1 2020.8.12 Sherlock init
+ -v0.2 2023.9.07 Sherlock 增加用宏写函数定义
 
 宏
 -----
@@ -15,7 +16,7 @@ C语言note
   如果宏的实现是一个使用##或者#的宏，那么直接使用##或者#的规则。
 
   如果要使得比如下面test case 4的到“19”的输出，需要中间转下，类似case 5的写法。
-  ```
+```
 #include <stdio.h>
 
 #define TEST(a, b) a##b
@@ -48,8 +49,21 @@ test 2: just_test
 test 3: 2000
 test 4: TEST(1, 9)
 test 5: 19
-  ```
+```
   https://www.cnblogs.com/alantu2018/p/8465911.html
+
+  程序里有代码逻辑和函数定义，使用宏也可以拼装出函数定义出来，主要被用来模版化生成
+  一些几乎一样的函数，比如，你要写一些运算函数add/sub/mul/div，这些函数都是两输入，
+  都是对两个数做运算，就可以写这样的宏出来:
+```
+#define FUN(name, op)           \
+int do_##name(int a, int b)     \
+{                               \
+	return a op b;          \
+}
+FUN(add, +)
+FUN(sub, 1)
+```
 
 自动数据类型转换
 -------------------

@@ -232,5 +232,6 @@ inkscape逻辑空间		 to do
 qemu user mode不能跑多进程	 to do
 qemu call IR实现分析		 2
 手工拼指令的方法		 #
-用宏定函数			 to do
+用宏定函数			 to post
 makefile高级用法		 #
+arm内存模型			 to do 难
