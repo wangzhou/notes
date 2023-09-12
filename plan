@@ -210,18 +210,18 @@ arm sevl/wfe/sev/wfi指令	 #
 arm customized instruction	 #
 rcu使用和原理			 c
 
-qemu helper函数中的store/load    to do (cpu_stq_data/cpu_memory_rw_debug) 2
+qemu helper函数中的store/load    #
 qemu 内存模拟			 to do 2
 
 riscv float			 #
 inkscape逻辑空间		 to do 4
 动态链接原理分析		 to do 3
 qemu user mode不能跑多进程	 #
-qemu call IR实现分析		 doing 1
+qemu call IR实现分析		 doing(遗留后端分析)
 手工拼指令的方法		 #
 用宏定函数			 #
 makefile高级用法		 #
-arm内存模型			 to do 难
+arm内存模型			 to do 先部分补齐
 ARM memory tag			 to do
 
 userspace-rcu			 work

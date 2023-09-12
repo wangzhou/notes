@@ -3,6 +3,7 @@
 -v0.3 2023.1.20 page walk细节
 -v0.4 2023.2.19 增加取指令的超链接
 -v0.5 2023.4.13 增加qemu里host ld/sd的分析，以及user mode下guest PA和host VA的区别。
+-v0.6 2023.9.12
 
 简介：本文分析qemu tcg里关于load/store的流程，以riscv平台为分析对象。qemu的版本是5.1.50。
       CPU访存主要有使用load/store的显示访存也有隐式访存，比如CPU取指令就属于一种
@@ -161,3 +162,5 @@ load/store host地址
    /* 直接生成host load/store指令 */
    tcg_out_opc_store()/tcg_out_opc_imm()
 ```
+
+注意在qemu代码(v8.0.0)的docs/devel/loads-stores.rst有qemu内部各种内存访问API的说明。

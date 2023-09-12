@@ -32,12 +32,17 @@ loop和GMainContext绑定后，就可以调用g_main_loop_run叫这个loop运行
 调用prepare/check/dispatch/finalize以及主业务处理函数，这个调用过程是一个批量处理
 的过程，就是对于一次循环里准备好的所有source调用prepare等函数。
 
-todo: prepare等函数返回值？
+todo: prepare等函数返回值？似乎prepare的返回值没有用。
 
 glib里额外增加了超时事件(timeout)和idle事件的接口，这两个事件源的底层也是依赖上述
 基本部件实现的。
 
-todo; timeout是怎么实现的？
+todo; timeout是怎么实现的？没有找到检测超时触发timer函数被调用的逻辑。
+      timer demo运行，显示cpu的负载很轻，不像是在一个循环里一直跑？
+
+todo; idle是怎么实现的？idle函数返回true，会刷屏，怎么判断处在所谓idle状态？
+
+todo: 可以动态加减事件么？
 
 代码分析
 ---------
