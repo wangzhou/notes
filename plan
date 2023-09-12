@@ -47,8 +47,6 @@ share lib name
 如何用automake组织一个项目
 openssl 异步机制分析
 
-linux ksm分析
-linux swap分析
 numa balancing
 /proc/vmstat
 migratepages分析
@@ -80,12 +78,6 @@ qemu qom          #
 qemu add trace    #    need update
 qemu的smmuv3的基础逻辑/pasid支持  #
 qemu mem
-memory buddy
-memory slab
-memory fault
-memory reclaim(swap, direct)
-memory vma
-memory pagecache
 fs vfs
 vim_note #
 glib opt #
@@ -109,8 +101,6 @@ CPU微架构使用store buffer的原因，除了store的时候不等invalid ack�
 cmake #
 mock  #
 iommu reserv region/MSI
-PLKA 4虚拟内存
-PLKA 内存回收
 qemu内存管理
 qemu tcg and exec               #
 perf框架
@@ -167,7 +157,6 @@ linux调度的细节分析		 to do
 kvm虚拟机和host进程统一调度	 to do
 arm spec笔记			 continue
 
-
 rv全部异常定义分析		 to do
 ELF/PE启动			 continue(uboot EFI)
 unix编程艺术读书笔记		 todo
@@ -221,18 +210,32 @@ arm sevl/wfe/sev/wfi指令	 #
 arm customized instruction	 #
 rcu使用和原理			 c
 
-qemu arm casp实现逻辑		 to do
-qemu helper函数中的store/load    to do (cpu_stq_data/cpu_memory_rw_debug)
-qemu 内存模拟			 1
-glib事件框架			 to do
+qemu helper函数中的store/load    to do (cpu_stq_data/cpu_memory_rw_debug) 2
+qemu 内存模拟			 to do 2
 
 riscv float			 #
-inkscape逻辑空间		 to do
-动态链接原理分析		 to do 重要
-qemu user mode不能跑多进程	 to do
-qemu call IR实现分析		 2
+inkscape逻辑空间		 to do 4
+动态链接原理分析		 to do 3
+qemu user mode不能跑多进程	 #
+qemu call IR实现分析		 doing 1
 手工拼指令的方法		 #
-用宏定函数			 to post
+用宏定函数			 #
 makefile高级用法		 #
 arm内存模型			 to do 难
 ARM memory tag			 to do
+
+userspace-rcu			 work
+glib事件框架			 work
+automake/autoconfig/autohead     #
+
+linux内存管理:
+ - ksm
+ - swap
+ - memory buddy
+ - memory slab
+ - memory fault
+ - memory reclaim(swap, direct)
+ - memory vma
+ - memory pagecache
+ - PLKA 4虚拟内存
+ - PLKA 内存回收

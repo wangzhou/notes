@@ -1,0 +1,10 @@
+qemu tcg中helper函数的使用和实现分析
+
+-v0.1 2023.9.11 Sherlock init
+-v0.2 2023.9.12 Sherlock
+
+简介：之前已经在各种qemu的分析中提到了helper函数，本文把这些信息总结整理到一起，
+      方便随后查看。helper函数中使用的各种技术也总结在这篇文档之中。分析基于qemu v7.1.50版本。
+
+关于call中间码和helper函数的内容，我们之前有过分析，call IR的分析可以参考[这里](https://wangzhou.github.io/qemu-tcg中间码优化和后端翻译/)，
+有关怎么加helper函数的简介可以参考[这里](https://wangzhou.github.io/qemu模拟系统指令/)。

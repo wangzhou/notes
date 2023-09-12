@@ -1,4 +1,5 @@
 -v0.1 2021.12.25 Sherlock init
+-v0.2 2023.09.11 Sherlock 增加qemu user mode对多进程和多线程的模拟和限制
 
 简介：本文是qemu user mode的一个速记，简单分析相关的代码、构建以及使用方法。
       具体以riscv为例说明。
@@ -38,8 +39,27 @@ main
 	  -> do_syscall1
 ```
 
+多线程/进程的模拟
+------------------
+
+user mode不模拟多个CPU core，但是user mode是可以执行多线程或多进程程序的，我们看
+下user mode怎么模拟clone/fork之类的Linux系统调用，就可以明白user mode支持多线程
+和多进程的逻辑。
+
+沿着如上do_syscall1函数就可以看到clone和fork的模拟方式，可以看到，如果是多线程，
+qemu user mode会在每次创建一个线程时，创建一个vCPU，然后把线程函数放到创建的vCPU
+上运行。如果是多进程程序，qemu直接fork新进程。
+
+注意这里会涉及一个原子操作支持的问题，qemu支持原子操作的一般思路是(还有一种思路是
+是直接使用host的原子指令支持guest的原子指令)，vCPU会跳到一个原子上下文里实现原子
+操作，所谓原子上下文，qemu实现的方式是，使用多线程pthread的同步方式，把其它vCPU
+的运行先停下来，只有一个vCPU可以运行。这样，qemu user多线程场景下还是可以使用一样
+的方式支持原子操作的，但是在多进程的场景下，如果两个进程共享了一段地址空间，并且
+想要原子的操作这段共享空间上的内存，qemu的基于pthread的原子操作支持方式就无法支持
+这样的场景了。
+
 使用方法
---------
+---------
 
 使用qemu-riscv --help可以查到全部参数设定，进一步用qemu-riscv -d --help可以看debug
 log的配置。其中-d可以配置打印出中间码、guest和host反汇编、guest cpu的寄存器等值，

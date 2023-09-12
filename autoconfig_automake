@@ -1,6 +1,7 @@
 autoconf/automake学习笔记
 
-v0.1 2013.12.12 *** 明白流程
+v0.1 2013.12.12 init 明白流程
+v0.2 2023.09.11 Sherlock autoconf/automake/autoheader是三个独立的命令
 
 1. 写hello.c程序
 
@@ -96,3 +97,7 @@ int main()
 	return 0;
 }
 ```
+
+注意，如上只是介绍了使用autoconf/autoheader/automake构建一个程序的流程，实际上
+这三个工具是相互独立的，有各自独立完成的功能逻辑，我们也可以只使用其中的一个或者
+几个工具来生成Makefile。
