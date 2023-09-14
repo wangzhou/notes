@@ -223,10 +223,11 @@ qemu call IR实现分析		 doing(遗留后端分析)
 makefile高级用法		 #
 arm内存模型			 to do 先部分补齐
 ARM memory tag			 to do
+glib事件框架			 hang(timer搞不明白)主循环挂起和timer唤醒点？
 
-userspace-rcu			 work
-glib事件框架			 work
+userspace-rcu			 doing
 automake/autoconfig/autohead     #
+eventfd				 to do(线程之间/进程之间/用户态和内核之间通信)
 
 linux内存管理:
  - ksm

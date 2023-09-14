@@ -51,7 +51,7 @@ translate.c里展开了一堆函数，这里translate.c里include了helper-gen.h
 展开的这个gen_helper_xxx函数是"生成helper函数"的函数，核心逻辑就是使用tcg_gen_callN
 生成CALL中间码。qemu在前端翻译的时候执行gen_helper_xxx插入CALL中间码。
 
-[这里](https://wangzhou.github.io/qemu模拟系统指令/)以riscv的ecall指令模拟为例展示了下helper函数的静态定义。
+[这里](https://wangzhou.github.io/qemu模拟系统指令/)以riscv的ecall指令模拟为例展示了helper函数的静态定义。
 
 前端翻译的逻辑比较简单，其实就是调用tcg_gen_callN生成CALL IR。
 
