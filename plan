@@ -214,10 +214,10 @@ qemu helper函数中的store/load    #
 qemu 内存模拟			 to do 2
 
 riscv float			 #
-inkscape逻辑空间		 to do 4
+inkscape逻辑空间		 #
 动态链接原理分析		 to do 3
 qemu user mode不能跑多进程	 #
-qemu call IR实现分析		 doing(遗留后端分析)
+qemu call IR实现分析		 c(遗留后端分析)
 手工拼指令的方法		 #
 用宏定函数			 #
 makefile高级用法		 #
