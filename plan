@@ -215,7 +215,7 @@ qemu 内存模拟			 to do 2
 
 riscv float			 #
 inkscape逻辑空间		 #
-动态链接原理分析		 to do 3
+动态链接原理分析		 c
 qemu user mode不能跑多进程	 #
 qemu call IR实现分析		 c(遗留后端分析)
 手工拼指令的方法		 #
