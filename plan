@@ -211,7 +211,9 @@ arm customized instruction	 #
 rcu使用和原理			 c
 
 qemu helper函数中的store/load    #
-qemu 内存模拟			 to do 2
+qemu 内存模拟			 doing: mmio也是用load/store访问的，相关逻辑怎么整合到load/store的模拟中，AS/MR/FV
+				 慢速路径里有io的入口，和AS/MR/RV等概念走到一起，但是memory还是没有和这些概念一起?
+				 所以，类似listener的概念只存在于kvm的内存模拟中？还是kvm中的io mmio模拟中？
 
 riscv float			 #
 inkscape逻辑空间		 #
@@ -221,7 +223,7 @@ qemu call IR实现分析		 c(遗留后端分析)
 手工拼指令的方法		 #
 用宏定函数			 #
 makefile高级用法		 #
-arm内存模型			 to do 先部分补齐
+arm内存模型			 c
 ARM memory tag			 to do
 glib事件框架			 hang(timer搞不明白)主循环挂起和timer唤醒点？
 
@@ -232,11 +234,11 @@ eventfd				 to do(线程之间/进程之间/用户态和内核之间通信)
 linux内存管理:
  - ksm
  - swap
- - memory buddy
+ - memory buddy #
  - memory slab
  - memory fault
- - memory reclaim(swap, direct)
+ - memory reclaim(swap, direct) #
  - memory vma
- - memory pagecache
+ - memory pagecache #
  - PLKA 4虚拟内存
  - PLKA 内存回收
