@@ -181,7 +181,6 @@ qemu IR分析			 c
 arm memory order		 to do
 splitwx				 to do
 
-riscv vector			 to do
 current的值，以及内核线程current里mm的值   to do
 vstime/hstime		         to do
 riscv branch指令的整理		 #
@@ -225,11 +224,12 @@ qemu call IR实现分析		 c(遗留后端分析)
 makefile高级用法		 #
 arm内存模型			 c
 ARM memory tag			 to do
-glib事件框架			 hang(timer搞不明白)主循环挂起和timer唤醒点？
+glib事件框架			 c idle的使用和实现逻辑
 
 userspace-rcu			 doing
 automake/autoconfig/autohead     #
 eventfd				 to do(线程之间/进程之间/用户态和内核之间通信)
+riscv vector			 to do
 
 linux内存管理:
  - ksm
