@@ -2,6 +2,7 @@
 -v0.2 2023.8.10 Sherlock 增加基本逻辑
 -v0.3 2023.8.11 Sherlock 增加代码分析
 -v0.4 2023.9.19 Sherlock 增加timer分析
+-v0.5 2023.9.21 Sherlock 补齐time和idle的分析
 
 简介：本文分析glib中事件处理框架的基本逻辑，知乎上的这篇文章简单demo了下glib事件
       处理的使用https://zhuanlan.zhihu.com/p/512939620，这篇文章写的不错，本文在
@@ -39,7 +40,8 @@ glib里额外增加了超时事件(timeout)和idle事件的接口，这两个事
 代码分析
 ---------
 
-我们看大概看下glib里的相关代码逻辑。
+我们看大概看下glib里的相关代码逻辑。glib启动事件循环的核心函数是g_main_loop_run，
+在其它API做配置后，调用该函数就可以启动事件循环。
 ```
 /* glib/glib/gmain.c */
 g_main_loop_run (GMainLoop *loop)
@@ -50,20 +52,26 @@ g_main_loop_run (GMainLoop *loop)
           +-> g_main_context_check (context, max_priority, fds, nfds);
           +-> g_main_context_dispatch (context);
 ```
+事件循环的主体逻辑比较直白，就是反复的监控注册的事件，当监控的事件发生时就调用相关
+的处理函数处理。在Linux系统上就是使用poll监控事件fd的集合。
 
-todo: prepare等函数返回值？似乎prepare的返回值没有用。
+在所有事件中超时事件和idle事件的实现比较特殊一点，我们下面单独介绍。
 
+timeout的实现
+--------------
 
-timer的实现
-------------
+glib中定时器的使用比较简单，直接用g_timeout_add就可以注册一个timeout事件，但是glib
+里注册的timeout时间不是精确的时间，这个在timeout的具体实现里也可以看出来。
 
-todo; timeout是怎么实现的？没有找到检测超时触发timer函数被调用的逻辑。
-      timer demo运行，显示cpu的负载很轻，不像是在一个循环里一直跑？
+glib的timeout事件并没有用通用的定时器去实现，而是直接用poll自带的timeout参数实现的。
+在g_main_context_prepare里，glib会计算出所有监控soure的最小的超时时间，这其中就
+包括了timeout的超时时间，glib把这个最小的超时时间作为这一轮context poll的timeout。
 
 idle的实现
 -----------
 
-todo; idle是怎么实现的？idle函数返回true，会刷屏，怎么判断处在所谓idle状态？
+idle的实现比较直白，g_idle_add直接加一个事件源进来，当系统里没有更高优先级的事件
+在执行时，就调用idle相关的回调函数。
 
 使用demon
 ----------
