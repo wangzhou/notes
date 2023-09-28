@@ -242,3 +242,9 @@ linux内存管理:
  - memory pagecache #
  - PLKA 4虚拟内存
  - PLKA 内存回收
+
+linux folois/arm contiguous bit  似乎folios只是软件管理比较方便了，但是folios怎么和
+伙伴系统融合，arm contiguous bit可以在非block的情况下，把一连续的小页合并成大一点
+页，并且tlb是一个，比如，在4K页下，可以把64K对齐的4K页合并起来，注意这逻辑里有很多
+软件配置错误的处理，以及access bit/dirty bit要处理的逻辑。怎么把folios和contiguous
+bit的独立逻辑整合起来? 注意，整block的大页，似乎天然就是一个block大页一个tlb的？

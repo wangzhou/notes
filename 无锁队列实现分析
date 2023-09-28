@@ -1,0 +1,87 @@
+-v0.1 2023.9.28 sherlock init
+
+简介：本文分析无锁队列的实现逻辑，并给出一个简易无锁队列的C实现。
+
+
+基本逻辑
+---------
+
+本文参考学习了很多网上介绍无锁队列的文章，其中讲的好的有陈皓的[这篇](https://coolshell.cn/articles/8239.html), Faustino的[这篇](https://codeproject.com/Articles/153898/Yet-another-implementation-of-a-lock-free-circul)，
+DPDK里也有实现无锁队列，对应的介绍文章在[这里](https://doc.dpdk.org/guides/prog_guide/ring_lib.html)。
+
+队列可以基于链表或者数组实现，无锁队列也有链表和数组实现的方式，陈皓的文章中对链表
+实现的方式有深入的分析，总的来讲链表实现方式最大的问题是引入了ABA的问题，数组的方式
+没有ABA的问题，Faustino和DPDK里有数组实现的实例。数组实现要一开始就分配全部的队列
+内存，和链表实现相比使用内存会多。
+
+我们这里基于数组实现，看下无锁队列的核心实现逻辑，Faustino的文章把基于数组的实现
+已经讲的很好，直接看原文效果更好。
+```
+ +---+---+---+---+---+---+---+---+
+ |   | x | x | x | x |   |   |   |
+ +---+---+---+---+---+---+---+---+
+       ^               ^ 
+      read          commit
+                       ^
+                     write
+```
+如上是基本数据结果的示意图，write表示push写入数据的位置，read表示pop读取数据的位置，
+push数据进入队列并不是一个原子的过程，而是先原子的抢到队列的位置，随后再把数据copy
+到位置上，commit就表示彻底完成copy数据的位置。
+
+多个push抢位置的逻辑是这样的，先原子的把write读到一个临时变量里(curr_write)，然后
+用CAS的方式尝试把队列write的值改成后续的一个值((curr_write + 1) % QSIZE)的值，判断
+的依据是队列在这个短暂的时间间隙没有被其他push写入过数据，也就是队列的write还是之前
+读出的curr_write，整个CAS的原子行为用CAS指令表达起来就是：CAS(&write, curr_write, (curr_write + 1) % QSIZE)，
+通过CAS的返回值得知我们是否抢到了队列位置，写入成功表示抢到了队列位置，队列write
+往后移动了一个位置。
+```
+                    curr_write
+                       v
+ +---+---+---+---+---+---+---+---+
+ |   | x | x | x | x |   |   |   |
+ +---+---+---+---+---+---+---+---+
+       ^               ^ 
+      read          commit
+                           ^
+                         write
+```
+成功抢到队列位置后，随后就可以把数据写入我们已经占有的位置: curr_write。
+
+数据的写入过程会和read的过程并发，这也是为什么还要有commit的原因，commit表示这个
+位置待写入数据或者正在写入数据，所以read和commit相等意味着队列为空或者队列正在写
+入马上可以pop的数据。数据写入完后，要更新队列commit，这时可能多个push都要并发的
+更新commit，只有队列commit和curr_write相等时，当前push才能更新commit。
+```
+                    curr_write_1
+                       v
+ +---+---+---+---+---+---+---+---+
+ |   | x | x | x | x | 1 |   |   |        core 1 push
+ +---+---+---+---+---+---+---+---+
+       ^               ^ 
+      read          commit
+                           ^
+                |        write
+                |
+                |  CAS(&commit, curr_write, (curr_write + 1) % QSIZE)
+                |
+                v       curr_write_2
+                           v
+ +---+---+---+---+---+---+---+---+
+ |   | x | x | x | x | 1 | 2 |   |        core 2 push
+ +---+---+---+---+---+---+---+---+
+       ^                   ^ 
+      read              commit
+                               ^
+                             write
+```
+commit的值不断的往后更新，后续core更新commit的条件不断满足。
+
+pop中更新read的逻辑和push中更新write的逻辑是一样的。队列空满判断的逻辑是：read和
+commit相等时队列为空，write的下一个位置是head时，队列为满，注意在这样的判断下，
+队列最大的容量是QSIZE - 1。
+
+一个例子
+---------
+
+[这里](https://github.com/wangzhou/tests/blob/master/lockless_array_queue/main.c)是一个基于数组实现的无锁队列的示例。
