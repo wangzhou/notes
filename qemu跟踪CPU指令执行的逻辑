@@ -103,7 +103,7 @@ user    0m5.144s
 sys     0m15.261s
 ```
 
-注意：测试的时候发现无法把plugin的统计信息输出到log文件里，暂时做了如下hack：
+**注意**：测试的时候发现无法把plugin的统计信息输出到log文件里，暂时做了如下hack：
 ```
 diff --git a/util/log.c b/util/log.c
 index 53b4f6c58e..09abf827e3 100644
