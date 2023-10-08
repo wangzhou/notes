@@ -1,0 +1,125 @@
+-v0.1 2023.10.7 Sherlock init
+-v0.2 2023.10.8 Sherlock 增加libexeclog的测试
+
+简介：本文介绍下qemu tcg下跟踪CPU指令执行的逻辑，并用一个小例子观察qemu跟踪指令
+      执行的效率。可以看到qemu跟踪指令执行的效率还是比较低的，在实际调试时，我们
+      更多采用不断缩小问题范围+指令执行跟踪定位和调试问题。
+
+
+qemu tcg简易逻辑
+-----------------
+
+为了明白qemu trace指令的原理，我们要先了解下qemu tcg的原理，我们这里做一个科普性质
+的介绍。详细的分析可以参考[这里]()。
+
+qemu tcg是在host机器上模拟guest机器的行为，qemu把guest的指令分块，然后一块块的翻译
+成对应的host指令块(TB)，翻译后的host指令块被缓存起来，所以，当有guest指令要执行的
+时候，qemu首先查找有没有对应的已经翻译过的TB，如果有就直接执行，如果没有就先翻译
+下，再执行，同时把翻译的TB加入缓存，下次就可以直接用。整个逻辑可以用如下示意图表示：
+
+```
+        +--> 执行指令
+        |       |
+        |       |
+        |       v         TB miss
+        | 在TB缓存查找TB --------> 翻译guest指令到TB
+        |       |                        |
+        |       |                        |
+        |       |  TB hit                v
+        |       |                  把TB放入TB缓存
+        |       |                        |
+        |       v                        |
+        +--- 执行TB <--------------------+
+             ^    |
+             |    |
+             +----+
+```
+
+qemu得到指令执行trace的方式
+----------------------------
+
+我们跟踪指令执行流程是跟踪guest指令的执行流程，把每条执行的guest指令的动态参数进行
+记录，比如记录每条指令执行时输入输出寄存器的值、load/store指令可以记录load/store
+的地址和数据等等。
+
+qemu可以使用-d打开debug，-d后可以跟各种参数跟踪不同信息，详细的使用方式可以参考[这里](https://wangzhou.github.io/qemu调试方法/)。
+这里和跟踪指令流最相近的就是反汇编(-d in_asm)和输出guest CPU寄存器值(-d cpu)。但是
+这里的反汇编是在翻译guest指令的时候进行的，如果guest指令已经被翻译成TB，反复执行
+TB是不会有反汇编的。qemu把可能连起来的TB，直接用一个跳转连接起来，所以当一个TB执行
+完时，可能直接跳到另一个TB去执行，直观看就是在上面“执行TB”那个回环中不断执行已经
+翻译好的TB，guest CPU寄存器的输出是在进入“执行TB”之前，所以，对于连接起来的TB，
+-d CPU也看不到对应guest CPU寄存器的变化。
+
+可以看到，qemu tcg会尽可能提升模拟的效率，debug手段不和翻译执行紧密耦合，这个是
+合情合理的。但是，我们又想利用qemu得到指令执行流，最简单的办法就是把产生指令执行
+流的代码也加到TB里，这样TB执行模拟的同时就可以得到指令指令流程。
+
+可以想到的一个方法是，针对guest指令自定义一套debug信息的记录格式，在guest指令的
+前端实现中使用中间码把对应的信息写入debug预留的buffer里，随后在把buffer里的信息
+输出成想要的格式。实际上，qemu plugin已经支持对guest指令插入helper函数的方式跟踪
+指令流，qemu里也提供了一个叫libexeclog的plugin跟踪指令流(没有指令输入输出寄存器
+数值的跟踪)。第一种方法工作量巨大，性能会比第二种方法好，第二种方法每个guest指令
+都要插一个helper函数，性能会非常差，但是写helper函数比直接写前端翻译(相当于汇编)
+要好点。
+
+基于libexeclog的跟踪效率
+-------------------------
+
+看下同一个程序，在加libexeclog plugin和不加情况下的运行时间。
+
+配置编译qemu和plugin:
+```
+configure -target-list=aarch64-linux-user -enable-plugins
+make -j
+cd qemu/build/contrib/plugins
+make
+```
+
+测试程序是一个计算密集的不断累加的程序：
+```
+int main()
+{
+	int i, sum = 0;
+
+	for (i = 0; i < 1000000; i++) {
+		sum += i;
+	}
+
+	return 0;
+}
+```
+
+测试结果如下，测试的环境是在Macbook Air(M1)的ubuntu虚拟机里，可以看到加上plugin
+运行guest程序，运行速度大大降低。libexeclog plugin就是上面说的第二种trace方法，
+可以看到每个指令插入helper函数的方法会大大降低模拟速度。
+```
+sherlock@m1:~/repos/qemu/build$ time ./qemu-aarch64 ~/a.out 
+real    0m0.047s
+user    0m0.044s
+sys     0m0.004s
+
+sherlock@m1:~/repos/qemu/build$ time ./qemu-aarch64 -plugin ~/repos/qemu/build/contrib/plugins/libexec
+real    0m20.405s
+user    0m5.144s
+sys     0m15.261s
+```
+
+注意：测试的时候发现无法把plugin的统计信息输出到log文件里，暂时做了如下hack：
+```
+diff --git a/util/log.c b/util/log.c
+index 53b4f6c58e..09abf827e3 100644
+--- a/util/log.c
++++ b/util/log.c
+@@ -488,9 +488,9 @@ const QEMULogItem qemu_log_items[] = {
+     { CPU_LOG_TB_NOCHAIN, "nochain",
+       "do not chain compiled TBs so that \"exec\" and \"cpu\" show\n"
+       "complete traces" },
+-#ifdef CONFIG_PLUGIN
++//#ifdef CONFIG_PLUGIN
+     { CPU_LOG_PLUGIN, "plugin", "output from TCG plugins"},
+-#endif
++//#endif
+     { LOG_STRACE, "strace",
+       "log every user-mode syscall, its input, and its result" },
+     { LOG_PER_THREAD, "tid",
+```
