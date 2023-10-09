@@ -234,7 +234,7 @@ riscv vector			 to do
 linux内存管理:
  - ksm
  - swap
- - memory buddy #
+ - memory buddy #     brk和伙伴系统？
  - memory slab
  - memory fault
  - memory reclaim(swap, direct) #
@@ -249,6 +249,4 @@ linux folois/arm contiguous bit  似乎folios只是软件管理比较方便了�
 软件配置错误的处理，以及access bit/dirty bit要处理的逻辑。怎么把folios和contiguous
 bit的独立逻辑整合起来? 注意，整block的大页，似乎天然就是一个block大页一个tlb的？
 
-vim repost
 sva repost
-qemu debug post

@@ -1,5 +1,6 @@
 -v0.1 2023.10.7 Sherlock init
 -v0.2 2023.10.8 Sherlock 增加libexeclog的测试
+-v0.3 2023.10.9 Sherlock 增加-singlestep的测试
 
 简介：本文介绍下qemu tcg下跟踪CPU指令执行的逻辑，并用一个小例子观察qemu跟踪指令
       执行的效率。可以看到qemu跟踪指令执行的效率还是比较低的，在实际调试时，我们
@@ -90,17 +91,29 @@ int main()
 
 测试结果如下，测试的环境是在Macbook Air(M1)的ubuntu虚拟机里，可以看到加上plugin
 运行guest程序，运行速度大大降低。libexeclog plugin就是上面说的第二种trace方法，
-可以看到每个指令插入helper函数的方法会大大降低模拟速度。
+可以看到每个指令插入helper函数的方法会大大降低模拟速度。但是，对于-singlestep debug
+的情况，给每个guest指令插入helper方式比qemu自带的debug开销反而要小，当然libexeclog
+里每个helper函数只做一些简单的操作，当helper函数功能复杂时，开销会变大。
 ```
 sherlock@m1:~/repos/qemu/build$ time ./qemu-aarch64 ~/a.out 
-real    0m0.047s
-user    0m0.044s
-sys     0m0.004s
+real    0m0.039s
+user    0m0.025s
+sys     0m0.014s
 
-sherlock@m1:~/repos/qemu/build$ time ./qemu-aarch64 -plugin ~/repos/qemu/build/contrib/plugins/libexec
-real    0m20.405s
-user    0m5.144s
-sys     0m15.261s
+sherlock@m1:~/repos/qemu/build$ time ./qemu-aarch64 -plugin ~/repos/qemu/build/contrib/plugins/libexeclog.so -d plugin -D ~/log ~/a.out 
+real    0m2.207s
+user    0m0.593s
+sys     0m1.608s
+
+sherlock@m1:~/repos/qemu/build$ time ./qemu-aarch64 -singlestep -d exec,cpu,in_asm -D ~/log ~/a.out 
+real    0m7.694s
+user    0m5.595s
+sys     0m2.086s
+
+sherlock@m1:~/repos/qemu/build$ time ./qemu-aarch64 -singlestep -plugin ~/repos/qemu/build/contrib/plugins/libexeclog.so -d plugin -D ~/log ~/a.out 
+real    0m2.276s
+user    0m0.602s
+sys     0m1.663s
 ```
 
 **注意**：测试的时候发现无法把plugin的统计信息输出到log文件里，暂时做了如下hack：
