@@ -230,18 +230,18 @@ userspace-rcu			 doing
 automake/autoconfig/autohead     #
 eventfd				 to do(线程之间/进程之间/用户态和内核之间通信)
 riscv vector			 to do
+SIMD的基本逻辑			 to do
 
 linux内存管理:
  - ksm
  - swap
- - memory buddy #     brk和伙伴系统？
+ - memory buddy #
+ - memory migration #
  - memory slab
  - memory fault
  - memory reclaim(swap, direct) #
  - memory vma
  - memory pagecache #
- - PLKA 4虚拟内存
- - PLKA 内存回收
 
 linux folois/arm contiguous bit  似乎folios只是软件管理比较方便了，但是folios怎么和
 伙伴系统融合，arm contiguous bit可以在非block的情况下，把一连续的小页合并成大一点
