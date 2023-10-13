@@ -1,0 +1,13 @@
+-v0.1 2023.10.13 Sherlock init
+
+简介：本文速记下x86/arm64/riscv下读cpu cycles的方式。
+
+x86上提供了用户态直接读cpu cycles数的寄存器，直接写一行嵌入式汇编就好。
+
+riscv上user mode也就类似的寄存器。
+
+arm64上相关的寄存器在PMUv3上，叫pmccntr_el0，但是这个寄存器的控制接口在内核态，
+需要先用系统调用或者写个内核驱动打开用户态可读pmccntr_el0这个开关。至于arm64上
+cntvct_el0上的寄存器表示的是timer的count，不是cpu cycles。
+
+总结: arm64为啥是这样的设计?

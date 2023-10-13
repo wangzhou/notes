@@ -250,3 +250,7 @@ linux folois/arm contiguous bit  似乎folios只是软件管理比较方便了�
 bit的独立逻辑整合起来? 注意，整block的大页，似乎天然就是一个block大页一个tlb的？
 
 sva repost
+多core ldxr + str可以唤醒么？
+
+python搞个系列
+阿姆达尔定理的测试逻辑
