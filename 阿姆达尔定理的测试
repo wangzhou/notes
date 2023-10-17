@@ -15,8 +15,8 @@ T1优化到T1/k，总的运行时间为：T_new = aT/k + (1 - a)T = (a/k + (1 - 
 S = 1 / (1 - a)。取个具体的值，如果a = 1 / 4，整个系统的优化倍数就是4 / 3。
 
 把上面的式子进一步具体化，T1是整个系统中可以并行的部分，增加CPU核数可以按比例的
-减少这一部分的时间，可以上面的k就表示优化并行部分的CPU核数，T2表示系统的串行部分
-的时间。可以见，不断的给系统增加CPU核数，系统整体的优化倍数上限是S = 1 / 串行部分比例。
+减少这一部分的时间，可见上面的k就表示优化并行部分的CPU核数，T2表示系统的串行部分
+的时间。可以看到，不断的给系统增加CPU核数，系统整体的优化倍数上限是S = 1 / 串行部分比例。
 也就是说，如果串行部分的比例是1 / 4，不断加入CPU核优化并行的上限是4倍，如果串行
 部分比例是1/2，这个上限是2倍。
 
@@ -26,7 +26,7 @@ S = 1 / (1 - a)。取个具体的值，如果a = 1 / 4，整个系统的优化�
 我们写一个简单测试程序做下测试，完整的测试代码在[这里](https://github.com/wangzhou/tests/tree/master/amdahl_test)。
 
 在这个测试中，我们提前准备一组任务，多个线程不断的从中取出任务执行，每个任务分并行
-部分和串行部分，当一个线程执行一个任务的串行部分时，这个线程需要上一个全局锁进行
+部分和串行部分，当一个线程执行一个任务的串行部分时，这个线程需要加上一个全局锁进行
 保护。测试中的串行和并行部分的比例用serial_ratio这个参数进行调节，测试在一定serial_ratio
 下，一定时间内(working_time)，随着CPU核数(pthread_num)变化，完成任务个数(work_num)
 的变化情况。
@@ -44,3 +44,13 @@ gcc main.c --static -lpthread
 我的测试环境是Macbook Air(M1)的ubuntu 20.04虚拟机，只有4个核, 测试结果如下图所示：
 ![amdahl测试](amdahl.svg)
 
+单线程下，串行比例50%和80%时，分别完成的work数是3226和3223:
+```
+sherlock@m1:~/tests/amdahl_test$ ./a.out --pthread_num=1 --serial_ratio=50 --working_time=2
+amdahl test result: pthread_num=1, serial_ratio=50, working_time=2, work_num=3226
+sherlock@m1:~/tests/amdahl_test$ ./a.out --pthread_num=1 --serial_ratio=80 --working_time=2
+amdahl test result: pthread_num=1, serial_ratio=80, working_time=2, work_num=3223
+```
+由最上面的分析可知，串行比例50%和80%的最大加速比是2和1.25，从上图中可以看到，串行
+比例80%的拐平数值大概是4000左右，串行比例50%的拐平数值大概是6000多点，和理论分析
+是一致的。

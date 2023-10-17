@@ -252,5 +252,6 @@ bit的独立逻辑整合起来? 注意，整block的大页，似乎天然就是�
 sva repost
 多core ldxr + str可以唤醒么？
 
-python搞个系列
-阿姆达尔定理的测试逻辑
+python搞个系列    交互(sys)/正则(re)/画图(matplotpy)  to do
+
+阿姆达尔定理的测试逻辑     topost
