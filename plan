@@ -231,6 +231,8 @@ automake/autoconfig/autohead     #
 eventfd				 to do(线程之间/进程之间/用户态和内核之间通信)
 riscv vector			 to do
 SIMD的基本逻辑			 to do
+SIMT的基本逻辑			 to do
+阿姆达尔定理的测试逻辑		 #
 
 linux内存管理:
  - ksm
@@ -253,5 +255,3 @@ sva repost
 多core ldxr + str可以唤醒么？
 
 python搞个系列    交互(sys)/正则(re)/画图(matplotpy)  to do
-
-阿姆达尔定理的测试逻辑     topost
