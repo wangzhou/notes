@@ -251,8 +251,8 @@ linux folois/arm contiguous bit  似乎folios只是软件管理比较方便了�
 软件配置错误的处理，以及access bit/dirty bit要处理的逻辑。怎么把folios和contiguous
 bit的独立逻辑整合起来? 注意，整block的大页，似乎天然就是一个block大页一个tlb的？
 
-sva repost
-多core ldxr + str可以唤醒么？
+多core ldxr + str可以唤醒么: 可以，唤醒有两种方法：1. snoop, 2. 硬件连线。感觉
+snoop的方式就可以snoop到多个core。
 
 python搞个系列    交互(sys)/正则(re)/画图(matplotpy)  to do
 qemu vcpu hotplug

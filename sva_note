@@ -147,10 +147,10 @@ SMMU, VFIO, 虚拟化，DT, ACPI等方面的修改，所以补丁比较分散，
    PRI请求是基于PCIe协议的, 平台设备无法用PRI发起缺页请求。实际上，平台设备是无法
    靠自身发起缺页请求的，SMMU用stall模式支持平台设备的缺页，当一个平台设备的内存
    访问请求到达SMMU后，如果SMMU里没有为va做到pa的映射，硬件会给SMMU的event queue
-   里写一个信息，SMMU的event queue中断处理里可以做缺页处理，然后SMMU可以回信息给
-   设备(fix me: 请求设备重发，还是smmu缺页处理后已经把该访问翻译后送到上游总线)。
-   实际上, SMMU使用event queue来处理各种错误异常，这里的stall模式是借用了event
-   queue来处理缺页。
+   里写一个信息，SMMU的event queue中断处理里可以做缺页处理，然后软件给SMMU发送
+   RESUME CMD继续stall的请求，如果出错，软件可以通过SMMU CMD回信息给设备。实际上，
+   SMMU使用event queue来处理各种错误异常，这里的stall模式是借用了event queue来处
+   理缺页。
 
    可以注意到PRI和stall模式完成缺页的区别是，PRI缺页的时候并不是在IO实际发生的
    时候，因为如果PRI response表示PRI请求失败，硬件完全可以不发起后续的IO操作。
