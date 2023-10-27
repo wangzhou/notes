@@ -255,3 +255,5 @@ sva repost
 多core ldxr + str可以唤醒么？
 
 python搞个系列    交互(sys)/正则(re)/画图(matplotpy)  to do
+qemu vcpu hotplug
+qemu 虚拟机热迁移

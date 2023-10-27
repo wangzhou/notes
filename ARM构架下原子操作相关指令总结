@@ -128,6 +128,10 @@ debug event; timer event stream; global monitor被清理掉。其中最后一种
 作用core的范围不一样。SEV还可以一把唤醒所有core上WFE，如果一个core已经WFE了，语意
 上就不可能再执行SEVL唤醒，所以可以看到spec里也没有相关的定义。
 
+可以看到一个core WFE睡眠后被唤醒，触发其唤醒的事件可能不是它期望的，所以，被唤醒
+的core需要执行检测代码，看看是否自己等待的事件发生，如果不是被自己等待的事件唤醒，
+就需要再次执行WFE去睡眠。
+
 PRFM
 -----
 

@@ -1,0 +1,26 @@
+
+
+ldr: 普通load
+ldar: 带acquire的load
+ldaxr: 带acquire + exclusive的load
+ldxr: 带exclusive的load
+
+ldp: load pair of registers
+
+```
+ld a x r s b
+st l   p   h
+           w
+ | | | | | |
+ | | | | | +--> 寄存器位宽
+ | | | | |
+ | | | | +----> 是否带符号
+ | | | |
+ | | | +------> 一个还是一对寄存器
+ | | |
+ | | +--------> 是否带exclusive
+ | |
+ | +----------> 是否带acquire/release
+ |                                
+ +------------> load还是store
+```
