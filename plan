@@ -178,7 +178,6 @@ qemu IR分析			 c
 
 手动交叉编译qemu user mode	 to do
 
-arm memory order		 to do
 splitwx				 to do
 
 current的值，以及内核线程current里mm的值   to do
@@ -257,3 +256,8 @@ snoop的方式就可以snoop到多个core。
 python搞个系列    交互(sys)/正则(re)/画图(matplotpy)  to do
 qemu vcpu hotplug
 qemu 虚拟机热迁移
+riscv memory order				      repost
+集合论/二元关系/全序关系/偏序关系/哈斯图	      to do
+arm memory model				      to do
+herdtools/cat/litmus test			      to do
+超标量处理器笔记				      update

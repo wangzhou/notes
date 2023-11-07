@@ -1,7 +1,11 @@
 -v0.1 2023.10.30 Sherlock init
+-v0.2 2023.10.31 Sherlock ...
+-v0.3 2023.11.06 Sherlock ...
+-v0.4 2023.11.07 Sherlock
 
 简介：本文是ARM64 spec 2.2/2.3章节的学习笔记。ARM的spec不同的版本这两节的定义语言
-      描述变化有点大，我们这里使用的是2023.4.12的版本。
+      描述变化有点大，我们这里使用的是2023.4.12的版本，另外，这个版本的行文似乎
+      比较乱，看的时候可以对比着上一个版本的看。
 
 2.2
 ====
@@ -46,20 +50,150 @@ ARM定义Normal/device memory都不要求是multi-copy atomic。
 2.3.1
 ------
 
-2.3.2/2.3.3/2.3.4
-------------------
+这一节是基础名词的定义，这些基础名词的定义和后面使用的地方是对应的，这里给出了所有
+情况下的定义，我们这里先根据基本的定义，把握下定义的主线。所以，我们这里先不关注
+某些特性的所有定义，比如和memory tag相关的定义，后面如果需要，我们在针对某个特性
+整体考虑。
+
+observer: 定义系统里可以发起读写请求的部件，比如CPU核或者外设。
+
+common shareability domain:
+
+location: 物理或者虚拟地址上的一个byte。
+
+program order: 程序中所展现的指令之间的先后关系。 
+
+effects: 指令执行产生的影响，比如对寄存器有影响的叫register effect，对内存的影响
+         叫memory effect，这里的effect的分类有点随心所欲，似乎是哪里需要了，就在
+	 这里加个定义，比如还有什么branching effect, TLBI effect, fault effect...
+
+reads-from-register: 描述的是相同寄存器之间的RAW关系。
+
+reads-from memory: 描述的是相同地址之间的RAW关系。没有提是不是相同observer，所以
+                   这个关系是可以存在不同observer上的。
+
+coherence order: 描述多个observer对相同地址写操作的关系。注意这里说这个是一个
+                 “total order”，序理论上全序是指集合中任意两个元素都是可比的。
+
+local read successor: 在一个observer上，描述相同地址之间的RAW关系。
+
+local write successor: 在一个observer上，描述相同地址之间的写操作在写操作或读操作
+                       之后的关系。
+
+coherence-before: 
+在一个coherence order关系里，排在前面的写操作coherence-before后面的写操作。
+store addr(W3)/load addr(R1)/store addr(W2)的关系里，如果R1 reads-from-memory W3,
+W3 coherence-before W2, 那么R1 coherence-before W2。(什么鬼?)
+
+对于store addr(W1) -> store addr(W2)和store addr(W1) -> load addr(R2)，两种情况中
+后者均没有对前者有coherence-before的关系。(啥也没有说?)
+...  
+
+observed-by: 在不同observer上，如果W2 coherence-after RW1，就是说在相同地址上W2
+	     的访问排到RW1的后面，我们说RW1 observed-by W2。(W2和RW1需要是explict
+	     的memory effect，先忽略Tag相关操作)
+
+overlapping accesses: 就是地址访问有重叠。
+
+single-copy-atomic-class: 所有single-copy-atomic触发的memory effects组成的集合。
+
+single-copy-atomic-order-before: ??
+
+2.3.2
+------
+
+这一节定义的是单条指令内在dependency关系，像CAS/SWAP这种读写effect都有的指令，
+CAS Xs, Xt, [Xn]指令中，如果Xs和Xn地址上的数据相等，就把Xt的值写到Xn地址上。
+
+注意，2.3.2的标题是“intrinsic dependency relations”，就是这一节定义的还是”关系“，
+并没有定义指令之间要准守的先后循序。
+
+2.3.3/2.3.4
+------------
+
+todo: ...
 
 2.3.5
 ------
 
-各种dependency的定义。
+各种dependency的定义，定义的是依赖的形式，至于基于这些依赖形式的指令先后顺序，这里
+并没有定义。
+
+dependency through registers and memory:
+一个PE上，寄存器或者地址上的RAW关系。一条指令中的data dependency关系。关系可以传递。
+
+basic dependency:
+两个effect是一样的(相同observed，相同作用结果)。上述的registers/memory dependency。
+
+address dependency:
+简单理解为，对于两个memory effect的指令，后一条指令用了前一条指令的输出作为地址。
+
+data dependency:
+简单理解为，对于两个memory effect的指令，后一条指令的数据用了前一条指令的输出。
+
+control dependency:
+只是定义了控制依赖的形式，有没有序要上要求，这里没有说啊。
+
+所以，我们可以简单总结下，对于address/data/control dependency基本上描述的是两条
+memory操作指令之间的依赖关系，这些依赖关系不是前后指令直接在地址上的依赖关系。
+可以看到这里和RISCV中定义的address/data/control dependency基本上是一样的。
+
+后面pick xxx dependency是什么？
 
 2.3.6
 ------
 
 各种order relation的定义。
 
+CSE-ordered-before: ?
+
+dependency-ordered-before:
+
+这里在定义order了，单核上的各种基本序都是这条里面定义的，注意这里的“序“指的还是
+关系。“A dependency creates externally-visible order between ...”，dependency创建
+了order，但是这里并没有说order里元素的先后关系。
+
+注意这里的order细化了上面的dependency，我们看control dependency相关的order，在这里
+明确提出了在一个control dependency里，后面的一个是memory write。也就是这里对后一个
+effect是memory read的control dependency关系是没有序上的定义的，配合后面创建先后
+关系的定义，control dependency里，后面的memory read是不存在先后顺序的约束的，这个
+和我们一般的认知也是相符的。
+
+pick-ordered-before:
+
+atomic-ordered-before:
+
+DSB-ordered-before:
+
+barrier-ordered-before:
+
+TTD-read-ordered-before:
+
+TLBI-ordered-before:
+
+TLBI-coherence-before:
+
+locally-ordered-before:
+
+这里基本上汇集了单核上的所有order的定义。
+
+pick-locally-ordered-before:
+
+hardware-required-ordered-before:
+
+包含了locally-ordered-before？
+
+hazard-ordered-before:
+
 2.3.7
 ------
 
-External ordering constraint的定义。
+External ordering constraint的定义，包含了单核上order的定义，描述中使用了“ordered-before”
+的词语：“An arbitrary pair of effects is ordered”, 这里才出现ordered(被排序)的概念。
+
+之前的ARM spec里有“Internal visibility requirement”的定义，里面明确有这样的语句：
+“..., then M1 will be seen to occur before M2 by that Observer”，像这样的语句才是
+在明确定义指令的先后关系。(2023.4.12版本的spec没有这一章节)
+
+2.3.8 ~ 13
+-----------
