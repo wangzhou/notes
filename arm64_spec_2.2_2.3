@@ -230,6 +230,10 @@ hazard-ordered-before:
 External ordering constraint的定义，包含了单核上order的定义，描述中使用了“ordered-before”
 的词语：“An arbitrary pair of effects is ordered”, 这里才出现ordered(被排序)的概念。
 
+external visibility requirement
+external completion requirement
+external global completion requirement 都展开分析下...
+
 之前的ARM spec里有“Internal visibility requirement”的定义，里面明确有这样的语句：
 “..., then M1 will be seen to occur before M2 by that Observer”，像这样的语句才是
 在明确定义指令的先后关系。(2023.4.12版本的spec没有这一章节)

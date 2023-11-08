@@ -258,6 +258,6 @@ qemu vcpu hotplug
 qemu 虚拟机热迁移
 riscv memory order				      repost
 集合论/二元关系/全序关系/偏序关系/哈斯图	      to do
-arm memory model				      to do
+arm memory model笔记				      to do
 herdtools/cat/litmus test			      to do
 超标量处理器笔记				      update
