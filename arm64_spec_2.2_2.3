@@ -1,7 +1,8 @@
 -v0.1 2023.10.30 Sherlock init
 -v0.2 2023.10.31 Sherlock ...
 -v0.3 2023.11.06 Sherlock ...
--v0.4 2023.11.07 Sherlock
+-v0.4 2023.11.07 Sherlock ...
+-v0.5 2023.11.08 Sherlock
 
 简介：本文是ARM64 spec 2.2/2.3章节的学习笔记。ARM的spec不同的版本这两节的定义语言
       描述变化有点大，我们这里使用的是2023.4.12的版本，另外，这个版本的行文似乎
@@ -99,6 +100,35 @@ single-copy-atomic-class: 所有single-copy-atomic触发的memory effects组成�
 
 single-copy-atomic-order-before: ??
 
+implicit translation table descriptor(TTD) memory effects:
+硬件对页表内存做隐式内存访问产生的effect，具体上有page table walk和对access/dirty
+bit的修改。
+
+hardware update effect: 特指对access/dirty bit修改产生的effect。基于这个还定义了
+hardware-update-predecessor/hardware-update-successor。
+
+tag memory effects/checked memory effects: 这两个是和memory tag相关的effect。
+
+barrier effects: spec上写的是DSB/DMB/ISB带来的effect，其他barrier指令怎么看？
+
+context synchronization effects(CSE effect): ISB或异常进入退出带来的effect。
+
+branch effects: 各种branch指令带来的改变PC的effect。
+
+TLBI effects/completed TLBI effect: tlbi指令会产生TLBI effect，tlbi后面加一个DSB.FULL
+指令会产生completed TLBI effect。基于此概念，还定义了TLBI-before/TLBI-after。
+
+fault effects, exception entry/return effects: 这块定义的比较混乱，定义关系之间
+会重叠，比如异常进入退出的effect，在上面又叫CSE effect。反正按照字面意思可以看懂
+就好。
+
+TLB uncacheable effects: 把translation fault/access flag fault/address size fault
+产生的effect归类为TLB uncacheable effect。基于这个概念还定义了TLB uncacheable-write-predecessor和
+TLB uncacheable-write-successor。
+
+low order bits/same low order bits/same location: 这组定义是为了定义最后的same
+location，这里说的不清楚。
+
 2.3.2
 ------
 
@@ -108,10 +138,15 @@ CAS Xs, Xt, [Xn]指令中，如果Xs和Xn地址上的数据相等，就把Xt的�
 注意，2.3.2的标题是“intrinsic dependency relations”，就是这一节定义的还是”关系“，
 并没有定义指令之间要准守的先后循序。
 
-2.3.3/2.3.4
-------------
+2.3.3
+------
 
-todo: ...
+translation-intrinsically-before。协议里写比较模糊，加个例子比较好。
+
+2.3.4
+------
+
+tag-check-intrinsically-before
 
 2.3.5
 ------
@@ -138,14 +173,16 @@ control dependency:
 memory操作指令之间的依赖关系，这些依赖关系不是前后指令直接在地址上的依赖关系。
 可以看到这里和RISCV中定义的address/data/control dependency基本上是一样的。
 
-后面pick xxx dependency是什么？
+后面pick xxx dependency中，似乎后一条指令里还有intrinsic的依赖？
 
 2.3.6
 ------
 
 各种order relation的定义。
 
-CSE-ordered-before: ?
+CSE-ordered-before: 如上面提到的，上下文同步时的order。控制依赖里如果前一个指令
+有显示memory read, 后一个指令有CSE effect，就是这种order。结合后面看，这种情况下
+也是保序的。
 
 dependency-ordered-before:
 
@@ -166,6 +203,8 @@ atomic-ordered-before:
 DSB-ordered-before:
 
 barrier-ordered-before:
+
+主要讲DMB的order。
 
 TTD-read-ordered-before:
 
