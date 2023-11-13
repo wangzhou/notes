@@ -2,7 +2,6 @@
 
 简介：本文介绍使用herd7做ARM内存模型验证的基本逻辑。
 
-
 ARM内存模型
 ------------
 
@@ -12,12 +11,107 @@ ARM spec的B2章节中介绍了ARM的内存模型，B2章节的核心内容是�
 对于这些规则，ARM需要确保当这些规则运行在一起的时候，相互之间没有冲突。程序员要
 确保在这组规则的下，写出的程序得到的各种结果是符合程序员预期的。
 
+我们看一个两个core上指令序例的例子，这个例子其实就是一个简单的Litmus测试用例。
+```
+AArch64 MP 
+{
+0:X1=x; 0:X3=y;
+1:X1=y; 1:X3=x;
+}
+ P0          | P1          ;
+ MOV W0,#1   | LDR W0,[X1] ;
+ STR W0,[X1] | LDR W2,[X3] ;
+ MOV W2,#1   |             ;
+ STR W2,[X3] |
+```
+P0/P1两个core, X1/X3表示两个寄存器，其中的内容是两个地址，x/y是对应地址上的值, 
+如果X1/X3是不同的地址，我们就先只看load/store的可能顺序，可能的顺序有：
+```
+------------------------------------------------------------
+             | LDR W0,[X1]                   | LDR W0,[X1]
+             |                               |
+             | LDR W2,[X3]                   | LDR W2,[X3]
+ STR W0,[X1] |                   STR W2,[X3] | 
+             |                               |
+ STR W2,[X3] |                   STR W0,[X1] | 
+------------------------------------------------------------
+             | LDR W0,[X1]                   | LDR W0,[X1]
+ STR W0,[X1] |                   STR W2,[X3] | 
+             | LDR W2,[X3]                   | LDR W2,[X3]
+ STR W2,[X3] |                   STR W0,[X1] | 
+------------------------------------------------------------
+             | LDR W0,[X1]                   | LDR W0,[X1]
+ STR W0,[X1] |                   STR W2,[X3] | 
+             |                               |
+ STR W2,[X3] |                   STR W0,[X1] | 
+             | LDR W2,[X3]                   | LDR W2,[X3]
+------------------------------------------------------------
+ STR W0,[X1] |                   STR W2,[X3] | 
+             | LDR W0,[X1]                   | LDR W0,[X1]
+ STR W2,[X3] |                   STR W0,[X1] | 
+             | LDR W2,[X3]                   | LDR W2,[X3]
+------------------------------------------------------------
+ STR W0,[X1] |                   STR W2,[X3] | 
+             |                               |
+ STR W2,[X3] |                   STR W0,[X1] | 
+             |                               |
+             | LDR W0,[X1]                   | LDR W0,[X1]
+             |                               |
+             | LDR W2,[X3]                   | LDR W2,[X3]
+------------------------------------------------------------
+             | LDR W2,[X3]                   | LDR W2,[X3]
+             |                               |
+             | LDR W0,[X1]                   | LDR W0,[X1]
+ STR W0,[X1] |                   STR W2,[X3] | 
+             |                               |
+ STR W2,[X3] |                   STR W0,[X1] | 
+------------------------------------------------------------
+             | LDR W2,[X3]                   | LDR W2,[X3]
+ STR W0,[X1] |                   STR W2,[X3] | 
+             | LDR W0,[X1]                   | LDR W0,[X1]
+ STR W2,[X3] |                   STR W0,[X1] | 
+------------------------------------------------------------
+             | LDR W2,[X3]                   | LDR W2,[X3]
+ STR W0,[X1] |                   STR W2,[X3] | 
+             |                               |
+ STR W2,[X3] |                   STR W0,[X1] | 
+             | LDR W0,[X1]                   | LDR W0,[X1]
+------------------------------------------------------------
+ STR W0,[X1] |                   STR W2,[X3] | 
+             | LDR W2,[X3]                   | LDR W2,[X3]
+ STR W2,[X3] |                   STR W0,[X1] | 
+             | LDR W0,[X1]                   | LDR W0,[X1]
+------------------------------------------------------------
+ STR W0,[X1] |                   STR W2,[X3] | 
+             |                               |
+ STR W2,[X3] |                   STR W0,[X1] | 
+             | LDR W2,[X3]                   | LDR W2,[X3]
+             |                               |
+             | LDR W0,[X1]                   | LDR W0,[X1]
+------------------------------------------------------------
+```
+应该是4*3*2的一个全排列，这里怎么只有20种? 那么也就需要验证如上所有的情况和其他
+规则不冲突，以上所有的输出结果都是合法的结果。可以看到人脑已经无法完成这样的工作，
+需要借助特性的工具来完成这样的验证。
 
-
-
-herd7/cat/Limus使用的基本逻辑
+herd7/cat/Litmus使用的基本逻辑
 ------------------------------
 
-https://developer.arm.com/Architectures/Memory%20Model%20Tool
+ARM使用herd7+cat+Litmus的方式来验证内存模型的正确性，ARM的官网上有一个herd7+cat+Litmus
+验证内存模型的使用方式，具体可以参考[这里](https://community.arm.com/arm-community-blogs/b/architectures-and-processors-blog/posts/how-to-use-the-memory-model-tool)。
 
-https://community.arm.com/arm-community-blogs/b/architectures-and-processors-blog/posts/how-to-use-the-memory-model-tool
+其中我们用cat文件描述ARM的内存模型定义，可以看到cat文件里(aarch64-v08.cat)描述的
+定义基本上和ARMspec B2.3章节是一一对应的。
+
+用Litmus的方式定义要测试的指令序列。
+
+而herd7以cat文件和Litmus测试用例为参数运行模型，得到Litmus测试用例在cat定义模型下
+的所有输出结果，并画出输出结果对应的图形。
+
+ARM提供了一个[网站](https://developer.arm.com/Architectures/Memory%20Model%20Tool)，可以形象的展示如上的这个流程。把上一小节的Litmus测试用例输入
+左边的窗口，右边的窗口可以选择不同的模型，点击Run按钮运行模型：
+![herd7验证ARM内存模型](herd7_1)
+
+在下面的输出窗口可以到看到P1上X0/X2的各种可能输出的值，已经产生这些输出值时，指令
+的可能执行顺序：
+![如上模型的部分输出](herd7_2)
