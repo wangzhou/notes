@@ -40,9 +40,9 @@ ARM64基本内存序定义
 --------------------
 
 简介里提到的"ARM Cortex-A Series Programmer’s Guide for ARMv8-A"并没有详细介绍CPU
-的内存序。ARM构架手册的B2.3详细定义了ARM64的内存模型。
+的内存序。ARM构架手册的B2.2/2.3详细定义了ARM64的内存模型。
 
-todo: 详细展开
+ARM构架手册的B2.2/B2.3的一个学习笔记可以参考[这里](https://wangzhou.github.io/ARM64内存模型笔记-B2-2-B2-3/)。
 
 ARM64内存屏障指令
 ------------------

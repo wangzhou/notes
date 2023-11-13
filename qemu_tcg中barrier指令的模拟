@@ -1,0 +1,156 @@
+qemu tcg中barrier指令的模拟
+
+-v0.1 2023.11.13 Sherlock init
+
+简介：本文分析qemu tcg中barrier指令模拟的基本逻辑，分析基于qemu代码的版本是v8.1.50。
+
+
+问题
+-----
+
+qemu tcg模拟中会遇到两类barrier相关的问题，第一类是qemu tcg需要直接支持guest barrier
+指令的模拟，在支持一个构架时，qemu的前端翻译需要把guest的barrier指令先翻译成qemu
+barrier相关的中间码(INDEX_op_mb)，后端翻译再在host机器上支持中间码的语意。
+
+第二类问题有点隐晦: 不同构架的内存模型定义是不一样的，比如X86的内存模型是TSO，这
+个模型下只有不同地址的WAR是可以乱序的，但是ARM64是弱内存模型，不同地址的读写都是
+可以乱序的。这样，在qemu tcg模拟多核的时候就可能出现host/guest内存模型不一致带来
+的问题，这个问题在guest是强内存模型，host是弱内存模型时会变得尤为凸显，需要注意
+的是，反过来guest是弱内存模型，host是强内存模型这里也会有问题。
+
+qemu的官方文档在讲到多核模拟的时候也提到了这个问题，具体可以参考[这里](https://www.qemu.org/docs/master/devel/multi-thread-tcg.html)的Memory Consistency小节。
+
+具体上看，这个问题是很好理解的，比如guest X86上的两个不同地址的写被翻译到一个tb里，
+guest X86认为这两个写指令是不会乱序的，这两个X86上的写指令翻译到ARM64也是写指令，
+但是在ARM64 host机器上执行相关的写指令时，ARM64上这两条写指令是可能会乱序的，如果
+翻译的时候不加入barrier指令维持X86上的内存序语意，最后在多核模拟的时候可能就会出错。
+
+模拟逻辑
+---------
+
+如上qemu中已经解决了相关的问题，qemu提供了一个barrier相关的中间码INDEX_op_mb，这
+个中间码可以带上各种参数表示各种barrier的语意:
+```
+typedef enum {
+    /* Used to indicate the type of accesses on which ordering
+       is to be ensured.  Modeled after SPARC barriers.
+
+       This is of the form TCG_MO_A_B where A is before B in program order.
+    */
+    TCG_MO_LD_LD  = 0x01,
+    TCG_MO_ST_LD  = 0x02,
+    TCG_MO_LD_ST  = 0x04,
+    TCG_MO_ST_ST  = 0x08,
+    TCG_MO_ALL    = 0x0F,  /* OR of the above */
+
+    /* Used to indicate the kind of ordering which is to be ensured by the
+       instruction.  These types are derived from x86/aarch64 instructions.
+       It should be noted that these are different from C11 semantics.  */
+    TCG_BAR_LDAQ  = 0x10,  /* Following ops will not come forward */
+    TCG_BAR_STRL  = 0x20,  /* Previous ops will not be delayed */
+    TCG_BAR_SC    = 0x30,  /* No ops cross barrier; OR of the above */
+} TCGBar;
+```
+比如，上面TCG_MO_LD_LD表示load/load之间要保序，TCG_BAR_LDAQ表示acquire语意的barrier。
+单独使用LDAQ/STRL的语意是明确的，怎么使用LD/ST这组barrier需要找下具体的位置，SC
+的使用场景也需要找下。
+
+如上，对于第一类问题，qemu前端翻译用qemu barrier中间码支持guest barrier的语意，
+注意，相关的支持可能会把barrier的语意增强，保证模拟功能正确即可。ARM64上DSB/DMB
+的qemu支持是这样的：
+```
+/* qemu/tcg/translate-a64.c */
+static bool trans_DSB_DMB(DisasContext *s, arg_DSB_DMB *a)
+{
+    /* We handle DSB and DMB the same way */
+    TCGBar bar;
+
+    switch (a->types) {
+    case 1: /* MBReqTypes_Reads */
+        bar = TCG_BAR_SC | TCG_MO_LD_LD | TCG_MO_LD_ST;
+        break;
+    case 2: /* MBReqTypes_Writes */
+        bar = TCG_BAR_SC | TCG_MO_ST_ST;
+        break;
+    default: /* MBReqTypes_All */
+        bar = TCG_BAR_SC | TCG_MO_ALL;
+        break;
+    }
+    /*
+     * 从这里实现可以看到，user mode只有在多线程的时候才需要实现barrier，user mode
+     * 在单线程下是不用实现barrier的。system mode都需要插入barrier支持guest barrier
+     * 的语意。
+     */
+    tcg_gen_mb(bar);
+    return true;
+}
+```
+
+对于第二类情况，qemu会在load/store翻译里隐式的插入必要的barrier中间码。qemu怎么
+知道guest/host之间的具体指令翻译时是否需要插入barrier来保证guest访存指令的语意呢？
+qemu定义了各个构架下的memory order上的约束，比如ARM64上是：
+```
+/* qemu/target/arm/cpu.h */
+#define TCG_GUEST_DEFAULT_MO      (0)
+/* qemu/tcg/aarch64/tcg-target.h */
+#define TCG_TARGET_DEFAULT_MO     (0)
+```
+X86上是：
+```
+#define TCG_TARGET_DEFAULT_MO     (TCG_MO_ALL & ~TCG_MO_ST_LD)
+/* The x86 has a strong memory model with some store-after-load re-ordering */
+#define TCG_GUEST_DEFAULT_MO      (TCG_MO_ALL & ~TCG_MO_ST_LD)
+```
+TARGET表示TCG的目标，所以是host，GUEST表示guest。所以TCG_GUEST_DEFAULT_MO和
+TCG_GUEST_DEFAULT_MO在一个qemu tcg模拟中是确定的值，比如在ARM64上模拟X86，那么
+TCG_GUEST_DEFAULT_MO取X86的定义(TCG_MO_ALL & ~TCG_MO_ST_LD)，TCG_TARGET_DEFAULT_MO
+取ARM64的定义。TCG_MO_ALL & ~TCG_MO_ST_LD表示X86下的memory order是放松了ST/LD之间
+的顺序，放松了WAR的顺序，ARM64是弱内存序，对不同地址的load/store都没有约束，所以
+这里是0。
+
+qemu在load/store中间码的支持里，用tcg_gen_req_mo函数判断是否需要插入barrier，如果
+需要插入，就直接插入对应barrier的中间码：
+```
+/* 这里以st_i32_int举例，其他load/store的实现类似 */
+tcg_gen_qemu_st_i32_int
+  +-> tcg_gen_req_mo(TCG_MO_LD_ST | TCG_MO_ST_ST);
+    +-> type &= tcg_ctx->guest_mo;
+    +-> type &= ~TCG_TARGET_DEFAULT_MO;
+    +-> if (type) {
+            tcg_gen_mb(type | TCG_BAR_SC);
+        }
+```
+qemu tcg中load/store指令的中间码的支持会调到如上的一组函数中，具体load/store中间码
+的支持可以参考[这里](https://wangzhou.github.io/qemu-tcg访存指令模拟/)。
+
+tcg_gen_req_mb的输入表示要支持guest barrier的语意，tcg_ctx->guest_mo是TCG_GUEST_DEFAULT_MO，
+第一个&操作表示guest上要求内存序才有必要继续要求host去支持，第二个&表示guest上要
+求但是host上不支持的内存序才有必要插入barrier指令支持。在最后插入barrier中间码的
+时候只插入对应约束的barrier就好，所以不清楚这里为什么要加强到TCG_BAR_SC?
+
+注意，这里st_i32_int需要保证和它之前的load/store指令保序，和他store指令保序，这个
+看起来是这里默认是TSO的约束，如果guest是ARM64，第一个&操作会直接过滤掉tcg_gen_req_mo
+输入中的默认约束。
+
+对于X86 guest/ARM64 host的场景，第一个&操作后type为TCG_MO_LD_ST | TCG_MO_ST_ST，
+第二个&操作后type为TCG_MO_LD_ST | TCG_MO_ST_ST，插入mb的type是LD_ST/ST_ST/SC。
+
+如上的两种情况生成的barrier中间码在后端翻译时被翻译成host上的barrier指令，ARM64
+后端对barrier的支持如下：
+```
+/* qemu/tcg/aarch64/tcg-target.c.inc */
+static inline void tcg_out_mb(TCGContext *s, TCGArg a0)
+{
+    static const uint32_t sync[] = {
+        [0 ... TCG_MO_ALL]            = DMB_ISH | DMB_LD | DMB_ST,
+        [TCG_MO_ST_ST]                = DMB_ISH | DMB_ST,
+        [TCG_MO_LD_LD]                = DMB_ISH | DMB_LD,
+        [TCG_MO_LD_ST]                = DMB_ISH | DMB_LD,
+        [TCG_MO_LD_ST | TCG_MO_LD_LD] = DMB_ISH | DMB_LD,
+    };
+    tcg_out32(s, sync[a0 & TCG_MO_ALL]);
+}
+```
+可以看到X86 guest/ARM64 host的场景下，st_i32_int中ARM64 host上插入的barrier指令是
+DMB，作用范围是inner域，DMB_LD | DMB_ST形成的DMB编码的CRm是0b1011，汇编表示是DMB ISH，
+语意是拦住DMB前后的store和load。
