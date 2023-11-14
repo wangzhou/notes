@@ -108,10 +108,10 @@ X86上是：
 ```
 TARGET表示TCG的目标，所以是host，GUEST表示guest。所以TCG_GUEST_DEFAULT_MO和
 TCG_GUEST_DEFAULT_MO在一个qemu tcg模拟中是确定的值，比如在ARM64上模拟X86，那么
-TCG_GUEST_DEFAULT_MO取X86的定义(TCG_MO_ALL & ~TCG_MO_ST_LD)，TCG_TARGET_DEFAULT_MO
-取ARM64的定义。TCG_MO_ALL & ~TCG_MO_ST_LD表示X86下的memory order是放松了ST/LD之间
+TCG_GUEST_DEFAULT_MO取X86的定义(TCG_MO_ALL & \~TCG_MO_ST_LD)，TCG_TARGET_DEFAULT_MO
+取ARM64的定义。TCG_MO_ALL & \~TCG_MO_ST_LD表示X86下的memory order是放松了ST/LD之间
 的顺序，放松了WAR的顺序，ARM64是弱内存序，对不同地址的load/store都没有约束，所以
-这里是0。没有搞清X86这里的写法，如果是放松store-after-load，应该是~TCG_MO_LD_ST?
+这里是0。没有搞清X86这里的写法，如果是放松store-after-load，应该是\~TCG_MO_LD_ST?
 
 qemu在load/store中间码的支持里，用tcg_gen_req_mo函数判断是否需要插入barrier，如果
 需要插入，就直接插入对应barrier的中间码：
