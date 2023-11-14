@@ -1,6 +1,7 @@
 qemu tcg中barrier指令的模拟
 
 -v0.1 2023.11.13 Sherlock init
+-v0.2 2023.11.14 Sherlock 补充了疑问
 
 简介：本文分析qemu tcg中barrier指令模拟的基本逻辑，分析基于qemu代码的版本是v8.1.50。
 
@@ -59,7 +60,7 @@ typedef enum {
 注意，相关的支持可能会把barrier的语意增强，保证模拟功能正确即可。ARM64上DSB/DMB
 的qemu支持是这样的：
 ```
-/* qemu/tcg/translate-a64.c */
+/* qemu/target/arm/tcg/translate-a64.c */
 static bool trans_DSB_DMB(DisasContext *s, arg_DSB_DMB *a)
 {
     /* We handle DSB and DMB the same way */
@@ -85,6 +86,10 @@ static bool trans_DSB_DMB(DisasContext *s, arg_DSB_DMB *a)
     return true;
 }
 ```
+可以看到，上面支持了DMB ST/LD的定义，比如ARM的定义中，DMB LD就是要保证LD/LD以及LD/ST
+之间的顺序。但是，这里没有搞清楚TCG_BAR_SC的语意，DMB LD不是保证LD/LD以及LD/ST的
+顺序就可以了么？DSB的支持也没有搞明白，DSB是保证非访存指令和访存指令之间的顺序，
+难道TCG_BAR_SC还有这个语意？
 
 对于第二类情况，qemu会在load/store翻译里隐式的插入必要的barrier中间码。qemu怎么
 知道guest/host之间的具体指令翻译时是否需要插入barrier来保证guest访存指令的语意呢？
@@ -106,7 +111,7 @@ TCG_GUEST_DEFAULT_MO在一个qemu tcg模拟中是确定的值，比如在ARM64�
 TCG_GUEST_DEFAULT_MO取X86的定义(TCG_MO_ALL & ~TCG_MO_ST_LD)，TCG_TARGET_DEFAULT_MO
 取ARM64的定义。TCG_MO_ALL & ~TCG_MO_ST_LD表示X86下的memory order是放松了ST/LD之间
 的顺序，放松了WAR的顺序，ARM64是弱内存序，对不同地址的load/store都没有约束，所以
-这里是0。
+这里是0。没有搞清X86这里的写法，如果是放松store-after-load，应该是~TCG_MO_LD_ST?
 
 qemu在load/store中间码的支持里，用tcg_gen_req_mo函数判断是否需要插入barrier，如果
 需要插入，就直接插入对应barrier的中间码：
@@ -154,3 +159,6 @@ static inline void tcg_out_mb(TCGContext *s, TCGArg a0)
 可以看到X86 guest/ARM64 host的场景下，st_i32_int中ARM64 host上插入的barrier指令是
 DMB，作用范围是inner域，DMB_LD | DMB_ST形成的DMB编码的CRm是0b1011，汇编表示是DMB ISH，
 语意是拦住DMB前后的store和load。
+
+可以看到X86到ARM64的翻译，其实只要实现ST_ST/LD_LD/ST_LD的语意就好，但是这里因为
+翻译的缘故，最后的翻译加强到store/load之间都保序了，实际上这里降低了程序的性能。
