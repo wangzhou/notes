@@ -256,8 +256,8 @@ snoop的方式就可以snoop到多个core。
 python搞个系列    交互(sys)/正则(re)/画图(matplotpy)  to do
 qemu vcpu hotplug
 qemu 虚拟机热迁移
-riscv memory order				      repost
 集合论/二元关系/全序关系/偏序关系/哈斯图	      to do
-arm memory model笔记				      to do
-herdtools/cat/litmus test			      to do
+arm memory model笔记				      c
+herdtools/cat/litmus test			      c
+qemu tcg barrier模拟				      c
 超标量处理器笔记				      update
