@@ -257,7 +257,7 @@ python搞个系列    交互(sys)/正则(re)/画图(matplotpy)  to do
 qemu vcpu hotplug
 qemu 虚拟机热迁移
 集合论/二元关系/全序关系/偏序关系/哈斯图	      to do
-arm memory model笔记				      c
-herdtools/cat/litmus test			      c
-qemu tcg barrier模拟				      c
+arm memory model笔记				      to sync
+herdtools/cat/litmus test			      to post
+qemu tcg barrier模拟				      to post
 超标量处理器笔记				      update

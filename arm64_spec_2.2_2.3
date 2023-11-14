@@ -31,7 +31,7 @@ and ..."，这条是说一个自然对齐的load指令一定是原子的。
 single-copy atomic访问的定义，就是定义single-copy atomic操作具有的性质: 1. 两个
 single-copy atomic写，如果地址重叠，那么一定是一个整体上在另一个的前或后执行；
 2. 两个single-copy atomic操作，一个读一个写，访问地址重叠，如果他们之间存在RAW关系，
-写不会coherence-before或coherence-after读，第二点没有读懂，这到底要说啥？
+写不会coherence-after读。(第二点原文应该这里有点笔误)
 
 2.2.3
 ------
@@ -94,12 +94,15 @@ local write successor: 在一个observer上，描述相同地址之间的写操�
 
 coherence-before: 
 在一个coherence order关系里，排在前面的写操作coherence-before后面的写操作。
+
 store addr(W3)/load addr(R1)/store addr(W2)的关系里，如果R1 reads-from-memory W3,
 W3 coherence-before W2, 那么R1 coherence-before W2。(什么鬼?)
 
 对于store addr(W1) -> store addr(W2)和store addr(W1) -> load addr(R2)，两种情况中
-后者均没有对前者有coherence-before的关系。(啥也没有说?)
-...  
+后者均没有对前者有coherence-before的关系。这里的load/store操作相同地址，并且先后
+是program order。
+
+(Tag相关的先不看)
 
 observed-by: 在不同observer上，如果W2 coherence-after RW1，就是说在相同地址上W2
 	     的访问排到RW1的后面，我们说RW1 observed-by W2。(W2和RW1需要是explict
@@ -206,6 +209,7 @@ dependency-ordered-before:
 effect是memory read的control dependency关系是没有序上的定义的，配合后面创建先后
 关系的定义，control dependency里，后面的memory read是不存在先后顺序的约束的，这个
 和我们一般的认知也是相符的。
+...
 
 pick-ordered-before:
 
@@ -231,9 +235,11 @@ pick-locally-ordered-before:
 
 hardware-required-ordered-before:
 
-包含了locally-ordered-before？
+包含了locally-ordered-before，又汇集了如上的其他类型的order定义。
 
 hazard-ordered-before:
+
+应该是特殊定义的一种order？
 
 2.3.7
 ------
@@ -241,8 +247,13 @@ hazard-ordered-before:
 External ordering constraint的定义，包含了单核上order的定义，描述中使用了“ordered-before”
 的词语：“An arbitrary pair of effects is ordered”, 这里才出现ordered(被排序)的概念。
 
-external visibility requirement
-external completion requirement
+external visibility requirement:
+这里external visibility requirement的描述包括了hardware-required-ordered-before,
+hardware-required-ordered-before包含了单核上order的定义。
+...
+
+external completion requirement。
+
 external global completion requirement 都展开分析下...
 
 之前的ARM spec里有“Internal visibility requirement”的定义，里面明确有这样的语句：
@@ -272,4 +283,5 @@ ARM里所有barrier指令在这一节定义。
 2.3.13
 -------
 
-limited ordering regions。
+limited ordering regions。就是用户可以自定义一些物理内存区域出来，这些内存区域里的
+指令和load acquire/store release的定义是用户可以重新定义的。
