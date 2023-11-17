@@ -236,8 +236,9 @@ SIMT的基本逻辑			 to do
 linux内存管理:
  - ksm
  - swap
- - memory buddy #
+ - memory buddy  		 to do
  - memory migration #
+ - memory compaction #
  - memory slab
  - memory fault
  - memory reclaim(swap, direct) #
