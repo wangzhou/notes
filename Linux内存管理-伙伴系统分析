@@ -1,6 +1,7 @@
 -v0.1 2023.10.09 Sherlock init
 -v0.2 2023.10.10 Sherlock ...
 -v0.3 2023.11.17 Sherlock 重新整理了逻辑
+-v0.4 2023.11.20 Sherlock 补充重点部分代码分析
 
 简介：文本分析Linux内核内存管理中伙伴系统的基本逻辑。
 
@@ -133,4 +134,46 @@ PA已经给到用户，你再把数据迁移到新的PA上就乱了。可以看�
 实际上，如果你用/proc/buddyinfo查看系统一开始buddy系统的信息，会发现内存基本上都
 挂在order上最大的空闲链表上，特定order的内存区域不断的从大order内存区域上拆下来。
 
-...
+Linux内核内存管理整体脉络可以参考[这里](https://wangzhou.github.io/PLKA第三章读书笔记/)，内存管理的基本数据结构(pglist_data/zone/free_area)，
+也在这里有所介绍。
+
+我们分别找下伙伴系统代码的几个关键位置：1. 系统一开始怎么被给到伙伴系统；2. 内存
+怎么从伙伴系统分配出去；3. 内存释放到伙伴系统后，怎么合并成大内存。
+
+上面的参考文章里已经指出伙伴系统初始化的代码路径，最后是调用__free_memory_core进行
+初始化。没有搞清的逻辑是，free_area里的movable/unmovable等不同迁移属性的内存区域
+是否是一开始初始化好一整块的？
+
+alloc_pages是伙伴系统的核心分配函数，顺着往下走可以到get_page_from_freelist，这个
+是伙伴系统的核心分配函数，再往下走是慢速路径了，我们这这里不看。
+```
+get_page_from_freelist
+  +-> rmqueue
+    +-> rmqueue_buddy
+      +-> __rmqueue
+            /*
+             * 这里从伙伴系统的freelist上取节点下来，然后使用__ClearPageBuddy，
+             * 标记对应的struct page脱离伙伴系统的管理。
+             *
+             * 注意__ClearPageBuddy函数是用宏定义在include/linux/page-flags.h里的。
+             */
+        +-> __rmqueue_smallest
+```
+
+伙伴系统释放内存的核心函数是：free_pages，一路调用到__free_one_page，这个函数实际
+执行内存释放和伙伴合并的逻辑。
+```
+__free_one_page
+  +-> while (order < MAX_ORDER) {
+            /*
+             * 可以看见伙伴系统找buddy的逻辑是很简单的: page_pfn ^ (1 << order)，
+             * 其实就是把pfn的最低有效bit反转下。
+             */
+        +-> find_buddy_page_pfn
+      }
+  +-> done_merging
+    ...
+```
+注意, 这里可以看到，伙伴系统并没有固定的数据结构记录谁是谁的buddy，只是每次都用
+如上的简单算法直接计算得到buddy，计算只是得到可能的buddy，随后还要用page_is_buddy
+再做下最终确认。

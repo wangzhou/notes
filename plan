@@ -15,10 +15,6 @@
 
 20. pthread
 
-1. perf
-2. memory
-3. ARM compile
-
 linux poll  xx
 automake
 preempt   xx
@@ -103,7 +99,6 @@ mock  #
 iommu reserv region/MSI
 qemu内存管理
 qemu tcg and exec               #
-perf框架
 rv指令分析：跳转指令		#
 qemu tcg load/store缺页         #  need to do
 qemu kvm模型    
@@ -237,7 +232,7 @@ linux内存管理:
  - ksm
  - swap
  - memory buddy  		 to do
- - memory migration #
+ - memory migration		 to do
  - memory compaction #
  - memory slab
  - memory fault
@@ -262,3 +257,4 @@ arm memory model笔记				      to sync
 herdtools/cat/litmus test			      c
 qemu tcg barrier模拟				      c
 超标量处理器笔记				      update
+perf框架					      to do
