@@ -3,7 +3,7 @@
 -v0.3 2023.7.19  Sherlock 增加了commit store和多核store buffer的分析
 -v0.4 2023.7.21  Sherlock 增加了invalid queue的逻辑
 -v0.5 2023.11.27 Sherlock 增加了barrier相关的分析
--v0.6 2023.11.28 Sherlock
+-v0.6 2023.11.28 Sherlock 修改invalid queue的逻辑
 
 简介：本文对超标量处理器里load/store指令的实现做一个梳理，其中的信息来自各个地方，
       再加上作者自己的逻辑分析。所以，本文只是自己对load/store指令实现的一个总结。
