@@ -3,9 +3,12 @@ C语言note
 
  -v0.1 2020.8.12 Sherlock init
  -v0.2 2023.9.07 Sherlock 增加用宏写函数定义
+ -v0.3 2023.12.4 Sherlock 增加宏的内容
 
 宏
 -----
+
+  C语言中宏的使用可以参考gcc preprocessor的说明文档：https://gcc.gnu.org/onlinedocs/cpp/
 
   \#\# 用来拼接前后的符号
   \# 用来把一个符号字符串化
@@ -64,6 +67,8 @@ int do_##name(int a, int b)     \
 FUN(add, +)
 FUN(sub, 1)
 ```
+  
+  字符串里无法定义宏。
 
 自动数据类型转换
 -------------------

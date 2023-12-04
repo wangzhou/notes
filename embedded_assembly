@@ -4,6 +4,7 @@ C语言嵌入ARM64汇编
 -v0.1 2018.3.14 Sherlock init Westford
 -v0.2 2018.3.17 Sherlock ...
 -v0.3 2018.3.18 Sherlock add constrain part
+-v0.4 2023.12.1 Sherlock
 
 
 本文介绍在C语言嵌入汇编语言的方法，linux kernel里有很多这样的例子。这里在aarch64
@@ -13,14 +14,16 @@ C语言嵌入ARM64汇编
        https://gcc.gnu.org/onlinedocs/gcc/Extended-Asm.html
 
 
-0. 使用场景
+使用场景
+---------
 
    嵌入汇编一般用在c语言无法使用的地方，比如要操作系统寄存器了，比如要直接调用
    汇编指令完成功能了(内存屏障，刷cache), 还有就是要优化性能。Linux内核里和硬件
    直接接触的体系架构相关的代码有很多是直接用汇编写的。
    
 
-1. 嵌入汇编的语法
+嵌入汇编的语法
+---------------
 
    asm volatile(code : output operand list : input operand list: clobber list);
 
@@ -49,9 +52,9 @@ C语言嵌入ARM64汇编
    这里的val和addr就是C代码里的变量。常量的意义可以参考:
    https://gcc.gnu.org/onlinedocs/gcc/Constraints.html, 简单讲这个常量可以是r,
    Q, m等，也可以再次被=，+， &等修饰。r, m, Q讲的是这个变量可以被编译器编译在
-   寄存器里，内存里，或者是通过指针再间接寻址下，=标识这个变量只读，+表示这个
-   变量可读可写。这里code里的w表示这个变量的位宽，w表示是32bit的，x表示是64bit
-   的，这里再次注意，我们现在讨论的是aarch64下的汇编。
+   寄存器里，内存里，或者是通过指针再间接寻址下，=表示这个变量的老值可以被覆盖，
+   +表示这个变量可读可写。这里code里的w表示这个变量的位宽，w表示是32bit的，x表示
+   是64bit的，这里再次注意，我们现在讨论的是aarch64下的汇编。
 
    可以随便写一个程序，aarch64-linux-gnu-gcc -S xx.c编译下，看看生成的汇编代码
    是怎么样的：
@@ -131,6 +134,7 @@ C语言嵌入ARM64汇编
    来。寄存器直接列名字，两个特殊的clobber参数是"memory"和"cc", cc表示会影响到
    flags register，memory就会影响到input operant参数指向的内存。
 
-2. 举例
+举例
+-----
 
    ...
