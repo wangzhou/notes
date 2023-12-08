@@ -133,7 +133,8 @@ context synchronization effects(CSE effect): ISB或异常进入退出带来的ef
 branch effects: 各种branch指令带来的改变PC的effect。
 
 TLBI effects/completed TLBI effect: tlbi指令会产生TLBI effect，tlbi后面加一个DSB.FULL
-指令会产生completed TLBI effect。基于此概念，还定义了TLBI-before/TLBI-after。
+指令会产生completed TLBI effect。基于此概念，还定义了TLBI-before/TLBI-after，比如，
+TLBI-before的定义是，一个completed TLBI effect和一个TTB read之间的顺序。
 
 fault effects, exception entry/return effects: 这块定义的比较混乱，定义关系之间
 会重叠，比如异常进入退出的effect，在上面又叫CSE effect。反正按照字面意思可以看懂
@@ -231,7 +232,11 @@ pick-ordered-before:
 
 atomic-ordered-before:
 
+说明的是load-exclusive/store-exclusive指令里包含的order语意。
+
 DSB-ordered-before:
+
+DSB的order定义。
 
 barrier-ordered-before:
 
@@ -245,7 +250,17 @@ TTD-read-ordered-before:
 保序，这里E1/E2是什么effect，spec里没有写出来。第二种情况：FEAT_ETS2(enhanced
 translation synchronization)支持时，情况1中的E2可以是implicit TTD memory effect。
 
-具体对应软件上的什么场景？从后面看起来E1/E2可以在不同的observer上?
+在如上的两种情况中，E3是TLBI effect，那么根据TLBI-after的定义，E1是一个TTD read。
+大概场景如下：
+```
+  core0:           core1:
+
+  TTD read(E1)
+                   TLBI(E3)
+		   DSB.FULL(E4) E2
+```
+spec上说E2 program after E3，那么E2可能在DSB之前也可能在DSB之后？具体对应软件上
+的什么场景？
 
 TLBI-ordered-before:
 
