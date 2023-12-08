@@ -265,7 +265,7 @@ translation synchronization)支持时，情况1中的E2可以是implicit TTD mem
 
   TTD read(E1)
                    TLBI(E3)
-		   DSB.FULL(E4) E2
+                   DSB.FULL(E4) E2
 ```
 spec上说E2 program after E3，那么E2可能在DSB之前也可能在DSB之后？具体对应软件上
 的什么场景？
