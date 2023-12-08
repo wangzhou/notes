@@ -4,6 +4,9 @@
 -v0.4 2023.11.07 Sherlock ...
 -v0.5 2023.11.08 Sherlock ...
 -v0.6 2023.11.09 Sherlock 在目录上补全的2.2/2.3的所有章节。
+-v0.7 2023.12.07 Sherlock 补充2.3.2的内容
+-v0.8 2023.12.08 Sherlock 增加TTD/TLBI的内容，还是不明白的多。
+
 
 简介：本文是ARM64 spec 2.2/2.3章节的学习笔记。ARM的spec不同的版本这两节的定义语言
       描述变化有点大，我们这里使用的是2023.4.12的版本，另外，这个版本的行文似乎
@@ -146,16 +149,29 @@ location，这里说的不清楚。
 2.3.2
 ------
 
-这一节定义的是单条指令内在dependency关系，像CAS/SWAP这种读写effect都有的指令，
+这一节定义的是单条指令内在dependency关系，像CSEL/CAS/SWAP这种读写effect都有的指令，
 CAS Xs, Xt, [Xn]指令中，如果Xs和Xn地址上的数据相等，就把Xt的值写到Xn地址上。
 
 注意，2.3.2的标题是“intrinsic dependency relations”，就是这一节定义的还是”关系“，
 并没有定义指令之间要准守的先后循序。
 
+CSEL Xd, Xn, Xm, cond 指令根据cond从PSTATE.NZCV的对应位或取信息，然后把Xn或Xm的
+值传递给Xd。
+
+SWP Xs, Xt, [Xn] 指令把Xn地址上的值load出来(data)，把Xs写入Xn的地址，并把之前load
+出的data写到Xt里。
+
 2.3.3
 ------
 
 translation-intrinsically-before。协议里写比较模糊，加个例子比较好。
+
+对于同一个指令中的两个effect，一个是implicit TTD read memory effect R1，后者是
+显示内存读写effect或者是fault effect E2。如果R1和一个intrinsic branch effect B3
+有数据依赖，B3和E2有控制依赖，那么E1和E2就存在这个关系。
+
+直观上看，最明显的一个例子就是load/store触发page fault的流程。不清楚E2是显示内存
+读写的时候，具体的场景是什么？
 
 2.3.4
 ------
@@ -219,13 +235,26 @@ DSB-ordered-before:
 
 barrier-ordered-before:
 
-主要讲DMB的order。
+主要讲DMB的order，以及带acquire/release属性的院子指令的order。
 
 TTD-read-ordered-before:
 
+这里描述了两种满足情况的定义，描述都是用effect的，为了简化描述，我们这里都有指令
+来说明。第一种情况：E1 -> TLBI(E3) -> DSB.FULL(E4) -> E2(spec上说E2在E3之后?)(E2
+不能是隐式内存effect)，也就是说E1改了页表，后面要加TLBI/DSB才能和E2中的内存访问
+保序，这里E1/E2是什么effect，spec里没有写出来。第二种情况：FEAT_ETS2(enhanced
+translation synchronization)支持时，情况1中的E2可以是implicit TTD memory effect。
+
+具体对应软件上的什么场景？从后面看起来E1/E2可以在不同的observer上?
+
 TLBI-ordered-before:
 
+一共有三种情况，第一种就是如上的TTD-read-ordered-before。后两种也依赖TTD的这个关系，
+搞懂TTD是关键 :(
+
 TLBI-coherence-before:
+
+晕...
 
 locally-ordered-before:
 
@@ -248,9 +277,41 @@ External ordering constraint的定义，包含了单核上order的定义，描�
 的词语：“An arbitrary pair of effects is ordered”, 这里才出现ordered(被排序)的概念。
 
 external visibility requirement:
+
 这里external visibility requirement的描述包括了hardware-required-ordered-before,
 hardware-required-ordered-before包含了单核上order的定义。
-...
+
+所以，这一节定义的order上的约束可以分两个大类，一个是单核上的order约束，一个是多核
+上order约束的传递关系。我们一个一个看下这里的定义:
+
+- E1 hardware-required-ordered-before E2
+
+- E1 hazard-ordered-before E2
+
+- E1 Observed-by E2 or effects belongs to same single-copy-atomicity class as E2
+
+  (single-copy-atomicity class是什么意思?) 结合observed-by的语意，这里似乎是在说
+  多核之间对同一地址数据的自然观察结果，也就是说所谓“E1 Observed-by E2”是一个结果。
+
+- E1是implicit TTD effect, E2 reads-from E1
+
+  意思是说，E1是一个页表读写，E2读对应的页表，E1/E2之间是保序的？
+
+- E2是implicit TTD effect, E2 reads-from E1
+
+  意思是说，E1是显示写了页表，E2隐式做页表读写，E1/E2之间是保序的？
+
+- E2 TLB uncacheable successor of E1
+
+- E2 hardware update successor of E1
+
+- E1 coherence-before E2，E1或E2是hardware update effect
+
+- E2 TLBI-coherence-after E1
+
+- E1 TLBI-ordered-before E2
+
+- E1 ordered-before E3，E3 ordered-before E2
 
 external completion requirement。
 
