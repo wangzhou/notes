@@ -1,5 +1,7 @@
 
 -v0.1 2023.11.23 Sherlock init
+-v0.2 2023.12.13 Sherlock ...
+-v0.3 2023.12.14 Sherlock
 
 简介: ...
 
@@ -48,4 +50,29 @@ todo: type, Data of string? Error_code of int?
 sudo apt install ocaml-dune
 
 
-herdtools7源代码结构，核心逻辑分析。
+herdtools7核心逻辑分析
+-----------------------
+
+我们需要搞清如下的问题：1. cat文件在herd里被表述的数据结构，2. Litmus测试代码在
+herd里怎么表述的，3. 模型和Litmus是怎么相互作用的？
+
+
+调试herd
+---------
+
+网络上有利用ocamldebug调试ocaml字节码的，但是herd7是编译好的二进制，不知道herd具体
+怎么调试。
+
+目前看到的两个尝试的方法是：1. 用gdb调试，单步下大概可以看到程序怎么跑的，但是具体
+变量打印不出来，2. herd7的-debug后的参数都加上，可以打印出解析cat/litmus的过程，
+但是还是看不到herd里是怎么描述cat和litmus里的代码，以及怎么用集合的运算做穷举的。
+
+最好我们就先用MP这个litmus case，跟踪下全部过程。
+
+
+
+
+
+
+
+
