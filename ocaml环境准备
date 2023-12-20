@@ -1,20 +1,18 @@
-
 -v0.1 2023.11.23 Sherlock init
 -v0.2 2023.12.13 Sherlock ...
 -v0.3 2023.12.14 Sherlock
+-v0.4 2023.12.19 Sherlock
+-v0.5 2023.12.20 Sherlock
 
-简介: ...
+简介: 本文是herd学习的笔记，包括ocaml的笔记。调试环境是M1上的ubuntu20.04虚拟机。
 
-环境：M1上的ubuntu20.04虚拟机。
+ocaml环境安装
+--------------
 
-按照ocaml官网的知道安装opam，ocaml以及相关的工具
-https://ocaml.org/docs/intalling-ocaml#Install-Platform-Tools
+按照ocaml官网的知道安装opam，ocaml以及相关的工具: https://ocaml.org/docs/intalling-ocaml#Install-Platform-Tools
 
-下载herdtools7代码，进入herdtools7代码目录，运行make。
-
-可能会出现找不见zarith库，安装这个库: opam install zarith
-
-再次make, OK。
+下载herdtools7代码，进入herdtools7代码目录，运行make。可能会出现找不见zarith库，
+安装这个库: opam install zarith。再次make, OK。
 
 make install把herd7(herd这个工具的可执行程序)安装到home/bin下，在herdtools7源代码
 目录下如下尝试做检测测试:
@@ -40,15 +38,16 @@ Hash=211d5b298572012a0869d4ded6a40b7f
 sherlock@m1:~/repos/herdtools7$ ~/bin/herd7 -model herd/libdir/aarch64.cat catalogue/aarch64/tests/MP.litmus -show prop -o ~/
 sherlock@m1:~/repos/herdtools7$ dot -Tpng ~/MP.dot -o ~/MP.png
 ```
-生成的图在: svg/MP.png
 (这个图上很多关系没有画出来啊? 比如LDR W2,[X3]也可以时rf STR W0,[X1])
+
+ocaml基本语法
+--------------
 
 todo: pattern matching语法说明, pattern matching generalises switch statement.
 
 todo: type, Data of string? Error_code of int?
 
-sudo apt install ocaml-dune
-
+todo; functor的概念。
 
 herdtools7核心逻辑分析
 -----------------------
@@ -56,6 +55,7 @@ herdtools7核心逻辑分析
 我们需要搞清如下的问题：1. cat文件在herd里被表述的数据结构，2. Litmus测试代码在
 herd里怎么表述的，3. 模型和Litmus是怎么相互作用的？
 
+对herdtools7的代码加入注释，具体位置在[这里](https://github.com/wangzhou/herdtools/blob/3fec52cce430362f03aedbbc2f925ded4a2d9746/herd/herd.ml#L1)
 
 调试herd
 ---------
@@ -69,10 +69,4 @@ herd里怎么表述的，3. 模型和Litmus是怎么相互作用的？
 
 最好我们就先用MP这个litmus case，跟踪下全部过程。
 
-
-
-
-
-
-
-
+目前没有好的herd调试方法，只能在必要的位置上加上printf来跟踪流程。
