@@ -1,2 +1,48 @@
 现代CPU性能分析与优化-读书笔记
 
+-v0.1 2023.12.27 Sherlock init
+
+简介：本文是"performance analysis and tuning on modern CPUs"的读书笔记，原文的位置
+      在https://book.easyperf.net/perf_book。这本书已经有了中文翻译的版本，总的
+      看来翻译的指令还好，这本书基于CPU微架构讲了用perf调优的基本方法，perf也主要
+      是使用了Intel CPU PMU的相关event。总体上看，这本书虽然写的比较科普，但是对
+      调优时可能遇到的微架构概念都有清晰的介绍，值得一读。
+
+
+这本书没有长逻辑链，所以我们就只是分章节单点记录下要点。
+
+
+第2章
+------
+
+性能测试时要注意CPU的动态调频，这个特性会给测量带来不确定性。(Linux系统下，动态
+调频的控制一般在/sys/devices/system/cpu/cpux/cpufreq/下，默认是schedutil，performance
+为性能优先，会用最高频率跑)
+
+记时有两种方法，一个是记录cpu cycle，一个是通过OS的clock_gettime记录实际的时间。
+(Intel上在用户态可以通过指令查看cpu cycle，ARM还没有这样的功能)
+
+第3章
+------
+
+Intel 安腾构架(Itanium)使用超长指令字(VLIW)的设计。
+
+硬件多线程机制主要的收益点是CPU存在后端长时延阻塞时(latency bound)，更加充分的利
+用内核资源。(注意，latency bound和memory bound的区别?)
+
+第4章
+------
+
+(todo: 找个x86笔记本测试)
+
+第5章
+------
+
+todo: 编译器优化告警。
+
+第6章
+------
+
+第六章的基本概念重点梳理。
+
+
