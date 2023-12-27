@@ -1,7 +1,9 @@
 -v0.1 2023.12.21 Sherlock init
+-v0.2 2023.12.26 Sherlock 
+-v0.3 2023.12.27 Sherlock update perf核心逻辑
 
 简介：本文分析Linux上perf子系统的基本逻辑，分析基于的内核版本是v6.7-rc6，分析基于
-      ARM64体系架构。
+      ARM64架构和RISCV构架。
 
 
 基本逻辑
@@ -62,6 +64,19 @@ perf用户态工具的代码在Linux内核tools/perf目录下，其实是可以�
 man perf_event_open可以查看该系统调用的具体参数，我们可以跟踪下一个perf_event具体
 是怎么被映射到底层的PMU counter上的。
 
+perf_event_open的入参是这样的：
+```
+int perf_event_open(struct perf_event_attr *attr, pid_t pid, int cpu, int group_fd,
+                    unsigned long flags);
+```
+基本逻辑是pid和cpu控制要跟踪的进程和CPU，group_fd可以支持同时跟踪一组event，具体
+要跟踪的事件在attr里定义。
+
+attr是一个大杂汇，内核通过attr.type/attr.config定义具体的event，公共的event有对应
+的type/config的定义，硬件厂商子定义的event使用PERF_TYPE_RAW作为type，attr.size定义
+这个结构体的大小，各个版本的perf_event_open的attr的size可能是不一样的，这里应该
+是只传递指针和size，靠这种方法做接口的演进。
+
 perf内核构架
 -------------
 
@@ -71,8 +86,14 @@ perf系统调用入口：
 ```
  /* linux/kernel/events/core.c */
  perf_event_open
-   +-> ...
+       /* 注册给task_struct */
+   +-> perf_install_in_context
 ```
+perf_event_open根据用户指令的event，在PMU硬件上分配具体的counter(这里只考虑硬件
+event的情况)，并把对应的event向task_struct注册，task_struct里用perf_event_context
+记录和当前线程相关的event，这里把event和task_struct绑定是为了后续在线程调度的时候
+停止和重启具体event的计数。perf_event_open生成匿名文件，并返回对应fd，随后用户通过
+fd控制对应的event。
 
 perf ioctl入口：
 ```
@@ -81,12 +102,26 @@ perf ioctl入口：
    +-> ...
 ```
 
-Linux调度进程，把一个进程投入运行，相关的counter也要投入运行：
+Linux调度进程，把一个进程投入运行，相关的counter也要投入运行，调用路径估计是：
 ```
  /* linux/kernel/events/core.c */
  __perf_event_task_sched_in
-   +-> ...
+   +-> perf_event_context_sched_in
+     +-> perf_event_sched_in
+       +-> ctx_sched_in
+         +-> ctx_groups_sched_in
+           +-> pmu_groups_sched_in
+             +-> merge_sched_in
+               +-> group_sched_in
+                 +-> event_sched_in
 ```
+可以看到event_sched_in将调用具体PMU的add回调函数，把event加回来。这里的整体逻辑是
+线程被调度出CPU之前使用__perf_event_task_sched_out暂停event的行为并保存当前统计值，
+线程被重新调度进CPU的时候使用如上的__perf_event_task_sched_in恢复event的上下文并
+重新开始event的运行。
+
+底层的具体操作在PMU驱动的add/del回调函数中完成，其中既控制PMU counter的启停，又
+恢复/保存counter的值到event上下文。
 
 - PMU驱动
 
@@ -101,7 +136,8 @@ perf_event的控制逻辑，并把自己的pmu注册到perf子系统上。
    +-> armpmu_register
 ```
 
-todo: 用一个例子从上到下打通一下perf_event <-> counter?
+PMU驱动的另一个重要功能是注册了PMU中断处理函数，PMU中断处理函数处理具体counter
+的溢出中断，调用perf子系统API记录中断发生时的程序上下文数据。
 
 TopDown模型
 ------------
