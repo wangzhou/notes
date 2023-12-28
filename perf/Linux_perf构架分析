@@ -5,9 +5,7 @@
 简介：本文分析Linux上perf子系统的基本逻辑，分析基于的内核版本是v6.7-rc6，分析基于
       ARM64架构和RISCV构架。
 
-
-基本逻辑
----------
+## 基本逻辑
 
 perf是Linux上支持程序调优的子系统，这个子系统很大的依赖硬件自带的PMU设备完成程序
 性能相关参数的采集，程序员可以使用收集到的数据完成程序调优。
@@ -32,8 +30,7 @@ Linux的perf子系统对于PMU进行了抽象封装，提供一组易用的接�
 核之间迁移的时候，进程数据的统计也要跟着一起迁移，4.为了方便用户使用，需要提供
 相应的用户态工具，发送perf命令，解析perf数据。
 
-perf用户态工具
----------------
+## perf用户态工具
 
 perf用户态工具的代码在Linux内核tools/perf目录下，其实是可以独立内核编译的用户态
 工具。用户态工具的基本逻辑比较简单，一般在主进程里完成命令解析和相关配置，创建
@@ -77,10 +74,9 @@ attr是一个大杂汇，内核通过attr.type/attr.config定义具体的event�
 这个结构体的大小，各个版本的perf_event_open的attr的size可能是不一样的，这里应该
 是只传递指针和size，靠这种方法做接口的演进。
 
-perf内核构架
--------------
+## perf内核构架
 
-- 核心构架
+### 核心构架
 
 perf系统调用入口：
 ```
@@ -123,7 +119,7 @@ Linux调度进程，把一个进程投入运行，相关的counter也要投入�
 底层的具体操作在PMU驱动的add/del回调函数中完成，其中既控制PMU counter的启停，又
 恢复/保存counter的值到event上下文。
 
-- PMU驱动
+### PMU驱动
 
 我们以ARM PMUv3驱动为例分析，看看具体硬件怎么和perf核心构架连在一起。其中核心逻辑
 就是Linux为PMU硬件抽象了一个struct pmu数据结构，各个PMU驱动要实现pmu数据结构里
@@ -139,8 +135,7 @@ perf_event的控制逻辑，并把自己的pmu注册到perf子系统上。
 PMU驱动的另一个重要功能是注册了PMU中断处理函数，PMU中断处理函数处理具体counter
 的溢出中断，调用perf子系统API记录中断发生时的程序上下文数据。
 
-TopDown模型
-------------
+## TopDown模型
 
 使用TopDown模型分析程序性能是Intel提出的一种程序性能分析方法，如上使用一组counter
 分析程序性能问题并不能系统的看问题，TopDown的方式可以系统的分析程序的性能问题。
@@ -148,16 +143,11 @@ TopDown模型
 简单讲，通过perf记录输出的一组程序运行参数，可以得到CPU在运行这段程序时，CPU上
 cycle的分布情况，这个分布情况可以从上到下的逐步细分，最后定位到具体是哪里的问题。
 
-最顶层可以分成4类：frontend bound, backend bound, bad speculation和retiring。
-
-(todo: 具体展开下这里的逻辑)
-
 Linux系统上已经支持使用perf直接得到TopDown结果，ARM64上目前还没有厂家可以做到。
+相关的信息可以参考[这里](https://wangzhou.github.io/现代CPU性能分析与优化-笔记/)。
 
-ARM PMU扩展特性
-----------------
+## ARM PMU扩展特性
 
 - SPE
 
 - uncore PMU
-
