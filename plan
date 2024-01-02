@@ -231,7 +231,7 @@ SIMT的基本逻辑			 to do
 linux内存管理:
  - ksm
  - swap
- - memory buddy  		 to do
+ - memory buddy  		 c
  - memory migration		 to do
  - memory compaction #
  - memory slab
@@ -255,7 +255,7 @@ qemu 虚拟机热迁移
 集合论/二元关系/全序关系/偏序关系/哈斯图	      to do
 herdtools/cat/litmus test			      c
 qemu tcg barrier模拟				      c
-perf框架					      to post
-cache实现很多问题				      to do
-easyperf笔记					      to do
-vector					   	      to do
+perf框架					      c
+cache实现很多问题				      c
+easyperf笔记					      c
+vector					   	      doing
