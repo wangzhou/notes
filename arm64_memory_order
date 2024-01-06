@@ -4,6 +4,7 @@ ARM64 内存屏障
 -v0.1 2018/5/21 Sherlock init
 -v0.2 2018/5/27 Sherlock add write sample
 -v0.3 2023/9/18 Sherlock add 重新整理全部逻辑
+-v0.4 2024/1/06 Sherlock add DSB/ISB的理解
 
 简介： 本文试图梳理aarch64构架下的内存屏障的逻辑，细节的东西还要去看ARMv8的手册。
        其实，"ARM Cortex-A Series Programmer’s Guide for ARMv8-A"这本书的第13章，
@@ -55,9 +56,15 @@ ARM64内存屏障指令
 的前后关系有约束，DSB在DMB的基础上可以约束其它指令的前后关系，ISB是最强的barrier
 指令，它不单可以保证前后指令的顺序，而且会清空流水线。
 
+CPU的硬件实现总是尽可能增大并发度，这就意味着CPU支持barrier指令的方式是控制约束
+CPU内特定部件而达到的，理解barrier时，不妨把CPU内各个部件拆开理解，这样可能更容易
+理解。
+
 这些指令可以带参数表示不同的作用域以及作用对象。ISH/OSH/SY表示的是inner shareble，
 outer shareble以及全系统作用域，LD/ST表示只对barrier指令之前的load或者store指令
-起作用。
+起作用。比如，DSB指令，ARM spec上明确提到它是拦不住指令fetch和decode的，而且在
+特定情况下，也拦不住后续访存指令的page table walk，而ISB可以把这之前的流水线上
+已经fetch和decode的指令全部flush掉。
 
 画一个图说明下所谓的作用域是怎么回事：
 ```

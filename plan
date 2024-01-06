@@ -234,11 +234,11 @@ linux内存管理:
  - memory buddy  		 c
  - memory migration		 to do
  - memory compaction #
+ - memory reclaim(swap, direct) #
+ - memory pagecache #
  - memory slab
  - memory fault
- - memory reclaim(swap, direct) #
  - memory vma
- - memory pagecache #
 
 linux folois/arm contiguous bit  似乎folios只是软件管理比较方便了，但是folios怎么和
 伙伴系统融合，arm contiguous bit可以在非block的情况下，把一连续的小页合并成大一点
@@ -258,4 +258,6 @@ qemu tcg barrier模拟				      c
 perf框架					      c
 cache实现很多问题				      c
 easyperf笔记					      c
-vector					   	      to post
+vector					   	      c
+arm64 内存屏障					      to post
+arm64 FEAT_ETS2					      to do
