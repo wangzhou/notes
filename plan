@@ -234,7 +234,7 @@ linux内存管理:
  - memory buddy  		 c
  - memory migration		 to do
  - memory compaction #
- - memory reclaim(swap, direct) #
+ - memory reclaim(swap, direct)  doing
  - memory pagecache #
  - memory slab
  - memory fault
@@ -260,4 +260,4 @@ cache实现很多问题				      c
 easyperf笔记					      c
 vector					   	      c
 arm64 内存屏障					      to post
-arm64 FEAT_ETS2					      to do
+arm64 FEAT_ETS2					      to post
