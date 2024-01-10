@@ -261,3 +261,5 @@ easyperf笔记					      c
 vector					   	      c
 arm64 内存屏障					      to post
 arm64 FEAT_ETS2					      to post
+kernel damon					      to do
+kernel 内存回收					      doing

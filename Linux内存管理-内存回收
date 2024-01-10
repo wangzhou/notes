@@ -1,7 +1,11 @@
 -v0.1 2023.11.21 Sherlock init
--v0.2 2024.01.08 Sherlock 
+-v0.2 2024.01.08 Sherlock ...
+-v0.3 2024.01.09 Sherlock 持续增加代码分析
+-v0.4 2024.01.10 Sherlock
 
-简介：本文总结Linux内核里内存回收的基本逻辑。
+简介：本文总结Linux内核里内存回收的基本逻辑，PLKA在第18章介绍了这部分内容，文本的
+      分析参考了PLKA的相关介绍，基于内核v6.7-rc6做代码分析。总的看新内核在内存回收
+      核心逻辑上变化不大，但是新加了比如folio/damon等特性。
 
 
 基本逻辑
@@ -25,14 +29,67 @@ Linux系统上的虚拟内存管理和物理内存管理的逻辑是相对正交
 直接分配不到物理内存，就会先回收物理内存，再试图分配。有相关的内核线程(kswapd等)，
 定期的做物理内存的回收。
 
-LRU链表维护使用中的物理页面。
+内核使用LRU链表维护使用中的物理页面的冷热信息，每个NUMA节点有独立的一组LRU链表，
+并且依据文件页/匿名页/active/inactive的不同组合形成4个LRU链表，再加上一个不可回收
+的LRU链表(unevitable)，一个NUMA节点有5个LRU链表。
 
-决定回收哪个物理页面的逻辑。
+LRU的转换使用了类似硬件分支预测里的两位饱和计数器的思路做active和inactive之间的
+状态转换。内核从inactive LRU链表上回收物理内存。
+
+struct folio中的PG_referenced, PG_active是对应的“两位”，状态转移逻辑：
+```
+ inactive           inactive         active             active  
+ unreferenced       referenced       unreferenced       referenced
+```
+2021年Linux kernel Plumber上这篇文章："Overview of Memory Reclaim in the Current Upstream Kernel"，
+对LRU list上的页面状态转换逻辑有很好的梳理。我们在这里简单整理下：
+
+PG_active表示当前folio在active还是inactive LRU上，一般一个folio最开始分配出来
+的时候是在inactive LRU上，PG_referenced是unreferenced(后面就用active/inactive/
+referenced/unreferenced表示对应的状态)，后续如果这个folio被访问到，CPU硬件会写
+对应页表项上的access bit，内核在reclaim的流程里检测到页表项的access bit被置1，会
+更新folio中的状态更新到referenced，此时folio依然在inactive LRU上，注意这个检测
+referenced的流程以后会把页表项的access bit清理掉，这个是为下次访问时硬件置1做好
+准备，referenced检测的具体代码在folio_referenced函数里。所有状态的切换逻辑依此类推，
+可能存在特殊的转换情况，总体上看，内核会double check下物理页的访问情况，再决定在
+active/inactive LRU链表上做移动。
+
+我们从上层看下触发状态切换的入口点在哪里。首先，内核在分配物理页面的时候(alloc_pages)，
+如果伙伴系统的内存不足，就会触发内存回收；内核线程kswapd会检测系统中的物理内存是否
+低于给定的水线，并在低于水线的时候启动内存回收；damon子系统新家的kdamond内核线程，
+会根据sysfs中的配置进行相关的检测或内存回收。
 
 通用物理页面的回收逻辑。
 
-根据页面具体回收方式，不同的处理。1. 不需要保存直接回收(缓存/没有用的内存/OOM)；2.需要保存
-(保存回backend文件/匿名页swap到swap分区/shrink)
+ - 基于LRU链表的页面回收逻辑
+
+根据页面具体回收方式，不同的处理。1. 不需要保存直接回收(缓存/没有用的内存/OOM)；
+2. 需要保存(保存回backend文件/匿名页swap到swap分区/shrink)。
 
 代码分析
 ---------
+
+```
+alloc_pages
+```
+
+```
+kswapd
+```
+
+```
+kdamoned
+```
+
+folio_set_active
+folio_deactiveate
+
+mm/swap.c的folio_mark_accessed, mark_page_accessed这个是老函数。
+folio_set_referenced
+
+kswapd的入口在mm/vmscan.c: kswapd_init()
+mm/page_alloc.c alloc_page里的慢速路径里shrink_zone/shrink_list等释放内存
+
+folio_check_referenced -> folio_referenced
+
+folio_test_xxx，PG_xxx比如PG_active/PG_young之类均定义在include/linux/page-flags.h
