@@ -3,7 +3,7 @@ Linux内存相关测试工具
 
 -v0.1 2020.11.17 Sherlock init
 
-1. smem
+smem
 -------
 ```
   PID User     Command                         Swap      USS      PSS      RSS 
@@ -18,7 +18,7 @@ Linux内存相关测试工具
  RSS: resident set size. 进程实际使用的物理内存，包括共享库内存。
  VSS: virtual set size. 进程使用的所有虚拟内存，包括共享库虚拟内存。
 
-2. /proc/buddyinfo
+/proc/buddyinfo
 ------------------
 ```
 Node 1, zone      DMA     10     12     11     11     13     11     10     10      6      6    226 
@@ -29,7 +29,7 @@ Node 3, zone   Normal  54266  41801  23819  10038   3476    641     65     29   
 表示系统里伙伴系统中，2^1, 2^2...连续页有多少个，这个可以看到伙伴系统内存碎片的
 情况。
 
-3. /sys/kernel/mm/*
+/sys/kernel/mm/*
 -------------------
 ```
 ├── hugepages
@@ -39,7 +39,7 @@ Node 3, zone   Normal  54266  41801  23819  10038   3476    641     65     29   
 ```
 可以看到如上各个特性的一些统计值。
 
-4. pidof + pmap + /proc/pid/maps /proc/pid/smaps /proc/pid/stack
+pidof + pmap + /proc/pid/maps /proc/pid/smaps /proc/pid/stack
 ----------------------------------------------------------------
 ./a.out &
 pmap -x `pidof a.out`
@@ -82,7 +82,7 @@ total kB            1592     672      72
 
 /proc/pid/smaps反应一个进程里的各个vma里的信息。提供的信息比/proc/pid/maps多
 
-5. numastat -p <pid>
+numastat -p <pid>
 --------------------
 ```
 Per-node process memory usage (in MBs) for PID 417 (a.out)
@@ -98,22 +98,22 @@ Total                        0.18            0.41            0.59
 可以看到一个进程在各个numa节点上的内存使用情况，可以用这个命令观察一段时间进程
 的内存在各个numa之间使用的情况。
 
-6. mallopt
+mallopt
 ----------
 C库中设定内存分配配置的接口, 通过mallopt这个函数可以改变malloc/free的行为。
 
-7. mbind/madvise
+mbind/madvise
 ----------------
 mbind是对应系统调用的封装，可以把虚拟内存对应的物理内存和对应的numa节点绑定。
 madvise也是对应系统调用的封装，可以从用户态传递一些内存相关的属性给内核。
 
-8. getrusage
+getrusage
 ------------
 getrusage是一个库函数，可以得到一个进程的相关资源的使用情况。其中包括内存使用
 的统计。比如其中，ru_minflt就是系统里初次分配内存这种缺页的次数，而ru_majflt
 是从swap分区里换入内存这样缺页的数目。
 
-9. proc下的关于内存的信息
+proc下的关于内存的信息
 -------------------------
 /proc/slabinfo
 /proc/iomem
