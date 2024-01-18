@@ -2,7 +2,9 @@
 -v0.2 2024.01.08 Sherlock ...
 -v0.3 2024.01.09 Sherlock 持续增加代码分析
 -v0.4 2024.01.10 Sherlock 把damon/lru-gen也加入分析
--v0.5 2024.01.11 Sherlock
+-v0.5 2024.01.11 Sherlock ...
+-v0.6 2024.01.16 Sherlock 分析代码
+-v0.7 2024.01.17 Sherlock
 
 简介：本文总结Linux内核里内存回收的基本逻辑，PLKA在第18章介绍了这部分内容，文本的
       分析参考了PLKA的相关介绍，基于内核v6.7-rc6做代码分析。总的看新内核在内存回收
@@ -25,10 +27,8 @@ Linux系统上的虚拟内存管理和物理内存管理的逻辑是相对正交
 从用户态的角度看，异常发生时访存指令停在了那里，随后继续执行完成访问虚拟地址的行为，
 用户态并不感知内核中物理页面管理的行为。
 
-整理内存回收的可能触发点。首先，断开VA->PA映射，比如munmap中，并不会直接释放物理
-页面，这个过程只会改动物理页面相关的反向映射以及LRU数据。在分配物理页面时，如果
-直接分配不到物理内存，就会先回收物理内存，再试图分配。有相关的内核线程(kswapd等)，
-定期的做物理内存的回收。
+所以，断开VA->PA映射，比如munmap中，并不会直接释放物理页面，这个过程只会改动物理
+页面相关的反向映射以及LRU数据。
 
 内核使用LRU链表维护使用中的物理页面的冷热信息，每个NUMA节点有独立的一组LRU链表，
 并且依据文件页/匿名页/active/inactive的不同组合形成4个LRU链表，再加上一个不可回收
@@ -64,7 +64,11 @@ active/inactive LRU链表上做移动。
 具有一定的实时性，页面回收可以在可用内存少的时候再进行。
 
 状态调整需要不断的清理PTE上的access bit，然后观察物理页的访问情况，相关逻辑的开销
-还不能大。显然，上面的几个点都没法做到: todo
+还不能大。如上分析的，对于kswapd和alloc_pages慢速路径中的页面回收，是在内存使用
+低于一定水线进行的，实际上是把冷热内存检测调整和物理内存回收这两个相对正交的逻辑
+放到了一起，冷热内存的检测看起来会不准。
+
+damon子系统可以根据用户配置主动进行冷热页检测，这个似乎作用要好点。
 
 通用物理页面的回收逻辑。
 
@@ -76,27 +80,80 @@ active/inactive LRU链表上做移动。
 代码分析
 ---------
 
+分配物理页面时，在慢速路径里触发内存回收的逻辑如下：
 ```
 alloc_pages
+  ...
+  +-> __alloc_pages_slowpath
+    +-> __alloc_pages_direct_reclaim
+      +-> __perform_reclaim
+        +-> try_to_free_pages
+          +-> do_try_to_free_pages
+            +-> shrink_zones
+              +-> shrink_zone
+                +-> shrink_zone_memcgs // 牵扯memory cgroup的逻辑
+                  +-> shrink_lruvec 
+                    +-> shrink_list  // shrink_folio_list <--- 从这里入手看看?
 ```
+shrink_list里先做shrink_active_list再做shrink_inactive_list，前者把active LRU中
+的冷页移动到inactive LRU，后者对inactive LRU里的冷页做回收操作。
 
+
+kswapd的内核线程做内存回收的逻辑如下：
 ```
+/* 入口在mm/vmscan.c的kswapd_init函数，一个NUMA node会对应一个kswapd线程 */
 kswapd
+      /* todo: 分析这里水线相关的逻辑 */
+  +-> balance_pgdat
+    +-> kswapd_shrink_node
+      +-> shrink_node
+```
+
+damon内核线程(kdamoned)做内核回收的逻辑需要在单独文档里展开。
+```
+damon/paddr.c -> reclaim_pages -> reclaim_folio_list -> shrink_folio_list
+```
+
+各种page fault中也会把对应的页加入LRU，这里只关注和LRU相关的逻辑。
+```
+handle_pte_fault
+  +-> do_pte_missing
+        /* 看起来只会加到本cpu的LRU缓存里，什么时候加入全局LRU链表? */
+    +-> folio_add_lru_vma
+  +-> do_swap_page
+  +-> do_numa_page
+  +-> do_wp_page 
+```
+
+shrink_active_list以及shrink_inactive_list基本逻辑分析如下。
+```
+shrink_active_list
 ```
 
 ```
-kdamoned
+shrink_inactive_list
+  +-> shrink_folio_list
 ```
 
+madvise系统调用也可以出发内存回收。
+```
+madvise.c(MADV_COLD) -> reclaim_pages
+```
+
+分配连续物理内存的alloc_contig_pages里也会尝试做内存回收。
+```
+page_alloc.c -> reclaim_clean_pages_from_list -> shrink_folio_list
+```
+
+如下是一些深入细节的辅助函数：
+```
 folio_set_active
 folio_deactiveate
 
 mm/swap.c的folio_mark_accessed, mark_page_accessed这个是老函数。
 folio_set_referenced
 
-kswapd的入口在mm/vmscan.c: kswapd_init()
-mm/page_alloc.c alloc_page里的慢速路径里shrink_zone/shrink_list等释放内存
-
 folio_check_referenced -> folio_referenced
 
 folio_test_xxx，PG_xxx比如PG_active/PG_young之类均定义在include/linux/page-flags.h
+```

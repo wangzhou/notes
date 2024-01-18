@@ -1,6 +1,7 @@
 -v0.1 2023.12.26 Sherlock init
 -v0.2 2024.01.11 Sherlock 增加ARM spec里cache的定义
 -v0.3 2024.01.15 Sherlock 补齐逻辑
+-v0.4 2024.01.18 Sherlock 修改PIPT cache的逻辑
 
 简介：本文回顾了虚拟地址索引cache中存在同名和重名问题。查看了ARM64下cache的实现
       限制，并基于这些限制分析了可能的同名和重名等问题。
@@ -46,13 +47,14 @@ map的物理地址是不同的，使用虚拟地址做cache索引时，相同的
 可能映射给不同的pa，这个时候index是一样的，只要映射pa的tag和之前的一样，cpu访问
 va就可能使用之前的cache。
 
-如果我们使用PIPT cache，上面的两个问题没有了。但是，如果cache使用完不做清理也一
-样会出问题。因为如果不清理cache，包括flush cache和无效化cache，第一，cache中的
-临时数据保存不到内存里，当物理内存上的数据要被swap到其它位置时，cache中的最新数据
-没有刷回内存，就会出错；第二，下次新使用这个cache时，如果还认为cache是有效的，
-下次访问就被旧数据干扰了。
+如果我们使用PIPT cache，上面的两个问题没有了。我们考虑还有没有其它问题存在。在
+一个硬件保证cache一致性的系统，PIPT cache基本上对软件是透明的。有的情况下可能硬
+件保证不了CPU和外设之间的cache一致性，这个时候就需要软件使用cache维护指令维护
+cache一致性。
 
-所以，即使是PIPT cache，当cache不再使用时，也要做flush和无效化操作。
+页表存放在内存里，所以它也可能缓存在cache里。PTW作为一个master和其它master，包括，
+其它PTW master、访存master和取指令master在cache有一定的逻辑关系，这个和具体体系
+结构有关系，我们放到下面ARM64的部分具体分析。
 
 ARM64中cache的逻辑
 -------------------
@@ -80,5 +82,7 @@ icache上。如果只是fetch指令执行，也不会出问题，唯一可能出
 共享代码的其它核上的icache。看起来ARM上的IC IALLUIS可以完成这个功能(invalidate all
 (to) PoU (in) inner shareble)。
 
-ARM上其它的cache都只能是PIPT cache，如上第一节中的分析，当cache对应的物理内存有
-变动时，需要做相关的flush和无效化操作。
+ARM上其它的cache都只能是PIPT cache，如上第一节中的分析，一般情况下，这些cache对
+软件都是透明的了。现代的SoC系统上，外设和CPU基本上也可以做到硬件维护cache一致性。
+
+TODO: PTW和cache之间的关系。
