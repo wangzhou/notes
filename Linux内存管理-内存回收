@@ -4,7 +4,8 @@
 -v0.4 2024.01.10 Sherlock 把damon/lru-gen也加入分析
 -v0.5 2024.01.11 Sherlock ...
 -v0.6 2024.01.16 Sherlock 分析代码
--v0.7 2024.01.17 Sherlock
+-v0.7 2024.01.17 Sherlock ...
+-v0.8 2024.01.18 Sherlock 粗略补齐代码分析
 
 简介：本文总结Linux内核里内存回收的基本逻辑，PLKA在第18章介绍了这部分内容，文本的
       分析参考了PLKA的相关介绍，基于内核v6.7-rc6做代码分析。总的看新内核在内存回收
@@ -98,7 +99,6 @@ alloc_pages
 shrink_list里先做shrink_active_list再做shrink_inactive_list，前者把active LRU中
 的冷页移动到inactive LRU，后者对inactive LRU里的冷页做回收操作。
 
-
 kswapd的内核线程做内存回收的逻辑如下：
 ```
 /* 入口在mm/vmscan.c的kswapd_init函数，一个NUMA node会对应一个kswapd线程 */
@@ -117,43 +117,83 @@ damon/paddr.c -> reclaim_pages -> reclaim_folio_list -> shrink_folio_list
 各种page fault中也会把对应的页加入LRU，这里只关注和LRU相关的逻辑。
 ```
 handle_pte_fault
+
   +-> do_pte_missing
-        /* 看起来只会加到本cpu的LRU缓存里，什么时候加入全局LRU链表? */
+        /* 看起来只会加到本cpu的LRU缓存里，什么时候加入全局LRU链表? 加入什么LRU */
     +-> folio_add_lru_vma
+      +-> folio_add_lru
+
+      /* 没有看明白swap的具体逻辑 */
   +-> do_swap_page
+      
+      /* numa balance里用的page fault，没有看到和LRU有关系的地方 */
   +-> do_numa_page
+
+      /* wp是write protect的意思，这个处理COW的情况，逻辑更复杂 */
   +-> do_wp_page 
+    +-> wp_page_copy
+      +-> folio_add_lru_vma
+        +-> folio_add_lru
 ```
 
-shrink_active_list以及shrink_inactive_list基本逻辑分析如下。
+shrink_active_list以及shrink_inactive_list基本逻辑分析如下:
 ```
+/*
+ * 入参有：这一次扫描的页数(nr_to_scan), lruvec, 针对一个page做rmap_walk的控制
+ * 参数(struct scan_control)。
+ */
 shrink_active_list
+      /* 每次都是从active LRU的尾部开始，最大摘出nr_to_scan个folio */
+  +-> isolate_lru_folios
+    +-> trace_mm_vmscan_lru_isolate
+      /*
+       * 对于隔离出来的folio，一般都做如下处理。folio_referenced得到folio被引
+       * 用的次数，对于引用非0，并且是代码段的folio，把它重新加回active LRU，
+       * 其它的情况加到inactive LRU里。这里引用的含义有点模糊，从代码上看，含义
+       * 是folio->mapcount，但是在contend时，返回rmap_walk时计算得到的referenced。
+       * 不理解这里的意思？
+       */
+  +-> folio_referenced
+        /* 反向映射的API，找到一个folio对应的vma，并调用sc传入的回调函数 */
+    +-> rmap_walk
+          /* 针对每个反向映射中找见的vma，都用folio_referenced_one处理下 */
+      +-> folio_referenced_one
+        +-> page_vma_mapped_walk
+          +-> ptep_clear_flush_young_notify
+                /* 体系结构相关的代码在这里清掉页表项上的access bit */
+            +-> ptep_clear_flush_young
 ```
-
+inactive LRU处理的逻辑和如上active LRU的类似，不过增加了很多页表回收的逻辑。
 ```
 shrink_inactive_list
+  +-> isolate_lru_folios
+      /*
+       * 这个函数是inactive LRU上页做回收的核心函数, alloc_pages/alloc_contig_pages/
+       * damon中都有调用。
+       *
+       * TODO: 内容太多了...
+       * 
+       * 注意: folio_test_xxx/folio_set_xxx/folio_get_xxx等，以及PG_xxx比如
+       *       PG_active/PG_young之类均定义在include/linux/page-flags.h。
+       */
   +-> shrink_folio_list
+    +-> folio_check_referenced 
+      +-> folio_referenced
 ```
 
-madvise系统调用也可以出发内存回收。
+madvise系统调用也可以触发内存回收:
 ```
-madvise.c(MADV_COLD) -> reclaim_pages
+do_madvise
+  +-> madvise_vma_behavior
+    +-> madvise_cold/madvise_pageout
+      +-> madvise_cold_or_pageout_pte_range
+        +-> reclaim_pages
 ```
 
-分配连续物理内存的alloc_contig_pages里也会尝试做内存回收。
+分配连续物理内存的alloc_contig_pages里也会尝试做内存回收:
 ```
-page_alloc.c -> reclaim_clean_pages_from_list -> shrink_folio_list
-```
-
-如下是一些深入细节的辅助函数：
-```
-folio_set_active
-folio_deactiveate
-
-mm/swap.c的folio_mark_accessed, mark_page_accessed这个是老函数。
-folio_set_referenced
-
-folio_check_referenced -> folio_referenced
-
-folio_test_xxx，PG_xxx比如PG_active/PG_young之类均定义在include/linux/page-flags.h
+/* page_alloc.c */
+alloc_contig_pages
+  +-> reclaim_clean_pages_from_list
+    + -> shrink_folio_list
 ```
