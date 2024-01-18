@@ -71,12 +71,9 @@ active/inactive LRU链表上做移动。
 
 damon子系统可以根据用户配置主动进行冷热页检测，这个似乎作用要好点。
 
-通用物理页面的回收逻辑。
-
- - 基于LRU链表的页面回收逻辑
-
-根据页面具体回收方式，不同的处理。1. 不需要保存直接回收(缓存/没有用的内存/OOM)；
-2. 需要保存(保存回backend文件/匿名页swap到swap分区/shrink)。
+对于通用物理页面的回收逻辑，我们放到下面的代码分析中。根据页面具体回收方式，
+不同情况有不同的处理: 1. 不需要保存直接回收(缓存/没有用的内存/OOM)；2. 需要保存
+(保存回backend文件/匿名页swap到swap分区/shrink)。
 
 代码分析
 ---------
@@ -94,7 +91,7 @@ alloc_pages
               +-> shrink_zone
                 +-> shrink_zone_memcgs // 牵扯memory cgroup的逻辑
                   +-> shrink_lruvec 
-                    +-> shrink_list  // shrink_folio_list <--- 从这里入手看看?
+                    +-> shrink_list
 ```
 shrink_list里先做shrink_active_list再做shrink_inactive_list，前者把active LRU中
 的冷页移动到inactive LRU，后者对inactive LRU里的冷页做回收操作。
