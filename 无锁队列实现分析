@@ -1,4 +1,5 @@
 -v0.1 2023.9.28 sherlock init
+-v0.2 2024.1.24 sherlock 增加bug分析部分
 
 简介：本文分析无锁队列的实现逻辑，并给出一个简易无锁队列的C实现。
 
@@ -11,7 +12,7 @@ DPDK里也有实现无锁队列，对应的介绍文章在[这里](https://doc.d
 
 队列可以基于链表或者数组实现，无锁队列也有链表和数组实现的方式，陈皓的文章中对链表
 实现的方式有深入的分析，总的来讲链表实现方式最大的问题是引入了ABA的问题，数组的方式
-没有ABA的问题，Faustino和DPDK里有数组实现的实例。数组实现要一开始就分配全部的队列
+其实也有ABA的问题，Faustino和DPDK里有数组实现的实例。数组实现要一开始就分配全部的队列
 内存，和链表实现相比使用内存会多。
 
 我们这里基于数组实现，看下无锁队列的核心实现逻辑，Faustino的文章把基于数组的实现
@@ -84,4 +85,81 @@ commit相等时队列为空，write的下一个位置是head时，队列为满�
 一个例子
 ---------
 
-[这里](https://github.com/wangzhou/tests/blob/master/lockless_array_queue/main.c)是一个基于数组实现的无锁队列的示例。
+[这里](https://github.com/wangzhou/tests/blob/master/lockless_array_queue/main.c)是一个基于数组实现的无锁队列的示例，我们给它加上注释，并一点一点分析其中有
+问题的地方。
+
+```
+#define Q_SIZE 100
+#define Q_POS(count) ((count) % Q_SIZE)
+
+static bool push(struct queue *q, int data)
+{
+        int curr_write;
+        int curr_read;
+
+        do {
+                /*
+                 * 注意，这个代码里的所有memory order的属性我们都用的时候最强的，
+                 * __ATOMIC_SEQ_CST表示其前后的访存都不能越过__ATOMIC_SEQ_CST
+                 * 标记的这条指令。在gcc atomic和memory order的定义上，memory
+                 * order的属性的作用访问不只是__atomic开头的函数，还包括所有访存
+                 * 操作。
+                 */
+                curr_write = __atomic_load_n(&q->write_pos, __ATOMIC_SEQ_CST);
+                curr_read = __atomic_load_n(&q->read_pos, __ATOMIC_SEQ_CST);
+                
+                /*
+                 * 如上一节所属，write实际写入位置永远不会和read相邻，当写入数据
+                 * 时，发现write和read相邻时，就认为队列已满。
+                 */
+                if (Q_POS(curr_write + 1) == Q_POS(curr_read)) {
+                        return false;
+                }
+        /*
+         * 注意，这里有一个低级错误，如下CAS函数中，在curr_write和write_pos上的值
+	 * 相等时，把后面Q_POS(curr_write + 1)的值改写write_pos。但是，在不相等时，
+	 * 会用write_pos的值改写curr_write的值。
+	 * 
+	 * todo: ...
+	 * 同理commit处的CAS是不是也有问题？
+         */
+        } while (!__atomic_compare_exchange_n(&q->write_pos, &curr_write,
+                 Q_POS(curr_write + 1), false, __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST));
+
+        /* todo: write ABA的问题 */
+        q->data[curr_write] = data;
+
+        /* todo: */
+        while (!__atomic_compare_exchange_n(&q->commit_pos, &curr_write,
+               Q_POS(curr_write + 1), false, __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST));
+        
+        return true;
+}
+
+/* return false if q is empty */
+static bool pop(struct queue *q, int *data)
+{
+        int curr_commit;
+        int curr_read;
+        int tmp;
+
+        do {
+                curr_read = __atomic_load_n(&q->read_pos, __ATOMIC_SEQ_CST);
+                curr_commit = __atomic_load_n(&q->commit_pos, __ATOMIC_SEQ_CST);
+
+                if (Q_POS(curr_read) == Q_POS(curr_commit)) {
+                        return false;
+                }
+
+                tmp = q->data[curr_read];
+                /* todo: curr_read没有问题 */
+                /* todo: read ABA的问题 */
+                if (__atomic_compare_exchange_n(&q->read_pos, &curr_read,
+                    Q_POS(curr_read + 1), false, __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST)) {
+                        *data = tmp;
+                        return true;
+                }
+
+        } while (1);
+}
+```
