@@ -1,5 +1,6 @@
 -v0.1 2023.9.28 sherlock init
 -v0.2 2024.1.24 sherlock 增加bug分析部分
+-v0.3 2024.1.25 sherlock 增加bug分析部分
 
 简介：本文分析无锁队列的实现逻辑，并给出一个简易无锁队列的C实现。
 
@@ -85,9 +86,9 @@ commit相等时队列为空，write的下一个位置是head时，队列为满�
 一个例子
 ---------
 
-[这里](https://github.com/wangzhou/tests/blob/master/lockless_array_queue/main.c)是一个基于数组实现的无锁队列的示例，我们给它加上注释，并一点一点分析其中有
-问题的地方。
-
+如下是从Faustino的实现中copy出来的一个基于数组实现的无锁队列的示例，我们给它加上
+注释，并一点一点分析其中有问题的地方。为了方便分析，我们把push和pop的分析分开，
+需要展开画图分析的，我们在代码后面画示意图分析。
 ```
 #define Q_SIZE 100
 #define Q_POS(count) ((count) % Q_SIZE)
@@ -109,33 +110,134 @@ static bool push(struct queue *q, int data)
                 curr_read = __atomic_load_n(&q->read_pos, __ATOMIC_SEQ_CST);
                 
                 /*
-                 * 如上一节所属，write实际写入位置永远不会和read相邻，当写入数据
+                 * 如上一节所述，write实际写入位置永远不会和read相邻，当写入数据
                  * 时，发现write和read相邻时，就认为队列已满。
                  */
                 if (Q_POS(curr_write + 1) == Q_POS(curr_read)) {
                         return false;
                 }
         /*
-         * 注意，这里有一个低级错误，如下CAS函数中，在curr_write和write_pos上的值
-	 * 相等时，把后面Q_POS(curr_write + 1)的值改写write_pos。但是，在不相等时，
-	 * 会用write_pos的值改写curr_write的值。
-	 * 
-	 * todo: ...
-	 * 同理commit处的CAS是不是也有问题？
+         * 注意CAS更新失败的逻辑，如下CAS函数中，在curr_write和write_pos上的值
+         * 相等时，把后面Q_POS(curr_write + 1)的值改写write_pos。但是，在不相等
+         * 时，会用write_pos的值改写curr_write的值。
+         *
+         * 这里的逻辑是没有问题的，因为如果CAS更新失败，程序会重新执行这个循环，
+         * 在如上的代码里拿到最新的write_pos。
+         * 
+         * 但是，下面commit_pos处的CAS就会有问题，我们在那里分析。
          */
+        /* 注意，这里还存在ABA的问题, 我们在如下write_pos ABA问题中说明 */
         } while (!__atomic_compare_exchange_n(&q->write_pos, &curr_write,
                  Q_POS(curr_write + 1), false, __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST));
 
-        /* todo: write ABA的问题 */
         q->data[curr_write] = data;
 
-        /* todo: */
+        /*
+         * 如果如下的CAS失败，curr_write值被更新为commit_pos的值，这里的逻辑就
+         * 乱了，具体分析见如下CAS问题，这其实是一个编码错误。
+         */
+        /*
+         * 注意, commit_pos不会出现类似write_pos ABA的问题，因为commit_pos总是
+         * 落后或者等于write_pos。
+         */
         while (!__atomic_compare_exchange_n(&q->commit_pos, &curr_write,
                Q_POS(curr_write + 1), false, __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST));
         
         return true;
 }
+```
 
+CAS问题:
+```
+            +---+---+---+---+---+---+---+---+
+thread1:    |   | x | x | x | x |   |   |   |
+            +---+---+---+---+---+---+---+---+
+                  ^               ^ 
+                 read          commit
+                                  ^
+                               curr_write
+           
+            +---+---+---+---+---+---+---+---+
+thread2:    |   | x | x | x | x |   |   |   |
+            +---+---+---+---+---+---+---+---+
+                  ^               ^ 
+                 read          commit
+                                      ^
+                                   curr_write
+```
+系统在一个时刻可能处于如上的状态，如果thread2的CAS先运行，因为commit_pos和curr_write
+不相等CAS执行失败，commit_pos的值改写curr_write，本来curr_write在CAS里是作为expected
+data存在的，等到commit_pos被更新到和当前thread的curr_write一样，就可以把commit_pos
+的新值写入。这下后面的逻辑就乱了。
+
+修改的方法是，这里每次做CAS之前把curr_write的值先保存起来，如果CAS失败，就用保存
+起来的值对curr_write做恢复。
+
+write_pos ABA问题:
+```
+thread1 睡前：
+
+    +---+---+---+---+---+---+---+---+
+    |   | a | b | c | d |   |   |   |
+    +---+---+---+---+---+---+---+---+
+          ^               ^ 
+         read           commit
+                          ^
+                        write
+thread1 醒来：
+    +---+---+---+---+---+---+---+---+
+    | k | e | f | g | h |   | i | g |
+    +---+---+---+---+---+---+---+---+
+                          ^   ^
+                      commit read
+                          ^
+                       write
+```
+如上，thread1 push在执行write_pos的CAS前sleep了，这期间其它线程持续做pop/push，
+队列的状态被更新为如上thread1醒来时的状态，thread1醒来继续执行write_pos的CAS，
+因为write_pos和curr_write相等，CAS成功，但是，实际上write和read相邻时，队列已经
+处于满的状态，这时候再写入，逻辑已经错了。
+
+解决办法是给write_pos加上版本号，每一轮版本号增加1，CAS操作时也要判断版本号，如果
+版本号不一样，CAS失败，重新进行push循环，这里面就会识别到队列已经处于满的状态。
+
+我们看下错误执行下，队列的表现。
+```
+thread1 醒来：
+    +---+---+---+---+---+---+---+---+
+    | k | e | f | g | h | l | i | g |
+    +---+---+---+---+---+---+---+---+
+                              ^ 
+                           commit
+                              ^
+                            write
+                              ^
+                            read
+```
+如上，thread1错误写入l后，队列的各个指针会相等，这个是合法状态，后续任意thread
+认为队列为空，pop操作失败，push操作会覆盖之前队列里的合法内容。综合表现为push入
+队的部分数据永远丢失了。
+
+可以看到当thread1醒来，队列不是处于非法状态时，thread1的push会恰巧成功：
+```
+thread1 醒来：
+    +---+---+---+---+---+---+---+---+
+    | k | e | f | g | h |   |   | g |
+    +---+---+---+---+---+---+---+---+
+                          ^       ^
+                        commit   read
+                          ^
+                        write    
+```
+加入version的解决办法，这里会多一次重新循环。
+
+在version解决办法的具体实现中，队列的位置还是用write_pos % Q_SIZE，但是我们在
+write_pos需要回绕到0的时候还是继续给write_pos加1，这样write_pos % Q_SIZE为0，但
+是write_pos / Q_SIZE加了1，表示新版本。可以看到如果睡的时间足够久，版本号也可能
+是一样的，如果write_pos是一个64bit的无符号数，可以认为版本号相等的情况永远不会
+发生。
+
+```
 /* return false if q is empty */
 static bool pop(struct queue *q, int *data)
 {
@@ -152,8 +254,11 @@ static bool pop(struct queue *q, int *data)
                 }
 
                 tmp = q->data[curr_read];
-                /* todo: curr_read没有问题 */
-                /* todo: read ABA的问题 */
+                /* 
+                 * 这里没有如上commit_pos CAS失败的问题，原因和write_pos一样：
+                 * 当如下CAS失败时，会重新load read_pos的值，更新curr_read。
+                 */
+                /* 注意，这里存在ABA的问题, 我们在如下read_pos ABA问题中说明 */
                 if (__atomic_compare_exchange_n(&q->read_pos, &curr_read,
                     Q_POS(curr_read + 1), false, __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST)) {
                         *data = tmp;
@@ -163,3 +268,35 @@ static bool pop(struct queue *q, int *data)
         } while (1);
 }
 ```
+read_pos ABA问题:
+```
+thread1 睡前：
+
+    +---+---+---+---+---+---+---+---+
+    |   | a | b | c | d |   |   |   |
+    +---+---+---+---+---+---+---+---+
+          ^               ^ 
+         read           commit
+                          ^
+                        write
+thread1 醒来：
+    +---+---+---+---+---+---+---+---+
+    |   | e | f | g | h | i |   |   |
+    +---+---+---+---+---+---+---+---+
+          ^                   ^ 
+         read               commit
+                              ^
+                            write
+```
+如上，thread1在pop数据的时候，执行完“tmp = q->data[curr_read]”(tmp为a)后sleep了
+很久，这期间其它线程不断的push/pop数据，队列中的数据更新了一轮，当thread1醒来，
+正好read_pos和它睡前一样时，thread1后续的CAS会成功，实际上thread1已经读到了错误
+的值(a)。
+
+和如上write_pos ABA问题一样，解决办法是在read_pos上加一个版本号，thread1醒来做
+CAS的时候，版本号不一样，CAS就会失败，重新进行pop循环，也就会重新读队列里的数据。
+
+继续看下错误执行时的现象，错误执行的时候，thread1醒来后把a pop出来，而a在thread1
+sleep时已经被其它thread pop出来过。总体上看，就是pop了重复数据出来。
+
+综合以上问题修改的一个现在看来没有问题的版本可以参考[这里](https://github.com/wangzhou/tests/blob/master/lockless_array_queue/main.c)。
