@@ -1,5 +1,7 @@
 -v0.1 2024.1.18 Sherlock init
 -v0.2 2024.1.26 Sherlock ...
+-v0.3 2024.2.19 Sherlock ...
+-v0.4 2024.2.20 Sherlock 更加基本逻辑和接口介绍
 
 简介：本文分析Linux内核里内存管理中damon子系统的基本逻辑，分析基于v6.7-rc6内核。
 
@@ -7,12 +9,132 @@
 基本逻辑
 ---------
 
+damon是Linux内核里的一个内存管理的子系统，这个子系统对用户暴露了一组sysfs接口出
+来，用户通过配置这些接口可以定制内存回收、内存冷热页管理等策略。damon子系统会根
+据用户定制的策略，使用专门的内核线程进行管理。
 
-代码分析
----------
+damon子系统的代码在内核mm/damon目录下。内核中有对应的使用文档，路径在Documentation/
+mm/damon，Documentation/admin-guide/mm/damon。
+
+总体上看damon子系统有三个大的使用方式，第一个是做内存监控，第二个是做内存回收，
+第三个是做LRU链表上冷热页的调整。
+
+做内存监控的sysfs接口在/sys/kernel/mm/damon目录，用户可以配置监控的目标以及策略，
+也可以配置某些事件发生时要做的处理。
+
+内存回收和LRU冷热页调整的sysfs接口在/sys/module/damon_reclaim和/sys/module/damon_lru_sort。
+用户通过这些接口定义内存回收和LRU冷热页调整的规则。
+
+damon还是使用PTE的access bit来判断CPU对物理页的访问情况，damon核心的创新是它把
+若干page放到一起，只用其中一个page的access bit做为这一堆page访问情况的度量，当
+这一堆page(一个区域)的访问情况相仿时，这个优化是合理的。在此基础上，damon会做区
+域的合并和拆分，相邻的不活跃的区域会合并成一个大区域，活跃的区域会拆分成多个较
+小的区域。
+
+damon还提供一个用户态工具：https://github.com/awslabs/damo，这个工具是damon sysfs
+接口的封装，方便用户直接使用。
 
 
 实际使用
 ---------
 
+如下是damon做内存监控实际使用时的一个sysfs的文件树，我们把注释直接写到里面。
+```
+`-- admin
+    `-- kdamonds                            <-- 创建了两个kdamond线程，只看0
+        |-- 0
+        |   |-- contexts                    <-- 目前一个kdamond只支持一个context
+        |   |   |-- 0
+        |   |   |   |-- avail_operations
+        |   |   |   |-- monitoring_attrs
+        |   |   |   |   |-- intervals
+        |   |   |   |   |   |-- aggr_us
+        |   |   |   |   |   |-- sample_us
+        |   |   |   |   |   `-- update_us
+        |   |   |   |   `-- nr_regions
+        |   |   |   |       |-- max
+        |   |   |   |       `-- min
+        |   |   |   |-- operations
+        |   |   |   |-- schemes
+        |   |   |   |   `-- nr_schemes      <-- 这里可以展开，配置context的监控策略
+        |   |   |   `-- targets             <-- 一个context下创建了3个target，
+        |   |   |       |-- 0                   每个target可以跟踪不同进程
+        |   |   |       |   |-- pid_target
+        |   |   |       |   `-- regions     <-- target0下创建了4个人region
+        |   |   |       |       |-- 0
+        |   |   |       |       |   |-- end
+        |   |   |       |       |   `-- start
+        |   |   |       |       |-- 1
+        |   |   |       |       |   |-- end
+        |   |   |       |       |   `-- start
+        |   |   |       |       |-- 2
+        |   |   |       |       |   |-- end
+        |   |   |       |       |   `-- start
+        |   |   |       |       |-- 3
+        |   |   |       |       |   |-- end
+        |   |   |       |       |   `-- start
+        |   |   |       |       `-- nr_regions
+        |   |   |       |-- 1
+        |   |   |       |   |-- pid_target
+        |   |   |       |   `-- regions
+        |   |   |       |       `-- nr_regions
+        |   |   |       |-- 2
+        |   |   |       |   |-- pid_target
+        |   |   |       |   `-- regions
+        |   |   |       |       `-- nr_regions
+        |   |   |       `-- nr_targets
+        |   |   `-- nr_contexts
+        |   |-- pid
+        |   `-- state
+        |-- 1
+        |   |-- contexts
+        |   |   `-- nr_contexts
+        |   |-- pid
+        |   `-- state
+        `-- nr_kdamonds
+```
 
+如下是damon做内存回收的sysfs接口：
+```
+# pwd
+/sys/module/damon_reclaim/parameters
+# ls
+aggr_interval                nr_reclaim_tried_regions
+bytes_reclaim_tried_regions  nr_reclaimed_regions
+bytes_reclaimed_regions      quota_ms
+commit_inputs                quota_reset_interval_ms
+enabled                      quota_sz
+kdamond_pid                  sample_interval
+max_nr_regions               skip_anon
+min_age                      wmarks_high
+min_nr_regions               wmarks_interval
+monitor_region_end           wmarks_low
+monitor_region_start         wmarks_mid
+nr_quota_exceeds
+```
+
+如下是damon做LRU冷热页移动的sysfs接口：
+```
+# pwd
+/sys/module/damon_lru_sort/parameters
+# ls
+aggr_interval                      nr_cold_quota_exceeds
+bytes_lru_sort_tried_cold_regions  nr_hot_quota_exceeds
+bytes_lru_sort_tried_hot_regions   nr_lru_sort_tried_cold_regions
+bytes_lru_sorted_cold_regions      nr_lru_sort_tried_hot_regions
+bytes_lru_sorted_hot_regions       nr_lru_sorted_cold_regions
+cold_min_age                       nr_lru_sorted_hot_regions
+commit_inputs                      quota_ms
+enabled                            quota_reset_interval_ms
+hot_thres_access_freq              sample_interval
+kdamond_pid                        wmarks_high
+max_nr_regions                     wmarks_interval
+min_nr_regions                     wmarks_low
+monitor_region_end                 wmarks_mid
+monitor_region_start
+```
+
+代码分析
+---------
+
+todo: ...
