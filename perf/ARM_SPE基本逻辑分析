@@ -1,5 +1,5 @@
 -v0.1 2024.2.20 Sherlock init
--v0.3 2024.2.21 Sherlock
+-v0.3 2024.2.21 Sherlock 增加部分基本逻辑
 
 简介：本文记录ARM SPE这个特性的软硬件接口基本逻辑。
 
