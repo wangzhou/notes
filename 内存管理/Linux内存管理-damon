@@ -2,6 +2,7 @@
 -v0.2 2024.1.26 Sherlock ...
 -v0.3 2024.2.19 Sherlock ...
 -v0.4 2024.2.20 Sherlock 更加基本逻辑和接口介绍
+-v0.5 2024.2.21 Sherlock 增加代码分析
 
 简介：本文分析Linux内核里内存管理中damon子系统的基本逻辑，分析基于v6.7-rc6内核。
 
@@ -33,7 +34,6 @@ damon还是使用PTE的access bit来判断CPU对物理页的访问情况，damon
 
 damon还提供一个用户态工具：https://github.com/awslabs/damo，这个工具是damon sysfs
 接口的封装，方便用户直接使用。
-
 
 实际使用
 ---------
@@ -137,4 +137,75 @@ monitor_region_start
 代码分析
 ---------
 
-todo: ...
+damon子系统用一堆__init修饰的初始化函数在内核启动的时候做damon相关的初始化。damon
+子系统的数据结构和运行大逻辑比较简单，复杂度在和业务相关的参数上。
+
+damon的内部数据结构基本和内存检测sysfs接口展示出来的一致，也是context/target/region
+的基本数据结构，context中抽象出了具体业务在整个检测流程里的操作函数，这一堆操作
+函数统一放到struct damon_operations里。
+
+如上的三种业务，每种业务运行的时候都对应一个kdamond的内核线程。每个kdamon线程都
+在一个循环里执行：检测内存访问，对应内存操作，调整检测区域的步骤，具体业务在
+damon_operations的各个回调函数里执行。
+
+下面用damon reclaim串联下如上的逻辑。damon reclaim的代码在mm/damon/reclaim，现在
+是一个只能编译进内核的内核模块。
+```
+damon_reclaim_init
+      /*
+       * 生成context和target(全局变量), 为context添加上damon_operations，其中
+       * damon_operations是DAMON_OPS_PADDR，为context生成对应的scheme，可见这里
+       * 同样有scheme的概念，只不过没有对外接口，直接写死了scheme的对应参数。
+       */
+  +-> damon_modules_new_paddr_ctx_target
+```
+
+用户对/sys/module/damon_reclaim/enabled写1触发damon收拢相关参数，然后拉起kdamond
+内核线程。
+```
+damon_reclaim_enabled_store
+  +-> damon_reclaim_turn
+    +-> damon_reclaim_apply_parameters
+      +-> damon_start
+      ...
+```
+
+reclaim场景下kdamond的基本逻辑。
+```
+kdamond_fn
+  while (!kdamond_need_stop(ctx)) {
+    +-> prepare_access_checks // damon_pa_prepare_access_checks
+    |     /*
+    |      * 对于每个region都随机挑选一个物理页做预处理，所谓预处理就是对这个物
+    |      * 理页做逆向映射查找(rmap_walk)，对于找到的每个虚拟页都清除页表上对应
+    |      * 的访问标记(access bit)。
+    |      */
+    | +-> damon_pa_mkold
+    |
+    |   /* 等待sample_interval us */
+    +-> kdamond_usleep(sample_interval)
+    |
+    +-> check_accesses // damon_pa_check_accesses
+    |     /*
+    |      * 如上相同的逻辑，rmap_walk检查所有虚拟页上的访问标记是否有被写过，
+    |      * 由此得出相应物理页在这期间有没有被访问过，并记录得到的统计数据。
+    |      *
+    |      * 这个函数返回相应物理页有没有被访问过。
+    |      */
+    | +-> damon_pa_young
+    |     /* 更新统计结果 */
+    | +-> damon_update_region_access_rate
+    |
+    +-> kdamond_apply_schemes
+          /*
+           * 根据scheme->action里的配置做对应的处理，如上初始化scheme时给reclaim
+           * scheme->action的参数是DAMOS_PAGEOUT，所以这里进入对应的流程。
+           *
+           * 针对每个target、每个region都做这样的处理。
+           */
+      +-> ctx->ops.apply_schemes // damon_pa_apply_schemes
+            /* 没有看懂这里的逻辑，是否做reclaim的依据是什么？*/
+        +-> damon_pa_pageout
+          +-> reclaim_pages
+  }
+```
