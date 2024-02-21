@@ -1,0 +1,25 @@
+-v0.1 2024.2.20 Sherlock init
+-v0.3 2024.2.21 Sherlock
+
+简介：本文记录ARM SPE这个特性的软硬件接口基本逻辑。
+
+
+基本逻辑
+---------
+
+SPE是ARM上的statistical profile extention，这个特性是PMU的增强。SPE增加了少量的
+采样事件计数器，当计数器的值满足采样条件的时候，硬件可以把采样信息记录在提前配置
+的buffer里。ARM spec D14章节有SPE的定义。
+
+SPE和传统的PMU采样的最大区别有两点：第一，采样过程是硬件自动完成的，比如，传统
+的PMU counter在条件满足时会触发中断，随后软件进行必要的采样，显然传统PMU采样会影
+响被采样代码的执行，而SPE是硬件把采样信息写到提前配置的buffer的，SPE不会影响被测
+试程序的执行，但是采样行为也就被硬件固定了；第二，SPE和传统PMU事件的语意有所不同，
+传统PMU事件偏向微架构级别的事件，SPE偏向架构基本的行为(一般是程序员可以直接看到的)。
+
+看个具体的例子，比如，SPE增加了对load/store指令的event：SAMPLE_FEED_LD/SAMPLE_FEED_ST。
+程序员可以配置跟踪load/store，并配置counter的初始值，当硬件更具load/store的操作
+改变counter里的数值，当counter里的数值满足一定的条件时，硬件自动做load/store对应
+影响的采样，并写入到采样buffer里，同时硬件自动重新继续用counter进行跟踪。可以看
+到，用SPE可以获得系统中比较准确的冷热页的信息。
+
