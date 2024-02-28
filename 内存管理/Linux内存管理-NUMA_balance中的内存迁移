@@ -1,4 +1,5 @@
 v0.1 2023.11.20 Sherlock init
+v0.2 2024.02.21 Sherlock
 
 简介：本文分析Linux内核里内存迁移的基本逻辑，内核中有很多地方要使用内存迁移，本文
       聚焦在NUMA balance中引起的内存迁移。
@@ -21,3 +22,5 @@ v0.1 2023.11.20 Sherlock init
 ---------
 
 知乎上的[这篇](https://zhuanlan.zhihu.com/p/635383566)文章对NUMA balance的代码分析的已经很好了。
+
+再次整理下代码。
