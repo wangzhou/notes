@@ -173,16 +173,28 @@ schedule
          *
          * rq里的各个域段的含义?
          */
-    +-> next = pick_next_task // __pick_next_task_fair
+    +-> next = pick_next_task // CFS里的回调是__pick_next_task_fair
+          /*
+           * 这里do-while的逻辑和sched group有关系，如果没有sched group，这里
+           * 的循环只会执行一次。
+           */
       +-> do {
             if (curr) { // sched_entity
               if (curr->on_rq)
-                /* 更新vruntime */
+                /* 更新vruntime等调度参数 */
                 update_curr(cfs_rq)
+                  +-> delta_exec = update_curr_se()
+                        /*
+                         * 这里是当前时间减去上次更新vruntime时的时间，update_curr
+                         * 这个函数在很多地方都会调用，如果上次调用是在离开就绪
+                         * 队列，其中睡眠了很久，再次调度的时候计算出的vruntime
+                         * 就是包换睡眠的vruntime，这里没有理解？
+                         */
+                    +-> delta_exec = now - curr->exec_start
+                  +-> curr_vruntime += calc_delta_fair(delta_exec, curr)
               else
                 curr = NULL
             }
-            /* 什么意思？*/
             se = pick_next_entity(cfs_rq)
             cfs_rq = group_cfs_rq(se)
           } while (cfs_rq)
@@ -192,6 +204,29 @@ schedule
 ```
 再调用这个函数之前，先把当前线程状态切换到睡眠状态，并把当前线程挂到对应的等待队
 列里。
+
+内核里会有周期性的timer中断产生，timer中断被触发后最终调用到tick_handle_periodic
+函数，具体的调用逻辑可以参考[这里](https://wangzhou.github.io/riscv-timer的基本逻辑)。
+
+tick_handle_periodic中执行调度相关的逻辑，基本逻辑如下，下面我们从sched_tick看起。
+```
+tick_handle_periodic
+  +-> tick_periodic
+    +-> update_process_times
+      +-> scheduler_tick
+
+/* linux/kernel/sched/core.c */
+scheduler_tick
+  +-> curr->sched_class->task_tick // CFS上是task_tick_fair
+    +-> entity_tick
+      +-> update_curr
+      +-> update_load_avg
+      +-> update_cfs_group
+    +-> task_tick_numa
+      +-> task_work_add
+  +-> trigger_load_balance
+```
+没有找见时间片用完触发调度的流程?
 
 看下如何获取调度相关的系统统计值。打开内核配置CONFIG_SCHEDSTATS和CONFIG_SCHED_DEBUG，
 在/proc/schedstat，/proc/<pid>/schedstat，/proc/<pid>/sched以及/sys/kernel/debug/sched
@@ -262,7 +297,6 @@ current_node=1, numa_group_id=0
 numa_faults node=0 task_private=0 task_shared=0 group_private=0 group_shared=0
 numa_faults node=1 task_private=0 task_shared=0 group_private=0 group_shared=0
 ```
-
 ```
 # mount -t debugfs none /sys/kernel/debug/
 # ls /sys/kernel/debug/sched/
@@ -271,7 +305,7 @@ debug              latency_warn_once  numa_balancing
 features           migration_cost_ns  tunable_scaling
 ```
 
-Note:
+Note(note post!):
 
 sysctl_sched_base_slice，原来的sysctl_sched_min_granularity，每个线程最小运行的
 时间。IO线程呢？normalized_sysctl_sched_base_slice
