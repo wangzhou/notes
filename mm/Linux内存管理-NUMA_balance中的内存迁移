@@ -64,7 +64,7 @@ scheduler_tick
           +-> test_and_set_tsk_thread_flag(task, TIF_NOTIFY_RESUME)
           +-> kick_process(task)
                 /*
-                 * 一般实现为一个IPI，这块逻辑不清除？反正我们可以认为task_numa_work
+                 * 一般实现为一个IPI，这块逻辑不清楚？反正我们可以认为task_numa_work
                  * 最终会在对应线程返回用户态之前被调用下。
                  */
             +-> smp_send_reschedule(cpu)
