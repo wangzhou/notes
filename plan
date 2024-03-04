@@ -190,7 +190,6 @@ spinlock实现分析		 #
 协程的使用和原理		 #
 IPI详细分析			 to do
 io_uring分析			 4. c
-per-cpu				 to do
 
 qemu tlb同步逻辑	         to do
 pthread spinlock/mutex lock      to do
@@ -260,17 +259,21 @@ easyperf笔记					      c
 vector					   	      c
 arm64 内存屏障					      to post
 arm64 FEAT_ETS2					      to post
-kernel damon					      to post
+kernel damon					      c
 kernel 内存回收					      c
 uaccess代码分析，看起来5.12的代码可以		      to do	
 处理非对齐的情况，不清楚怎么处理fault。               c
-ARM PMU SPE基本硬件逻辑				      c
+ARM PMU SPE基本硬件逻辑				      to do *
 memory migration		 		      to do
-rmap						      to do
+rmap						      to do *
 
 linux进程调度：
- - CFS                           topost
- - 调度域和调度组                todo
- - load计算/线程迁移/负载均衡    todo
- - numa balance 	         topost
+ - CFS                            c
+ - 调度域和调度组                 todo
+ - load计算/线程迁移/负载均衡     todo
+ - numa balance 	          c
+
+ per-cpu 			  todo
+ 统计系统里负载均衡中跨numa的次数 todo
+
 
