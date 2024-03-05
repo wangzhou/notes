@@ -82,6 +82,8 @@ rt和dl排在fair之前，但是系统中绝大多数线程属于fair调度。
 start_kernel
   +-> sched_init
     +-> init_sched_fair_class
+          /* 注册一个SCHED_SOFTIRQ的软中断，如下线程在CPU之间做负载均衡会用到 */
+      +-> open_softirq(SCHED_SOFTIRQ, run_rebalance_domains)
 ```
 
 ```
@@ -221,6 +223,7 @@ scheduler_tick
     +-> task_tick_numa
       +-> task_work_add
   +-> trigger_load_balance
+    +-> raise_softirq(SCHED_SOFTIRQ)
 ```
 没有找见时间片用完触发调度的流程?
 

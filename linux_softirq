@@ -29,9 +29,9 @@ Linux内核里模拟硬件的这种行为，在软件层面也实现了类似的
      +-> irq_exit
        +-> __irq_exit_rcu
          +-> if (!in_interrupt() && local_softirq_pending())
-	       /* 注意这个函数会有两个版本，我们这里只看!CONFIG_PREEMPT_RT的版本 */
-	   +-> invoke_softirq()
-	     +-> wakeup_softirqd()
+               /* 注意这个函数会有两个版本，我们这里只看!CONFIG_PREEMPT_RT的版本 */
+           +-> invoke_softirq()
+             +-> wakeup_softirqd()
 ```
 如上，在硬中断退出的时候会检测有没有pending的软中断，如果有，就去执行软中断的回调
 函数，在具体执行的时候，又会根据条件决定是马上调用软中断的处理函数还是唤醒软中断

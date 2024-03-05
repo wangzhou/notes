@@ -1,3 +1,74 @@
 -v0.1 2024.3.1 sherlock init
+-v0.2 2024.3.5 sherlock 增加基本逻辑
 
-简介：本文总结Linux内核里调度域和调度组的逻辑关系，分析使用的内核版本是6.8-rc5。
+简介：本文总结Linux内核里调度域和调度组的逻辑关系，Linux的调度子系统基于调度域和
+      调度组的概念进行负载均衡，本文是后续分析具体负载均衡逻辑的基础。分析使用的
+      内核版本是6.8-rc5，使用qemu的版本是v8.2.50的ARM64构架版本。
+      
+基本逻辑
+---------
+
+Linux内核把CPU核按照调度域和调度组范围进行管理，调度域/调度组是一个层级结构，并
+不是只有一层。之所以要把CPU核分组管理，是因为在进行线程负载均衡的时候，“距离”较
+近的核的附属资源一般集中在一起，当线程在这些核之间迁移时，因为线程迁移带来的开销
+更小。所以，如果线程均衡会优先在“距离”近的核上进行，在达成均衡的目的的同时，尽量
+减小开销。
+
+具体的看，当硬件具有SMT时，在同一个物理核的不同虚拟核上迁移时，因为虚拟核共享L1
+cache，迁移引发的cache开销是很小的；当线程在cluster内迁移时，因为cluster内的CPU
+核可能共享L3 cache，迁移引发的cache开销比较小；当线程在NUMA节点内部迁移时，NUMA
+balancing只是重新补上NUMA balancing扫描时断开的页表项，而在不同NUMA节点之间迁移
+时，NUMA balancing会进行物理页面的迁移(NUMA balancing的具体逻辑可以参考[这里](https://wangzhou.github.io/Linux内存管理-NUMA-balance中的内存迁移))。
+
+调度域/调度组的概念在内核文档中已经有描述：Documentation/scheduler/sched-domains.rst。
+下面是一个包含SMT/cluster/NUMA的CPU系统拓扑图，我们用这个图做具体说明。
+```
++------------------------ NUMA0 ------------------------+-------------------------- NUMA1 ----------------------------+
+|                                                       |                                                             |
++--------- cluster0 --------+--------- cluster1 --------+--------- cluster2 ----------+---------- cluster3 -----------+
+|                           |                           |                             |                               |
++-------------+-------------+-------------+-------------+-------------+---------------+---------------+---------------+
+|  (p_core0)  |  (p_core1)  |  (p_core2)  |  (p_core3)  |  (p_core4)  |  (p_core5)    |  (p_core6)    |  (p_core7)    |
+|             |             |             |             |             |               |               |               |
+| core0 core1 | core2 core3 | core4 core5 | core6 core7 | core8 core9 | core10 core11 | core12 core13 | core14 core16 |
++-------------+-------------+-------------+-------------+-------------+---------------+---------------+---------------+
+```
+对于上面的系统，描述调度域的数据结构是这样的，对于每个core，在每个层级上都有一个
+sched_domain的数据结构描述调度范围，比如core0在最底层(SMT)的sched_domain里包含
+core0和core1，在再上一层(cluster)的sched_domain里包含core0-core3，在NUMA这一层的
+sched_domain里包含core0-core7，在最上层的sched_domain里包含全部core。
+
+调度域在一层中收拢所有的CPU核，调度组则为负载均衡增加一个从上到下的视角。比如，
+core0的最底层sched_domain里就包含两个调度组，其中一个调度组里包含core0，另一个
+调度组里包含core1；core0的cluster这一层的调度域里包含两个调度组，一个调度组包含
+core0/core1，另一个调度组里包含core2/core3。
+
+注意，调度里还有一个task_group的概念，task_group是线程的集合，为的是把一组线程作
+为一个调度实体参与调度，利用task_group也可以控制线程使用CPU资源的情况。
+
+代码分析
+---------
+
+系统模拟
+---------
+
+我们采用目前最新的ARM64版本的qemu(v8.2.50)构造一个如上拓扑结构的系统出来。大概的
+命令是这样：
+```
+qemu-system-aarch64 \
+	-smp 16,sockets=2,clusters=2,threads=2 \
+	-cpu cortex-a57 \
+	-machine virt \
+ 	-append "console=ttyAMA0" \
+	-nographic -m 4096m \
+	-kernel ~/repos/linux/arch/arm64/boot/Image \
+	-initrd ~/tests/kernel_debug_using_qemu/rootfs.cpio.gz \
+	-object memory-backend-ram,id=mem0,size=2048M \
+	-object memory-backend-ram,id=mem1,size=2048M \
+        -numa node,memdev=mem0,nodeid=0,cpus=0-7 \
+        -numa node,memdev=mem1,nodeid=1,cpus=8-15
+```
+如上命令表示系统里有16个core，两个socket(一个socket对应一个NUMA)，一个NUMA里包含
+两个cluster，一个物理CPU核包含两个逻辑CPU core。(是这样么？)
+
+
