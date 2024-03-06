@@ -1,5 +1,6 @@
 -v0.1 2024.3.1 sherlock init
 -v0.2 2024.3.5 sherlock 增加基本逻辑
+-v0.3 2024.3.6 sherlock ...
 
 简介：本文总结Linux内核里调度域和调度组的逻辑关系，Linux的调度子系统基于调度域和
       调度组的概念进行负载均衡，本文是后续分析具体负载均衡逻辑的基础。分析使用的
@@ -48,6 +49,21 @@ core0/core1，另一个调度组里包含core2/core3。
 
 代码分析
 ---------
+
+```
+start_kernel
+  ...
+  +-> kernel_init_freeable
+    +-> sched_init_smp
+      +-> sched_init_domains(cpu_active_mask)
+        +-> doms_cur = alloc_sched_domains(1)
+	    /*
+	     * doms_cur[0]是系统中active cpu的mask，sched domain和group都是在
+	     * 这个函数里创建起来的。
+	     */
+	+-> build_sched_domains(doms_cur[0], NULL)
+
+```
 
 系统模拟
 ---------
