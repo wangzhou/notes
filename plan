@@ -278,4 +278,6 @@ linux进程调度：
  perf software event的实现(migration)	  todo
  softirq				  todo
  nohz的逻辑				  todo
+ cpu load显示/线程迁移显示		  todo
+ 最底层的调度域对么？
 
