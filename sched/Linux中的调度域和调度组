@@ -143,7 +143,7 @@ qemu-system-aarch64 \
         -numa node,memdev=mem1,nodeid=1,cpus=8-15
 ```
 如上命令表示系统里有16个core，两个socket(一个socket对应一个NUMA)，一个NUMA里包含
-两个cluster，一个物理CPU核包含两个逻辑CPU core。(是这样么？)
+两个cluster，一个物理CPU核包含两个逻辑CPU core。
 
 在schedule的debugfs里可以看到如下和domain相关的debug信息：
 ```
