@@ -109,19 +109,135 @@ CPU核负载的定义。
 在调度子系统基本逻辑分析中，已经知道负载均衡的主要入口点是run_rebalance_domains，
 具体逻辑可以参考[这里](https://wangzhou.github.io/Linux内核调度的基本逻辑/)。
 
+负载均衡基本逻辑的代码分析如下：
 ```
 run_rebalance_domains
   +-> nohz_idle_balance
   +-> update_blocked_averages
   +-> rebalance_domains
+        /* 遍历每个CPU的各个sched_domain */
     +-> for_each_domain(cpu, sd) {
-	  +-> load_balance
-	    +-> should_we_balance
-	    +-> find_busiest_group
-	    +-> find_busiest_queue
-	    +-> detach_tasks
-	    +-> attach_tasks
-	}
+              /*
+               * 得到这一级domain的扫描间隔时间，这个时间可以通过sysfs的接口手动
+               * 调整。
+               */
+          +-> interval = get_sd_balance_interval
+              /* 到了时间才进行均衡的逻辑 */
+          +-> if (time_after_eq(jiffies, sd->last_balance + interval)) {
+                +-> load_balance(cpu, rq, sd, idle, &continue_balancing)
+                      /*
+                       * 当前core是local group的第一个core，或者local group里有
+                       * idle的core。
+                       */
+                  +-> should_we_balance
+                      /*
+                       * 其中的逻辑不只是“找见最繁忙的group”，当检测到没有必要作
+                       * 均衡时，这个函数直接退出，并返回NULL。
+                       */
+                  +-> find_busiest_group
+                        /*
+                         * 遍历domain里各个group，找到最繁忙的那个group，各种
+                         * corner的情况也在这里处理。下面把find_busiest_group的
+                         * 逻辑展开分析。
+                         */
+                    +-> update_sd_lb_stats
+                      /* 找到最繁忙group里的最繁忙rq */
+                  +-> find_busiest_queue
+                  +-> detach_tasks
+                  +-> attach_tasks
+              }
+        }
+```
+
+这里展开下find_busiest_group的逻辑：
+```
+find_busiest_group
+  +-> init_sd_lb_stats(&sds)
+  +-> update_sd_lb_stats(env, &sds)
+        /* 遍历domain里的每个group */
+    +-> do {
+              /* 对于一个group，更新其负载信息 */
+          +-> update_sg_lb_stats(env, sds, sg, sgs, &sg_status)
+          ^ for_each_cpu_and(i, sched_group_span(group), env->cpus) {
+          |       /*
+          |        * 每个group的一些统计信息是group中各个core的rq的信息之和：
+          |        *
+          |        * group_load是group的负载，每个rq平均负载(load_avg)之和。
+          |        * group_util?
+          |        * group_runnable是每个rq的runnable_avg之和，todo
+          |        * sum_nr_running是每个rq h_nr_running之和， todo
+          |        */
+          |   +-> 更新group_load/group_util/group_runnable/sum_nr_running。
+          |       /*
+          |        * 这个domain里的core有没有能力不等的，比如大小核，sd flags里
+          |        * 的SD_ASYM_CPUCAPACITY这个标记在sd初始化的时候根据固件传入的
+          |        * 的信息进行初始化。
+          |        */
+          |   +-> if (env->sd->flags & SD_ASYM_CPUCAPACITY) {
+          |         /*
+          |          * 只要有rq里misfit_task_load大于group的group_misfit_task_load，
+          |          * 就认为group的计算能力满足不了线程的需要。
+          |          *
+          |          * misfit_task_load? group_misfit_task_load?
+          |          */
+          |         if (sgs->group_misfit_task_load < rq->misfit_task_load) {
+          |           sgs->group_misfit_task_load = rq->misfit_task_load;
+          |           *sg_status |= SG_OVERLOAD;
+          |         } if ((env->idle != CPU_NOT_IDLE) && ... ) {
+          |           /* todo：不理解这里的逻辑？*/
+          |         }
+          | }
+          |
+          | +-> if (!local_group && env->sd->flags & SD_ASYM_PACKING && ...) {
+          |       sgs->group_asym_packing = 1
+          |     }
+          |
+          | +-> if (!local_group && smt_balance(env, sgs, group))
+          |       sgs->group_smt_balance = 1
+          |
+          |     /*
+          |      * 负载均衡逻辑定义了group的负载类型，根据负载类型进行均衡逻辑，
+          |      * 如下group包括local_group。
+          |      *
+          |      * imbalance_pct是一个可以通过sysfs配置的系数，这个系数大概是117。
+          |      */
+          | +-> sgs->group_type = group_classify(env->sd->imbalance_pct, group, sgs)
+          |           /*
+          |            * overloaded指group的算力不满足需求了。可见，running线程
+          |            * 数量小于核数，不是overloaded； todo
+          |            */
+          |       +-> group_is_overloaded(imbalance_pct, sgs)
+          |           /* group里有用户配置的affinity? */
+          |       +-> sg_imbalanced(group)
+          |           /* 其它地方配置进来 */
+          |       +-> sgs->group_asym_packing/sgs->group_smt_balance/sgs->group_misfit_task_load
+          |           /* group_fully_busy指group算力可以满足负载需求 */
+          |       +-> group_has_capacity(imbalance_pct, sgs)
+          |           /* 剩下情况就是group里的算力有空余了 */
+          |
+          |     /* todo: ... */
+          | +-> sgs->avg_load = (sgs->group_load * SCHED_CAPACITY_SCALE) /
+          |                     sgs->group_capacity;
+          |
+          v   /* 如果传入的sg比sds中记录的busier，就更新记录的值*/
+          +-> update_sd_pick_busiest(env, sds, sg, sgs)
+        }
+  +-> /* 不要需要负载均衡时，直接返回NULL。需要作负载均衡，跳到calculate_imbalance */
+
+      /*
+       * 对于需要作负载均衡的情况，跳到这里计算不均衡负载的值，同时把group type
+       * 转化成migration_type。后续find_busiest_queue根据migration_type作线程迁移
+       * 之前的准备。
+       *
+       * todo: migration_type的语意？
+       */
+  +-> calculate_imbalance(env, &sds)
+```
+
+这里展开下find_busiest_queue的逻辑：
+```
+find_busiest_queue
+  +-> 
 ```
 
 调试

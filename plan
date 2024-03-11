@@ -269,9 +269,10 @@ rmap						      to do *
 
 linux进程调度：
  - CFS                                    repost
- - 调度域和调度组                         todo
- - load计算/线程迁移/负载均衡             todo
+ - 调度域和调度组                         topost
+ - load计算/线程迁移/负载均衡             doing
  - numa balance 	                  c
+ - 调度带宽限制				  todo
 
  per-cpu 			          todo
  统计系统里负载均衡中跨numa的次数         todo
