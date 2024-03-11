@@ -115,38 +115,39 @@ run_rebalance_domains
   +-> nohz_idle_balance
   +-> update_blocked_averages
   +-> rebalance_domains
-        /* 遍历每个CPU的各个sched_domain */
-    +-> for_each_domain(cpu, sd) {
-              /*
-               * 得到这一级domain的扫描间隔时间，这个时间可以通过sysfs的接口手动
-               * 调整。
-               */
-          +-> interval = get_sd_balance_interval
-              /* 到了时间才进行均衡的逻辑 */
-          +-> if (time_after_eq(jiffies, sd->last_balance + interval)) {
-                +-> load_balance(cpu, rq, sd, idle, &continue_balancing)
-                      /*
-                       * 当前core是local group的第一个core，或者local group里有
-                       * idle的core。
-                       */
-                  +-> should_we_balance
-                      /*
-                       * 其中的逻辑不只是“找见最繁忙的group”，当检测到没有必要作
-                       * 均衡时，这个函数直接退出，并返回NULL。
-                       */
-                  +-> find_busiest_group
-                        /*
-                         * 遍历domain里各个group，找到最繁忙的那个group，各种
-                         * corner的情况也在这里处理。下面把find_busiest_group的
-                         * 逻辑展开分析。
-                         */
-                    +-> update_sd_lb_stats
-                      /* 找到最繁忙group里的最繁忙rq */
-                  +-> find_busiest_queue
-                  +-> detach_tasks
-                  +-> attach_tasks
-              }
-        }
+    /* 遍历每个CPU的各个sched_domain */
+    for_each_domain(cpu, sd) {
+          /*
+           * 得到这一级domain的扫描间隔时间，这个时间可以通过sysfs的接口手动调整，
+           * /sys/kernel/debug/sched/domains/domainN/max(min)_interval。可以看到
+           * domain从低到高，max_interval的值是4ms/8ms/16ms/32ms。
+           */
+      +-> interval = get_sd_balance_interval
+          /* 到了时间才进行均衡的逻辑 */
+      +-> if (time_after_eq(jiffies, sd->last_balance + interval)) {
+            +-> load_balance(cpu, rq, sd, idle, &continue_balancing)
+            ^     /*
+            |      * 当前core是local group的第一个core，或者local group里有
+            |      * idle的core。
+            |      */
+            | +-> should_we_balance
+            |     /*
+            |      * 其中的逻辑不只是“找见最繁忙的group”，当检测到没有必要作
+            |      * 均衡时，这个函数直接退出，并返回NULL。
+            |      */
+            | +-> find_busiest_group
+            |       /*
+            |        * 遍历domain里各个group，找到最繁忙的那个group，各种
+            |        * corner的情况也在这里处理。下面把find_busiest_group的
+            |        * 逻辑展开分析。
+            |        */
+            |   +-> update_sd_lb_stats
+            |     /* 找到最繁忙group里的最繁忙rq */
+            | +-> find_busiest_queue
+            | +-> detach_tasks
+            v +-> attach_tasks
+          }  
+    }
 ```
 
 这里展开下find_busiest_group的逻辑：
@@ -162,12 +163,24 @@ find_busiest_group
           |       /*
           |        * 每个group的一些统计信息是group中各个core的rq的信息之和：
           |        *
-          |        * group_load是group的负载，每个rq平均负载(load_avg)之和。
-          |        * group_util?
-          |        * group_runnable是每个rq的runnable_avg之和，todo
-          |        * sum_nr_running是每个rq h_nr_running之和， todo
+          |        * group_load是group的负载，每个rq平均负载(load_avg)之和，rq的
+          |        * load_avg是rq上每个调度实体的load_avg之和，每个调度实体的load_avg
+          |        * 是: 实际运行时间/在rq里的总时间在各个时间段上的衰减累加值。
+          |        *
+          |        * group_util？
+          |        *
+          |        * group_runnable是每个rq的runnable_avg之和，runnable_avg是rq
+          |        * 中各个调度实体的runnable_avg之和，调度实体中的runnable_avg
+          |        * 是平均实际运行时间。
+          |        *
+          |        * sum_nr_running是每个rq h_nr_running之和，rq的h_nr_running是
+          |        * rq中task的个数。
+          |        *
+          |        * nr_running和h_nr_running的区别？
+          |        *
+          |        * nr_numa_running/nr_preferred_running?
           |        */
-          |   +-> 更新group_load/group_util/group_runnable/sum_nr_running。
+          |   +-> 更新group_load/group_util/group_runnable/sum_nr_running/nr_running等。
           |       /*
           |        * 这个domain里的core有没有能力不等的，比如大小核，sd flags里
           |        * 的SD_ASYM_CPUCAPACITY这个标记在sd初始化的时候根据固件传入的
@@ -188,10 +201,12 @@ find_busiest_group
           |         }
           | }
           |
+          |     /* 检测group_asym_packing的场景？*/
           | +-> if (!local_group && env->sd->flags & SD_ASYM_PACKING && ...) {
           |       sgs->group_asym_packing = 1
           |     }
           |
+          |     /* 检测group_smt_balance的场景？*/
           | +-> if (!local_group && smt_balance(env, sgs, group))
           |       sgs->group_smt_balance = 1
           |
@@ -199,12 +214,17 @@ find_busiest_group
           |      * 负载均衡逻辑定义了group的负载类型，根据负载类型进行均衡逻辑，
           |      * 如下group包括local_group。
           |      *
-          |      * imbalance_pct是一个可以通过sysfs配置的系数，这个系数大概是117。
+          |      * imbalance_pct是一个可以通过sysfs配置的系数，具体路径为：
+          |      * /sys/kernel/debug/sched/domains/domainN/imbalance_pct，默认值
+          |      * 是110等。
           |      */
           | +-> sgs->group_type = group_classify(env->sd->imbalance_pct, group, sgs)
           |           /*
-          |            * overloaded指group的算力不满足需求了。可见，running线程
-          |            * 数量小于核数，不是overloaded； todo
+          |            * overloaded指group的算力不满足需求了。具体看，running线程
+          |            * 数量小于核数，不是overloaded；本组CPU的能力小于group_util
+          |            * (group_capacity * 100 < group_util * imbalance_pct)；本
+          |            * 组CPU的能力小于group_runnable(group_capacity * imbalance_pct <
+          |            * group_runnable * 100)
           |            */
           |       +-> group_is_overloaded(imbalance_pct, sgs)
           |           /* group里有用户配置的affinity? */
@@ -215,7 +235,7 @@ find_busiest_group
           |       +-> group_has_capacity(imbalance_pct, sgs)
           |           /* 剩下情况就是group里的算力有空余了 */
           |
-          |     /* todo: ... */
+          |     /* 对于overloaded的场景，更新group avg_load */
           | +-> sgs->avg_load = (sgs->group_load * SCHED_CAPACITY_SCALE) /
           |                     sgs->group_capacity;
           |
@@ -232,20 +252,128 @@ find_busiest_group
        * todo: migration_type的语意？
        */
   +-> calculate_imbalance(env, &sds)
+
+        /* 最繁忙group是特殊情况的，都要作负载均衡 */
+    +-> busiest->group_type == group_misfit_task/group_asym_packing/
+                               group_smt_balance/group_imbalanced
+
+        /* 目的group有负载空余的情况 */
+    +-> local->group_type == group_has_spare
+
+        /* 目的group是fully busy或特殊情况的 */
+    +-> local->group_type < group_overloaded
+
+        /* 目的group和最繁忙group都是overloaded */
 ```
 
 这里展开下find_busiest_queue的逻辑：
 ```
 find_busiest_queue
-  +-> 
+  +-> ...
 ```
 
 调试
 -----
 
-/proc/loadavg
-/proc/stat
-/sys/kernel/debug/sched/debug会输出大量调度相关的信息。
+/sys/kernel/debug/sched/debug会输出大量调度相关的信息：
+```
+# cat debug
+Sched Debug Version: v0.11, 6.8.0-rc5-00029-g39133352cbed-dirty #35
+ktime                                   : 77971.241760
+sched_clk                               : 78217.145648
+cpu_clk                                 : 78217.151952
+jiffies                                 : 4294911788
+
+sysctl_sched
+  .sysctl_sched_base_slice                 : 3.000000
+  .sysctl_sched_features                   : 6237751
+  .sysctl_sched_tunable_scaling            : 1 (logarithmic)
+
+cpu#0
+  .nr_running                    : 1
+  .nr_switches                   : 1391
+  .nr_uninterruptible            : 1
+  .next_balance                  : 4294.911795
+  .curr->pid                     : 217
+  .clock                         : 78226.130128
+  .clock_task                    : 77891.460592
+  .avg_idle                      : 1000000
+  .max_idle_balance_cost         : 500000
+
+cfs_rq[0]:/autogroup-17
+  .exec_clock                    : 0.000000
+  .left_deadline                 : 0.000001
+  .left_vruntime                 : 0.000001
+  .min_vruntime                  : 48.829024
+  .avg_vruntime                  : 48.829024
+  .right_vruntime                : 0.000001
+  .spread                        : 0.000000
+  .nr_spread_over                : 0
+  .nr_running                    : 1
+  .h_nr_running                  : 1
+  .idle_nr_running               : 0
+  .idle_h_nr_running             : 0
+  .load                          : 1048576
+  .load_avg                      : 1023
+  .runnable_avg                  : 757
+  .util_avg                      : 757
+  .util_est                      : 0
+  .removed.load_avg              : 0
+  .removed.util_avg              : 0
+  .removed.runnable_avg          : 0
+  .tg_load_avg_contrib           : 1024
+  .tg_load_avg                   : 1218
+  .se->exec_start                : 77891.460592
+  .se->vruntime                  : 757.395153
+  .se->sum_exec_runtime          : 49.877600
+  .se->load.weight               : 881561
+  .se->avg.load_avg              : 859
+  .se->avg.util_avg              : 757
+  .se->avg.runnable_avg          : 757
+
+cfs_rq[0]:/
+  .exec_clock                    : 0.000000
+  .left_deadline                 : 0.000001
+  .left_vruntime                 : 0.000001
+  .min_vruntime                  : 757.395153
+  .avg_vruntime                  : 757.395153
+  .right_vruntime                : 0.000001
+  .spread                        : 0.000000
+  .nr_spread_over                : 0
+  .nr_running                    : 1
+  .h_nr_running                  : 1
+  .idle_nr_running               : 0
+  .idle_h_nr_running             : 0
+  .load                          : 881561
+  .load_avg                      : 862
+  .runnable_avg                  : 759
+  .util_avg                      : 759
+  .util_est                      : 0
+  .removed.load_avg              : 0
+  .removed.util_avg              : 0
+  .removed.runnable_avg          : 0
+  .tg_load_avg_contrib           : 0
+  .tg_load_avg                   : 0
+
+rt_rq[0]:
+  .rt_nr_running                 : 0
+  .rt_throttled                  : 0
+  .rt_time                       : 0.000000
+  .rt_runtime                    : 950.000000
+
+dl_rq[0]:
+  .dl_nr_running                 : 0
+  .dl_bw->bw                     : 996147
+  .dl_bw->total_bw               : 0
+[...]
+```
+
+/sys/kernel/debug/sched/domains有调度域的debug信息，目前似乎没有调度组的debug信息。
+
+proc文件系统中的debug选项有：/proc/loadavg, /proc/stat。调度实体的debug信息可以
+参考/proc/<pid>/schedstat。
+
+Note(no post):
 
 1. 各个调度域多长时间均衡一次?
 2. 到达怎么样的不平衡程度才要做均衡？

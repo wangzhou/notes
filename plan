@@ -268,9 +268,9 @@ memory migration		 		      to do
 rmap						      to do *
 
 linux进程调度：
- - CFS                                    repost
+ - CFS                                    c
  - 调度域和调度组                         topost
- - load计算/线程迁移/负载均衡             doing
+ - load计算/线程迁移/负载均衡             topost
  - numa balance 	                  c
  - 调度带宽限制				  todo
 

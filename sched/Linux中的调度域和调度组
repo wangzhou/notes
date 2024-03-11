@@ -158,43 +158,43 @@ cpu1   cpu11  cpu13  cpu15  cpu3   cpu5   cpu7   cpu9
 # tree 
 .
 ├── domain0
-│   ├── busy_factor
-│   ├── cache_nice_tries
+│   ├── busy_factor             16
+│   ├── cache_nice_tries        0
 │   ├── flags
 │   ├── groups_flags
-│   ├── imbalance_pct
-│   ├── max_interval
+│   ├── imbalance_pct           110
+│   ├── max_interval            4
 │   ├── max_newidle_lb_cost
-│   ├── min_interval
+│   ├── min_interval            2
 │   └── name               <--- SMT
 ├── domain1
-│   ├── busy_factor
-│   ├── cache_nice_tries
+│   ├── busy_factor             16
+│   ├── cache_nice_tries        1
 │   ├── flags
 │   ├── groups_flags
-│   ├── imbalance_pct
-│   ├── max_interval
+│   ├── imbalance_pct           117
+│   ├── max_interval            8
 │   ├── max_newidle_lb_cost
-│   ├── min_interval
+│   ├── min_interval            4
 │   └── name               <--- CLS
 ├── domain2
-│   ├── busy_factor
-│   ├── cache_nice_tries
+│   ├── busy_factor             16
+│   ├── cache_nice_tries        1
 │   ├── flags
 │   ├── groups_flags
-│   ├── imbalance_pct
-│   ├── max_interval
+│   ├── imbalance_pct           117
+│   ├── max_interval            16
 │   ├── max_newidle_lb_cost
-│   ├── min_interval
+│   ├── min_interval            8
 │   └── name               <--- MC
 └── domain3
-    ├── busy_factor
-    ├── cache_nice_tries
+    ├── busy_factor             16
+    ├── cache_nice_tries        2
     ├── flags
     ├── groups_flags
-    ├── imbalance_pct
-    ├── max_interval
+    ├── imbalance_pct           117
+    ├── max_interval            32
     ├── max_newidle_lb_cost
-    ├── min_interval
+    ├── min_interval            16
     └── name               <--- NUMA
 ```
