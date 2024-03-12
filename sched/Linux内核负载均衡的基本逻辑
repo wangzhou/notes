@@ -2,6 +2,7 @@
 -v0.2 2024.3.7  sherlock 分析代码
 -v0.3 2024.3.8  sherlock 分析代码
 -v0.4 2024.3.11 sherlock 分析代码
+-v0.5 2024.3.12 sherlock 分析代码
 
 简介：本文总结Linux内核里负载均衡的基本逻辑，分析使用的内核版本是6.8-rc5。
 
@@ -87,11 +88,18 @@ CPU本身的计算能力也影响负载均衡的策略，比如一个大小核�
 负载均衡还要处理人为线程邦核的情况，邦核的线程显然是不能动了，负载均衡的逻辑就要
 绕开被绑的线程，针对其它线程进行调整。
 
-除了时钟中断定时触发负载均衡，系统中的线程在需要调度的时候(wakeup)都会看看哪个CPU
-核上更合适执行任务，进而触发线程迁移。系统中可能出现处于不同NUMA的线程共用相同内
-存的情况，这样不管怎么做NUMA balancing，始终有垮NUMA使用内存的情况存在，所以NUMA
-balancing的逻辑里会检测这种情况，并相应的做线程迁移，把不同NUMA上的线程迁移到相同
-NUMA节点上。(todo: nohz场景下的负载均衡)
+除了时钟中断定时触发负载均衡，系统中的线程在需要调度的时候(fork/wakeup)都会看看
+哪个CPU核上更合适执行任务，进而触发线程迁移。当core进入没有任务运行进入idle时，
+也会尝试进行需在均衡，把其它core上的负载拉到idle的自己上运行，这种负载均衡的触发
+方式叫new idle load balance。当core进入idle，又没有周期性的时钟中断时(内核打开
+noHZ的配置)，如果又有其它core上负载过重，这时没有时钟中断触发的负载均衡逻辑从重
+负载core上拉负载，如果又没有new idle load balance，那么重负载core上的负载将得不
+到均衡，对于这种情况，重负载core上的负载均衡逻辑会给其它的idle core发IPI触发idle
+core进行负载均衡，这种负载均衡的触发方式叫noHz idle load balance。
+
+系统中可能出现处于不同NUMA的线程共用相同内存的情况，这样不管怎么做NUMA balancing，
+始终有垮NUMA使用内存的情况存在，所以NUMAbalancing的逻辑里会检测这种情况，并相应
+的做线程迁移，把不同NUMA上的线程迁移到相同NUMA节点上。
 
 我们下面先分析调度子系统中各种负载定义，然后分析负载均核的具体逻辑。
 
@@ -121,8 +129,12 @@ run_rebalance_domains
            * 得到这一级domain的扫描间隔时间，这个时间可以通过sysfs的接口手动调整，
            * /sys/kernel/debug/sched/domains/domainN/max(min)_interval。可以看到
            * domain从低到高，max_interval的值是4ms/8ms/16ms/32ms。
+           *
+           * 如果当前core是busy的，就是正在跑task，interval会再乘上busy_factor，
+           * 这个系数可以通过sysfs接口调整，使得有task运行的core不急于做均衡:
+           * /sys/kernel/debug/sched/domains/domainN/busy_factor，目前默认是16。
            */
-      +-> interval = get_sd_balance_interval
+      +-> interval = get_sd_balance_interval(sd, busy)
           /* 到了时间才进行均衡的逻辑 */
       +-> if (time_after_eq(jiffies, sd->last_balance + interval)) {
             +-> load_balance(cpu, rq, sd, idle, &continue_balancing)
@@ -155,9 +167,9 @@ run_rebalance_domains
 find_busiest_group
   +-> init_sd_lb_stats(&sds)
   +-> update_sd_lb_stats(env, &sds)
-        /* 遍历domain里的每个group */
+        /* 遍历domain里的每个group，在非local_group中找最繁忙group */
     +-> do {
-              /* 对于一个group，更新其负载信息 */
+              /* 对于每个group(包括local)，更新其负载信息 */
           +-> update_sg_lb_stats(env, sds, sg, sgs, &sg_status)
           ^ for_each_cpu_and(i, sched_group_span(group), env->cpus) {
           |       /*
@@ -242,18 +254,97 @@ find_busiest_group
           v   /* 如果传入的sg比sds中记录的busier，就更新记录的值*/
           +-> update_sd_pick_busiest(env, sds, sg, sgs)
         }
-  +-> /* 不要需要负载均衡时，直接返回NULL。需要作负载均衡，跳到calculate_imbalance */
 
       /*
-       * 对于需要作负载均衡的情况，跳到这里计算不均衡负载的值，同时把group type
-       * 转化成migration_type。后续find_busiest_queue根据migration_type作线程迁移
-       * 之前的准备。
+       * 如下是根据上面得到local/busiest group所做出是否要做负载均衡的判断。不要
+       * 需要负载均衡时，直接返回NULL。需要作负载均衡，跳到calculate_imbalance。
+       * 我们逐个看看这些判断的规则。
+       */
+
+      /*
+       * 对于最繁忙group是misfit_task情况直接做balance，asym_packing/imbalanced
+       * 的情况也是一样的。
+       */
+  +-> if (busiest->group_type == group_misfit_task)                           
+        goto force_balance;                                             
+
+      /*
+       * local group比最繁忙group group_type更大，因为上面已经对最繁忙group检测
+       * 了imbalanced/asym_packing/misfit_task，这里最繁忙group只能是has_spare/
+       * fully_busy/smt_balance/overloaded，在最繁忙group这样取值时，local group
+       * 大于最繁忙的group，则不做balance。
+       */
+  +-> if (local->group_type > busiest->group_type)                            
+        goto out_balanced;                                              
+
+      /*
+       * local group是overloaded，busiest group比overloaded小的情况，上面已经过
+       * 滤了，所以这里busiest group也是overloaded。
+       */
+  +-> if (local->group_type == group_overloaded) {                            
+
+        /* local的平均负载比busiest大，则不做负载均衡 */
+        if (local->avg_load >= busiest->avg_load)                       
+                goto out_balanced;                                      
+
+        /* local的平均负载比domain的负载大，也不做负载均衡 */ 
+        sds.avg_load = (sds.total_load * SCHED_CAPACITY_SCALE) /        
+                        sds.total_capacity;                             
+        if (local->avg_load >= sds.avg_load)                            
+                goto out_balanced;                                      
+
+        /*
+         * 这里看是给local load再加上一个系数，搞的迁移更加保守，imbalance_pct
+         * 越大，迁移越难。imbalance_pct默认值是110。
+         */
+        if (100 * busiest->avg_load <= env->sd->imbalance_pct * local->avg_load)       
+                goto out_balanced;                                      
+      }
+
+      /* 没有看懂这里？ */
+  +-> if (sds.prefer_sibling && local->group_type == group_has_spare &&       
+          sibling_imbalance(env, &sds, busiest, local) > 1)                   
+              goto force_balance;                                             
+                                                                              
+      /*
+       * busiest group不是overloaded，再排除imbalanced/asym_packing/misfit_task，
+       * busiest group只能是has_spare/fully_busy/smt_balance，上面local group大于
+       * busiest group已经处理，这里为local_group小于等于busiest group。
+       */
+  +-> if (busiest->group_type != group_overloaded) {                          
+        /* local_group虽然负载比busiest小，但是有task运行时，也不做均衡 */
+        if (env->idle == CPU_NOT_IDLE)
+                goto out_balanced;                                      
+
+        /*
+         * 如果busiest group里有多个SMT core，但是local group没有，从busiest 
+         * group上拉task到local group。
+         */
+        if (busiest->group_type == group_smt_balance &&                 
+            smt_vs_nonsmt_groups(sds.local, sds.busiest))
+                goto force_balance;                                     
+
+        /* busiest group中的idle_cpus越多越不应该做均衡 */
+        if (busiest->group_weight > 1 && local->idle_cpus <= (busiest->idle_cpus + 1))
+                goto out_balanced;                                      
+                                                                        
+        /* busiest group里其实没有有用的task在跑，不需要做均衡 */
+        if (busiest->sum_h_nr_running == 1)
+                goto out_balanced;                                      
+      }
+
+      /*
+       * 对于需要作负载均衡的情况，跳到这里定量计算不均衡负载的值，同时把group
+       * type转化成migration_type。后续find_busiest_queue根据migration_type作线
+       * 程迁移之前的准备。
        *
-       * todo: migration_type的语意？
+       * migration_type有：load/util/task/misfit，migration_type的不同对应的不均
+       * 衡值imbalance的含义不同，misfit/task时，imbalance是task的个数，load时，
+       * imbalance是不平衡的负载值，util时，imbalance是CPU的util值？
        */
   +-> calculate_imbalance(env, &sds)
 
-        /* 最繁忙group是特殊情况的，都要作负载均衡 */
+        /* 最繁忙group是特殊情况的 */
     +-> busiest->group_type == group_misfit_task/group_asym_packing/
                                group_smt_balance/group_imbalanced
 
