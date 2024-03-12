@@ -41,15 +41,15 @@ core1的就绪队列(rq)上有四个线程需要执行，core0的最底层domain
 time1:
                     ||||
            core0   core1   core2   core3
-          
+
 time2:
             ||      ||
            core0   core1   core2   core3
-          
+
 time3:
              |      ||       |
            core0   core1   core2   core3
-          
+
 time4:       |       |       |       |
            core0   core1   core2   core3
 ```
@@ -158,7 +158,7 @@ run_rebalance_domains
             | +-> find_busiest_queue
             | +-> detach_tasks
             v +-> attach_tasks
-          }  
+          }
     }
 ```
 
@@ -265,8 +265,8 @@ find_busiest_group
        * 对于最繁忙group是misfit_task情况直接做balance，asym_packing/imbalanced
        * 的情况也是一样的。
        */
-  +-> if (busiest->group_type == group_misfit_task)                           
-        goto force_balance;                                             
+  +-> if (busiest->group_type == group_misfit_task)
+        goto force_balance;
 
       /*
        * local group比最繁忙group group_type更大，因为上面已经对最繁忙group检测
@@ -274,63 +274,63 @@ find_busiest_group
        * fully_busy/smt_balance/overloaded，在最繁忙group这样取值时，local group
        * 大于最繁忙的group，则不做balance。
        */
-  +-> if (local->group_type > busiest->group_type)                            
-        goto out_balanced;                                              
+  +-> if (local->group_type > busiest->group_type)
+        goto out_balanced;
 
       /*
        * local group是overloaded，busiest group比overloaded小的情况，上面已经过
        * 滤了，所以这里busiest group也是overloaded。
        */
-  +-> if (local->group_type == group_overloaded) {                            
+  +-> if (local->group_type == group_overloaded) {
 
         /* local的平均负载比busiest大，则不做负载均衡 */
-        if (local->avg_load >= busiest->avg_load)                       
-                goto out_balanced;                                      
+        if (local->avg_load >= busiest->avg_load)
+                goto out_balanced;
 
-        /* local的平均负载比domain的负载大，也不做负载均衡 */ 
-        sds.avg_load = (sds.total_load * SCHED_CAPACITY_SCALE) /        
-                        sds.total_capacity;                             
-        if (local->avg_load >= sds.avg_load)                            
-                goto out_balanced;                                      
+        /* local的平均负载比domain的负载大，也不做负载均衡 */
+        sds.avg_load = (sds.total_load * SCHED_CAPACITY_SCALE) /
+                        sds.total_capacity;
+        if (local->avg_load >= sds.avg_load)
+                goto out_balanced;
 
         /*
          * 这里看是给local load再加上一个系数，搞的迁移更加保守，imbalance_pct
          * 越大，迁移越难。imbalance_pct默认值是110。
          */
-        if (100 * busiest->avg_load <= env->sd->imbalance_pct * local->avg_load)       
-                goto out_balanced;                                      
+        if (100 * busiest->avg_load <= env->sd->imbalance_pct * local->avg_load)
+                goto out_balanced;
       }
 
       /* 没有看懂这里？ */
-  +-> if (sds.prefer_sibling && local->group_type == group_has_spare &&       
-          sibling_imbalance(env, &sds, busiest, local) > 1)                   
-              goto force_balance;                                             
-                                                                              
+  +-> if (sds.prefer_sibling && local->group_type == group_has_spare &&
+          sibling_imbalance(env, &sds, busiest, local) > 1)
+              goto force_balance;
+
       /*
        * busiest group不是overloaded，再排除imbalanced/asym_packing/misfit_task，
        * busiest group只能是has_spare/fully_busy/smt_balance，上面local group大于
        * busiest group已经处理，这里为local_group小于等于busiest group。
        */
-  +-> if (busiest->group_type != group_overloaded) {                          
+  +-> if (busiest->group_type != group_overloaded) {
         /* local_group虽然负载比busiest小，但是有task运行时，也不做均衡 */
         if (env->idle == CPU_NOT_IDLE)
-                goto out_balanced;                                      
+                goto out_balanced;
 
         /*
-         * 如果busiest group里有多个SMT core，但是local group没有，从busiest 
+         * 如果busiest group里有多个SMT core，但是local group没有，从busiest
          * group上拉task到local group。
          */
-        if (busiest->group_type == group_smt_balance &&                 
+        if (busiest->group_type == group_smt_balance &&
             smt_vs_nonsmt_groups(sds.local, sds.busiest))
-                goto force_balance;                                     
+                goto force_balance;
 
         /* busiest group中的idle_cpus越多越不应该做均衡 */
         if (busiest->group_weight > 1 && local->idle_cpus <= (busiest->idle_cpus + 1))
-                goto out_balanced;                                      
-                                                                        
+                goto out_balanced;
+
         /* busiest group里其实没有有用的task在跑，不需要做均衡 */
         if (busiest->sum_h_nr_running == 1)
-                goto out_balanced;                                      
+                goto out_balanced;
       }
 
       /*
