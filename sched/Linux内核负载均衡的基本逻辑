@@ -171,7 +171,7 @@ numa_faults node=0 task_private=0 task_shared=0 group_private=0 group_shared=0
 
 todo: load_avg/runnable_avg/util_avg的计算没有看懂。
 
-相关的数据结构为：
+负载相关的数据结构为struct sched_avg，调度实体中会内嵌一个sched_avg。
 ```
 struct sched_entity {
 
@@ -189,7 +189,7 @@ struct sched_entity {
 }
 ```
 
-相关的计算更新基本逻辑为：
+负载相关的更新点有很多，最终都会调用到update_load_avg。
 ```
 update_load_avg
 ```
