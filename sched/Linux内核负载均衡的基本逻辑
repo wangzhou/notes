@@ -1,9 +1,6 @@
--v0.1 2024.3.1  sherlock init
--v0.2 2024.3.7  sherlock 分析代码
--v0.3 2024.3.8  sherlock 分析代码
--v0.4 2024.3.11 sherlock 分析代码
--v0.5 2024.3.12 sherlock 分析代码
--v0.6 2024.3.13 sherlock 分析代码
+-v0.1 2024.3.1       sherlock init
+-v0.2 2024.3.7-3.8   sherlock 分析代码
+-v0.3 2024.3.11-3.14 sherlock 分析代码
 
 简介：本文总结Linux内核里负载均衡的基本逻辑，分析使用的内核版本是6.8-rc5。
 
@@ -121,7 +118,58 @@ task存在的总时间的比值做负载的度量：
 ```
 可以看到对于一个计算密集性的task，这个比值是接近1的，为了避免小数乘以1024，最终
 这个值是接近1024的。当一个core上有多个计算密集性的task时，负载接近task的个数乘以
-1024。
+1024。需要注意的是，这种基于每个调度实体的负载计算方法是在v3.8的内核版本引入的，
+名字叫per-entity load tracking(PELT)。
+
+Linux内核在计算一个task或者一个调度实体的负载时，考虑了过去一段时间的负载对未来
+的可能影响。直观上看，内核计算本时刻的负载，是为了调度服务，如果本时刻的负载很高，
+调度器把task安排到合适的core上执行，下个时刻负载变的很低，这种安排就是不合理的，
+所以，考虑过去一段时间的负载，是为了通过过去负载数据，得到这个调度实体的负载基本
+情况。
+
+具体上看，内核把负载的统计时间段(period)设定为1024us(大概是1ms，1024是为了方便计
+算)，调度实体某个时间的负载定义，是过去各个时间段的负载和一个逐渐减小的衰减系数
+乘积之和：
+```
+ load_sum = v0 + v1 * y^1 + v2 * y^2 + ... vn * y^n, 其中定义y^32 ~= 0.5。
+```
+在一个period内，如果调度实体一直在rq，那么对应的vn值就是1024。如上这个等比数列有
+最大值存在，内核里对这个值的定义是：#define LOAD_AVG_MAX 47742。我们可以写个demo
+的死循环程序，运行一段时间后观察对应task的load_sum的值。可以看到如下的se.avg.load_sum
+的值比较接近最大值。从内核的计算代码上看，runnable_sum每次计算会乘上1024，util_sum
+也会每次计算会乘上1024，但是util_sum只在task在CPU上运行时计算。
+```
+# cat /proc/120/sched
+a.out (120, #threads: 1)
+-------------------------------------------------------------------
+se.exec_start                                :        115459.735792
+se.vruntime                                  :         81051.015808
+se.sum_exec_runtime                          :         80699.256128
+se.nr_migrations                             :                    0
+nr_switches                                  :                  603
+nr_voluntary_switches                        :                   43
+nr_involuntary_switches                      :                  560
+se.load.weight                               :              1048576
+se.avg.load_sum                              :                47719  <---
+se.avg.runnable_sum                          :             48870356
+se.avg.util_sum                              :             44864269
+se.avg.load_avg                              :                 1023
+se.avg.runnable_avg                          :                 1023
+se.avg.util_avg                              :                  940
+se.avg.last_update_time                      :         115459735552
+se.avg.util_est                              :                  664
+policy                                       :                    0
+prio                                         :                  120
+clock-delta                                  :                  672
+mm->numa_scan_seq                            :                    0
+numa_pages_migrated                          :                    0
+numa_preferred_nid                           :                   -1
+total_numa_faults                            :                    0
+current_node=0, numa_group_id=0
+numa_faults node=0 task_private=0 task_shared=0 group_private=0 group_shared=0
+```
+
+todo: load_avg/runnable_avg/util_avg的计算没有看懂。
 
 相关的数据结构为：
 ```
@@ -145,8 +193,6 @@ struct sched_entity {
 ```
 update_load_avg
 ```
-
-(todo: 怎么进行观测?)
 
 代码分析
 ---------
