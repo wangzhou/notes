@@ -270,15 +270,16 @@ rmap						      to do *
 linux进程调度：
  - CFS                                    c
  - 调度域和调度组                         topost
- - load计算/线程迁移/负载均衡             topost
+ - 线程迁移/负载均衡                      topost
  - numa balance 	                  c
  - 调度带宽限制				  todo
+ - load计算				  todo
+ - nohz的逻辑				  todo
 
  per-cpu 			          todo
  统计系统里负载均衡中跨numa的次数         todo
  perf software event的实现(migration)	  todo
  softirq				  todo
- nohz的逻辑				  todo
  cpu load显示/线程迁移显示		  todo
  最底层的调度域对么？
 
