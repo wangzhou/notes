@@ -430,7 +430,7 @@ cfs_rq[0]:/
   .h_nr_running                  : 1
   .idle_nr_running               : 0
   .idle_h_nr_running             : 0
-  .load                          : 881561
+  .load                          : 881561      <--- cfs_rq->load.weight
   .load_avg                      : 862
   .runnable_avg                  : 759
   .util_avg                      : 759

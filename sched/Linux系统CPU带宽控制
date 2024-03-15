@@ -1,10 +1,10 @@
 -v0.1 2024.03.13 Sherlock init
--v0.2 2024.03.14 Sherlock
+-v0.2 2024.03.14 Sherlock 增加CPU cgroup使用举例
+-v0.3 2024.03.15 Sherlock 增加基本逻辑
 
 简介: 本文总结Linux内核里关于CPU使用带宽控制的基本逻辑。Linux是一个多用户的操作
       系统，管理员可以通过一定的手段控制用户(线程)对CPU资源的使用，本文分析内核
       对这个特性的支持逻辑。
-
 
 使用cgroup限制线程对CPU使用
 ----------------------------
@@ -57,3 +57,17 @@ root@m1:/sys/fs/cgroup/cpu/my_test# echo 50000 > cpu.cfs_quota_us
     PID USER      PRI  NI  VIRT   RES   SHR S CPU% MEM%   TIME+  Command
 3818875 sherlock   20   0  1788   432   368 R 49.5  0.0  3:21.22 ./a.out
 ```
+
+基本逻辑
+---------
+
+
+
+
+代码分析
+---------
+
+
+
+
+

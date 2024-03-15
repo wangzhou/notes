@@ -116,26 +116,26 @@ update_load_avg(struct cfs_rq *cfs_rq, struct sched_entity *se, int flags)
        /* 计算各个平均量, load_avg计算中乘的load是这个se的权重 */
        ___update_load_avg(&se->avg, se_weight(se));
 
-             /*
-              * 除数为：PELT_MIN_DIVIDE + avg->period_contrib，即：
-              *         LOAD_AVG_MAX*y + avg->period_contrib
-              *
-              * avg->period_contrib的含义是上面计算xxx_sum时，对于1024us的时间段，
-              * 多余出来的时间。
-              *                           inf                  inf
-              * LOAD_AVG_MAX * y = ( 1024 Sum y^n ) * y = 1024 Sum y^n
-              *                           n=0                  n=1
-              *
-              * 所以，LOAD_AVG_MAX*y + avg->period_contrib为：
-              *
-              *      inf    
-              * 1024 Sum y^n + avg->period_contrib，是这个时间点sum的理论最大值。
-              *      n=1    
-              *
-              * 总结下，对于一个计算很密集的se(或task)，load_avg会近似为它的权重，
-              * runnable_avg会近似为1024(1 << SCHED_CAPACITY_SHIFT)，util_avg?
-              *
-              */
+            /*
+             * 除数为：PELT_MIN_DIVIDE + avg->period_contrib，即：
+             *         LOAD_AVG_MAX*y + avg->period_contrib
+             *
+             * avg->period_contrib的含义是上面计算xxx_sum时，对于1024us的时间段，
+             * 多余出来的时间。
+             *                           inf                  inf
+             * LOAD_AVG_MAX * y = ( 1024 Sum y^n ) * y = 1024 Sum y^n
+             *                           n=0                  n=1
+             *
+             * 所以，LOAD_AVG_MAX*y + avg->period_contrib为：
+             *
+             *      inf    
+             * 1024 Sum y^n + avg->period_contrib，是这个时间点sum的理论最大值。
+             *      n=1    
+             *
+             * 总结下，对于一个计算很密集的se(或task)，load_avg会近似为它的权重，
+             * runnable_avg会近似为1024(1 << SCHED_CAPACITY_SHIFT)，util_avg?
+             *
+             */
          +-> sa->load_avg = div_u64(load * sa->load_sum, divider);
          +-> sa->runnable_avg = div_u64(sa->runnable_sum, divider);
          +-> WRITE_ONCE(sa->util_avg, sa->util_sum / divider);
@@ -143,13 +143,31 @@ update_load_avg(struct cfs_rq *cfs_rq, struct sched_entity *se, int flags)
        cfs_se_util_change(&se->avg);
     }
 
-      /* 计算一个cfs_rq的各种负载统计，没有搞懂这里的逻辑？*/
+      /*
+       * 计算一个cfs_rq的各种负载统计，应该是rq上各个se的负载相加。在把一个se加
+       * 入rq时，会把se的负载统计加入rq的负载统计，代码路径在：(以CFS为例)
+       * sched_class->switched_to_fair->attach_task_cfs_rq->attach_entity_cfs_rq
+       * ->attach_entity_load_avg。
+       *
+       * 注意这里把cfs_rq->avg里的负载统计，也和entity->avg一样，使用衰减系数加
+       * 权处理了下。但是，在计算sum值时，传入的参数不一样，load为
+       * scale_load_down(cfs_rq->load.weight)，runnable是rq上的线程数，running是
+       * 是否为CPU上正在运行的线程。
+       *
+       * 使用衰减系数加权的办法得到一个动态变化量的描述，cfs_rq的负载也这样计算
+       * 是没有问题的，需要注释的是为什么同样一套逻辑可以既处理se的负载又可以处
+       * 理cfs_rq的负载。
+       */
   +-> decayed  = update_cfs_rq_load_avg(now, cfs_rq);
     +-> decayed |= __update_load_avg_cfs_rq(now, cfs_rq);
 
-      /* 没有搞懂下面的逻辑？*/
+      /* 没有搞懂这里的逻辑？*/
   +-> decayed |= propagate_entity_load_avg(se);
 
+      /*
+       * 如果是se挂入rq的情况, 并且是挂入一个新的CPU，可以看到se相关的负载统计
+       * 也一并加到rq的负载统计里。
+       */
   +-> if (!se->avg.last_update_time && (flags & DO_ATTACH)) {
 
         attach_entity_load_avg(cfs_rq, se);
@@ -163,6 +181,7 @@ update_load_avg(struct cfs_rq *cfs_rq, struct sched_entity *se, int flags)
   +-> } else if (decayed) {
 
         cfs_rq_util_change(cfs_rq, 0);
+          +-> cpufreq_update_util
 
         if (flags & UPDATE_TG)
           update_tg_load_avg(cfs_rq);
@@ -199,4 +218,6 @@ load_sum = v0 + v1 * y^1 + v2 * y^2 + ... vn * y^n ...
          = d3 + 1024 Sum* y^n +  d1 * y^p + (p_c + 1024 * y^1 + 1024 * y^2 + ...)
                      n=1                    |<-- 就是上次更新时间点负载的定义-->|
 ```                                             
-如上的结果就是内核accumulate_sum函数的注释中一开始的公式。
+如上的结果就是内核accumulate_sum函数的注释中一开始的公式。需要注意的是d2域段的系
+数为什么都是1024，参考本文一开始的负载计算的逻辑，只要d2这段时间，se都在rq里，那
+么rq时间和每一段的时间相等，比值就只剩下1024了。
