@@ -1,4 +1,5 @@
 -v0.1 2024.3.14 Sherlock init
+-v0.1 2024.3.15 Sherlock 分析代码
 
 简介：本文总结Linux内核中调度子系统内负载计算的基本逻辑。分析依赖的内核版本是v6.8-rc5。
 
@@ -106,27 +107,40 @@ update_load_avg(struct cfs_rq *cfs_rq, struct sched_entity *se, int flags)
 
     /*
      * 计算调度实体的load_sum/runnable_sum/util_sum，xxx_sum就是上面提到的各个
-     * period时间段加权统计量的和。xxx_sum的计算使用了一些技巧，我们把这个函数
+     * period时间段加权统计量的和。xxx_sum的计算使用了一些技巧，我们把其中的逻辑
      * 单独抽出来分析。
      */
     if (___update_load_sum(now, &se->avg, !!se->on_rq, se_runnable(se),
                             cfs_rq->curr == se)) {
 
-            /* 计算各个平均量, load_avg计算中乘的load是这个se的权重 */
-            ___update_load_avg(&se->avg, se_weight(se));
+       /* 计算各个平均量, load_avg计算中乘的load是这个se的权重 */
+       ___update_load_avg(&se->avg, se_weight(se));
 
-                  /*
-                   * 除数为：PELT_MIN_DIVIDE + avg->period_contrib，即：
-                   *         LOAD_AVG_MAX - 1024 + avg->period_contrib
-                   *
-                   * avg->period_contrib的含义是上面计算xxx_sum时，对于1024us的
-                   * 时间段，多余出来的时间。但是，不理解除数的整体含义？
-                   */
-              +-> sa->load_avg = div_u64(load * sa->load_sum, divider);
-              +-> sa->runnable_avg = div_u64(sa->runnable_sum, divider);
-              +-> WRITE_ONCE(sa->util_avg, sa->util_sum / divider);
+             /*
+              * 除数为：PELT_MIN_DIVIDE + avg->period_contrib，即：
+              *         LOAD_AVG_MAX*y + avg->period_contrib
+              *
+              * avg->period_contrib的含义是上面计算xxx_sum时，对于1024us的时间段，
+              * 多余出来的时间。
+              *                           inf                  inf
+              * LOAD_AVG_MAX * y = ( 1024 Sum y^n ) * y = 1024 Sum y^n
+              *                           n=0                  n=1
+              *
+              * 所以，LOAD_AVG_MAX*y + avg->period_contrib为：
+              *
+              *      inf    
+              * 1024 Sum y^n + avg->period_contrib，是这个时间点sum的理论最大值。
+              *      n=1    
+              *
+              * 总结下，对于一个计算很密集的se(或task)，load_avg会近似为它的权重，
+              * runnable_avg会近似为1024(1 << SCHED_CAPACITY_SHIFT)，util_avg?
+              *
+              */
+         +-> sa->load_avg = div_u64(load * sa->load_sum, divider);
+         +-> sa->runnable_avg = div_u64(sa->runnable_sum, divider);
+         +-> WRITE_ONCE(sa->util_avg, sa->util_sum / divider);
 
-            cfs_se_util_change(&se->avg);
+       cfs_se_util_change(&se->avg);
     }
 
       /* 计算一个cfs_rq的各种负载统计，没有搞懂这里的逻辑？*/
@@ -156,21 +170,33 @@ update_load_avg(struct cfs_rq *cfs_rq, struct sched_entity *se, int flags)
 ```
 
 ___update_load_sum细节逻辑展开如下。我们的目的是计算如上load_sum的值，计算load_sum
-的值其实不必要知道过去每个1024us域段对应的vn值：
+的值其实不必要知道过去每个1024us域段对应的vn值，我们直接借助内核代码里的注释说明
+问题。
+```
+  period_contrib  d1          d2           d3                                        
+              ^   ^           ^            ^                                         
+              |   |           |            |                                         
+            |<->|<->|<----------------->|<--->|                                      
+        ... |---x---|------| ... |------|-----x (now)                                
+                ^     n=p-1        n = 1      ^
+                |                             |
+       
+          上次更新时间点                本次更新时间点
+```
+本次更新时间点负载的定义以及推导如下，p_c是上面period_contrib的简称。
 ```
 load_sum = v0 + v1 * y^1 + v2 * y^2 + ... vn * y^n ...
+         
+         = d3 + 1024 * y^1 + 1024 * y^2 + ... 1024 * y^(p - 1) + (d1 + p_c) * y^p + ...
 
-         = v0 + (v1 + v2 * y^1 + ... vn * y^(n - 1) ...) * y  <--- 从第二项开始每项提出y
-
-	 = v1 + load_sum' * y
-```
-如上一个时间的load_sum值等于当前1024us的vn值和之前一个1024us时刻的load_sum'和y的
-乘积。
-
-```
-___update_load_sum
-  +-> 
-
-```
-
-
+                     p-1
+         = d3 + 1024 Sum* y^n +  (d1 + p_c) * y^p + ...
+                     n=1
+                     p-1
+         = d3 + 1024 Sum* y^n +  d1 * y^p + p_c * y^p + 1024 *y^(p + 1) + ...
+                     n=1
+                     p-1
+         = d3 + 1024 Sum* y^n +  d1 * y^p + (p_c + 1024 * y^1 + 1024 * y^2 + ...)
+                     n=1                    |<-- 就是上次更新时间点负载的定义-->|
+```                                             
+如上的结果就是内核accumulate_sum函数的注释中一开始的公式。
