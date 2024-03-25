@@ -457,7 +457,7 @@ dl_rq[0]:
 /sys/kernel/debug/sched/domains有调度域的debug信息，目前似乎没有调度组的debug信息。
 
 proc文件系统中的debug选项有：/proc/loadavg, /proc/stat。调度实体的debug信息可以
-参考/proc/<pid>/schedstat。
+参考/proc/\<pid\>/schedstat。
 
 Note(no post):
 
