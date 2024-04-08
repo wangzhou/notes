@@ -285,3 +285,5 @@ linux进程调度：
  softirq				  todo
  cpu load显示/线程迁移显示		  todo
  最底层的调度域对么？
+
+ wfe/wfi qemu实现			  todo
