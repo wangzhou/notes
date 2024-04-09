@@ -1,0 +1,19 @@
+-v0.1 2024.4.9 Sherlock init
+
+简介：迅速记录下Linux内核编译时符号导出的问题。
+
+
+在内核代码外编译一个内核模块，发现总是出现“ERROR: modpost: "class_create" xxxx undefinded!
+
+这个错误表示内核模块里使用了class_create这个符号，但是编译的时候检测到内核没有
+导出这个符号。
+
+编译内核的时候会把导出的符号都放到顶层的Module.symvers中，去Module.symvers中看确
+实是没有class_create的，但是，去看源码，class_create确实被EXPORT出来了。
+
+最后发现，把编译命令从make -j Image改成make -j就可以了，改过之后重新编译，
+Module.symvers也有class_create，自然内核模块编译也通过了。 
+
+make -j是编译Image和所有module。重新make Image了下，发现根本没有生成Module.symvers，
+make -j才会生成Module.symvers。看来，之前的Module.symvers是之前make -j生成的，
+而且之前的内核版本和当前的内核版本不一样，才出现了这个问题。
