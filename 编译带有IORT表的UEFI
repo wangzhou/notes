@@ -1,0 +1,7 @@
+-v0.1 2017.2.22 Sherlock init
+
+编译带有IORT表的UEFI时，有时会出现编译失败, 显示无法编译IORT表。一般的，这是 
+因为编译工具无法识别IORT表中的SMMU节点引起的。
+
+我们可以在 https://acpica.org/downloads 上下载最新的acpica工具，编译，安装，即可 
+解决这个问题。具体的编译安装指导见上面的链接。
