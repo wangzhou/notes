@@ -287,3 +287,4 @@ linux进程调度：
  最底层的调度域对么？
 
  wfe/wfi qemu实现(qemu atomic分析)        todo
+ pthread_note修改			  todo
