@@ -1,4 +1,5 @@
--v0.1 2024.4.9 Sherlock init
+-v0.1 2024.4.9  Sherlock init
+-v0.2 2024.4.12 Sherlock 增加两个模块符号依赖问题
 
 简介：迅速记录下Linux内核编译时符号导出的问题。
 
@@ -17,3 +18,18 @@ Module.symvers也有class_create，自然内核模块编译也通过了。
 make -j是编译Image和所有module。重新make Image了下，发现根本没有生成Module.symvers，
 make -j才会生成Module.symvers。看来，之前的Module.symvers是之前make -j生成的，
 而且之前的内核版本和当前的内核版本不一样，才出现了这个问题。
+
+
+两个模块的符号依赖问题。
+
+一个模块可以通过EXPORT_SYMBOL向其它模块导出符号，模块编译的时候，导出的符号被保存
+到Module.symvers这个文件里。其它模块里如果用到了导出的符号，编译的时候需要在对应
+的Makefile里加上保存导出符号的Module.symvers的路径：
+
+KBUILD_EXTRA_SYMBOL=/path_to_Module.symvers
+
+这样就可以正常编译第二个模块。
+
+如上的两个模块，因为第二个模块存在对第一个模块中符号的依赖，所以，第二个模块不
+卸载，第一个模块是卸载不了的。可以看到，第二个模块加载后，第一个模块的引用技术
+会增加。

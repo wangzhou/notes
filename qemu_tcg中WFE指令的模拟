@@ -1,4 +1,5 @@
--v0.1 2024.4.9 Sherlock init
+-v0.1 2024.4.9  Sherlock init
+-v0.2 2024.4.12 Sherlock ...
 
 简介：本文分析qemu tcg中对ARM64 WFE指令模拟的基本逻辑，分析使用的qemu版本是v8.2.50。
 
@@ -10,3 +11,22 @@ ARM64中的WFE指令的基本描述可以参考[这里](https://wangzhou.github.
 
 模拟逻辑
 ---------
+
+可以看到WFE指令的基本逻辑是要触发CPU进入低功耗模式挂起执行，然后还需要模拟各种
+触发CPU继续执行的激励。
+
+在我们当前分析的qemu版本中，user mode和system mode对WFE的模拟是不一样的，不过两
+者都没有完整模拟出WFE的相关功能。
+
+首先，qemu翻译执行的主循环在遇到WFE指令时，断开tb，配置EXCP_YIELD异常，使用长跳转
+跳出翻译执行主循环。
+
+对于user mode，针对EXCP_YIELD异常没有做处理，模拟执行又继续到WFE指令，于是模拟程
+序就一直在这里循环了。
+
+对于system mode，跳出翻译执行主循环后，会在qemu_wait_io_event里把vCPU线程挂起等待。
+```
+```
+
+ARM spec里描述了多种触发CPU执行的激励，但是，当前的qemu里只实现了中断触发CPU继续
+执行的逻辑。
