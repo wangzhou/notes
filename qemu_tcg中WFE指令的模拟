@@ -1,6 +1,7 @@
 -v0.1 2024.4.9  Sherlock init
 -v0.2 2024.4.12 Sherlock ...
 -v0.3 2024.4.13 Sherlock 初步完成
+-v0.4 2024.4.14 Sherlock 初步完成，不清楚为什么kick_vcpu_thread里要cpu_exit
 
 简介：本文分析qemu tcg中对ARM64 WFE指令模拟的基本逻辑，分析使用的qemu版本是v8.2.50。
 
@@ -57,4 +58,9 @@ cpu_interrupt
 使对应的CPU退出翻译执行主流程，进而可以去处理中断。如果这里的唤醒在对应CPU睡眠之
 前，本次中断中的唤醒是无效的，那么对应CPU的睡眠就只能等后续的中断去唤醒。
 
-这里为什么还要调用cpu_exit一下？
+这里为什么还要调用cpu_exit一下？cpu_exit中，先配置exit_request为1，再配置icount_decr.
+u16.high为-1，在翻译执行的主流程里会检测后者，-1会触发vCPU跳出翻译执行的主逻辑，
+进入中断异常处理逻辑，在cpu_handle_interrupt里会检测exit_request，exit_request
+为1会触发vCPU彻底跳出翻译执行主逻辑(包括中断异常处理)。所以，cpu_exit的语意是明确
+的，就是使vCPU退出运行。这里kick_vcpu_thread是要使vCPU继续运行，不清楚为什么还要
+调用下cpu_exit。
