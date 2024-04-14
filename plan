@@ -286,5 +286,6 @@ linux进程调度：
  cpu load显示/线程迁移显示		  todo
  最底层的调度域对么？
 
- wfe/wfi qemu实现(qemu atomic分析)        todo
+ wfe/wfi qemu实现qemu atomic分析          c
+ qemu atomic分析			  todo
  pthread_note修改			  todo
