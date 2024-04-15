@@ -288,4 +288,5 @@ linux进程调度：
 
  wfe/wfi qemu实现qemu atomic分析          c
  qemu atomic分析			  todo
- pthread_note修改			  todo
+ rcu深入分析			          todo
+ 模块之间并发一般处理逻辑		  todo
