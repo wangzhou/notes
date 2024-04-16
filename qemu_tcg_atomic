@@ -1,7 +1,13 @@
--v0.1 2022.1.4 Sherlock init
+-v0.1 2022.1.4   Sherlock init
+-v0.2 2024.4.16  Sherlock 增加vCPU互斥的代码分析
 
 简介：qemu tcg中原子指令学习的一个速记，以riscv为平台。
 
+
+使用host原子指令模拟
+---------------------
+
+用一个原子加指令为例，说明下原子指令模拟的逻辑，如下是amoadd指令模拟的基本逻辑。
 ```
 /* target/riscv/insn_trans/trans_rva.c.inc */
 trans_amoadd_w
@@ -61,6 +67,9 @@ ABI_TYPE ATOMIC_NAME(X)(CPUArchState *env, target_ulong addr,       \
 ```
 可以看到，里面还是使用的host平台上的基本的原子语义函数做的。
 
+vCPU互斥模拟原子指令
+---------------------
+
 如果需要模拟多条指令拼起来的原子指令，我们就考虑用锁保护。要保护的对象是内存的状态。
 之所以需要保护，是多CPU可能会去改相同的内存位置。qemu使用一个线程模拟一个CPU，
 所以一个CPU对本CPU的寄存器的更新总是顺序的，所以CPU的寄存器状态是不需要做互斥的。
@@ -92,3 +101,107 @@ gen_helper_cmpxchg16b_unlocked，控制进哪个分支的逻辑是tb cflags的CF
 在进入cpu_exec_step_atomic的时候会把这个标记为去掉，翻译的时候就会进入相应的代码，
 产生相应的tb，如果是直接lookup执行这个tb，注意tb lookup的参数里也包含了
 tb的cflags。
+
+vCPU互斥代码细节分析
+---------------------
+
+cpu_exec_step_atomic里使用start_exclusive/end_exclusive创建一个互斥区，在这个区间
+里，系统里只有当前的vCPU在运行，其它的vCPU线程都处于挂起状态。
+
+start_exclusive的细节逻辑分析如下：
+```
+void start_exclusive(void)
+{
+    CPUState *other_cpu;
+    int running_cpus;
+
+    /*
+     * start_exclusive的结尾会把这个值配置为1，这里的意思是如果已经在互斥区，就
+     * 把互斥区的引用增加。互斥区里只有一个vCPU，所以这里最多也就是一个vCPU多次
+     * 进来互斥区。
+     */
+    if (current_cpu->exclusive_context_count) {
+        current_cpu->exclusive_context_count++;
+        return;
+    }
+
+    /* 保护系统里vCPU的链表 */
+    qemu_mutex_lock(&qemu_cpu_list_lock);
+    /* 
+     * 对于多个vCPU都要进入互斥区，第一个vCPU进入后，后面的vCPU再进来就挂在这个
+     * 地方。
+     *
+     * 注意，模拟原子行为，不只是模拟出原子指令之间的行为，原子指令和普通指令之
+     * 的间也要做到互斥，所以只有这里的逻辑是不够的，还是要其它vCPU彻底停下来的
+     * 逻辑。
+     *
+     * qemu的翻译指令逻辑有：1. 翻译执行的主循环，2. 执行原子行为的循环。这里就
+     * 是后者执行时vCPU线程暂停的地方。
+     */
+    exclusive_idle();
+      +-> qemu_cond_wait(&exclusive_resume, &qemu_cpu_list_lock)
+
+    /*
+     * 通过这个全局变量，告诉其它vCPU，它们都需要挂起等待，只要当前vCPU还在互斥
+     * 区，pending_cpus就至少会为1。其它vCPU可能在running也可能不在running状态，
+     * 当前vCPU观察其它vCPU是否处于running状态。
+
+     * 对于running状态的vCPU，统统告诉它们当前vCPU在等他们挂起，如果其它vCPU看到
+     * 了当前vCPU给他们的通知(has_waiter)，其它vCPU就把pending_cpus的计数减1(在
+     * cpu_exec_end中)，如果其它vCPU在退出的时候没有看到has_waiter(但是，当前vCPU
+     * 认为对应的vCPU是running，并且配置了其它vCPU的has_waiter)，那么下次这个vCPU
+     * 继续执行的时候依然会在cpu_exec_end的地方把pending_cpus的计数减1(注意，这个
+     * vCPU一定要再次回来，如果这个vCPU被彻底remove，对应的计数要减少，不然感觉
+     * 会挂死系统)。
+     *
+     * 对于当前vCPU认为不在running的其它vCPU，其它vCPU的has_waiter不会被配置，那
+     * 么等这些vCPU再次运行执行到cpu_exec_start时，它们发现系统要求它们挂起，而且
+     * 又没有其它vCPU在等待自己挂起，它自己就默默把自己挂起。
+     */
+    qatomic_set(&pending_cpus, 1);
+
+    smp_mb();
+    running_cpus = 0;
+    CPU_FOREACH(other_cpu) {
+        /*
+         * 对于所有其它的vCPU，如果当前vCPU观察到其它的vCPU正在运行，就配置其它
+         * vCPU的has_waiter，告诉其它vCPU，当前系统里有vCPU在等待它停止运行。
+         * qemu_cpu_kick使其它vCPU退出翻译执行大循环。
+         *
+         * 当前vCPU观察到有几个其它正在运行的vCPU，就会等待几次vCPU挂起。
+         *
+         * qemu翻译执行的主循环被cpu_exec_start/cpu_exec_end包围。cpu中的running
+         * 在cpu_exec_start配置，在cpu_exec_end去除。
+         */
+        if (qatomic_read(&other_cpu->running)) {
+            other_cpu->has_waiter = true;
+            /* 记录需要等待停止的vCPU个数 */
+            running_cpus++;
+            qemu_cpu_kick(other_cpu);
+        }
+    }
+
+    qatomic_set(&pending_cpus, running_cpus + 1);
+    while (pending_cpus > 1) {
+        /*
+         * 挂起本vCPU，等待其它的vCPU线程挂起，注意这里有两个条件变量，当前vCPU
+         * 在exclusive_cond上等待，等其它vCPU线程挂起，其它vCPU线程在exclusive_resume
+         * 上挂起，等待退出互斥区的vCPU线程通知它们继续运行。
+         */
+        qemu_cond_wait(&exclusive_cond, &qemu_cpu_list_lock);
+    }
+
+    /* Can release mutex, no one will enter another exclusive
+     * section until end_exclusive resets pending_cpus to 0.
+     */
+    qemu_mutex_unlock(&qemu_cpu_list_lock);
+
+    current_cpu->exclusive_context_count = 1;
+}
+```
+
+end_exclusive里把pending_cpus清0，表示不需要其它vCPU挂起了，然后唤醒exclusive_resume
+条件变量上等待的其它vCPU线程，相关逻辑同样被qemu_cpu_list_lock保护。
+
+可以看到start_exclusive/end_exclusive还需要和cpu_exec_start/cpu_exec_end的逻辑一起
+才能构造出vCPU互斥区。
