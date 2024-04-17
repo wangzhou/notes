@@ -1,7 +1,7 @@
 -v0.1 2023.8.3  Sherlock init
 -v0.2 2023.8.7  Sherlock 增加基本逻辑，Linux内核实现
 -v0.3 2023.8.22 Sherlock 补了一些疑问，代码随后看吧
--v0.4 2024.4.17 Sherlock
+-v0.4 2024.4.17 Sherlock 理解了RCU synchronize_rcu是等老数据的使用者退出
 
 简介：本文描述RCU锁的基本原始和使用。详细代码分析需要合适的时机再补进来，太复杂了。
 
@@ -112,9 +112,9 @@ free(old);
          |                        |                        |
  reader4:|                        |   ----new---------     |
          |                        |                        |
- reader5:|                        |            |           |  new'
-                                  |<---------->|
-                                  synchronize_rcu
+ reader5:|                        |                        |  new'
+                                    |<---------->|
+                                    synchronize_rcu
 ```
 如上，rcu_assign_pointer new之后的synchronize_rcu是等待被替换的old没有用户在使用。
 对于任意一个CPU，使用old可能有几种情况：1. 没有使用过old，2. 使用过old，但是已经
@@ -123,8 +123,7 @@ old使用过程是不会发生调度的，所以只要在synchronize_rcu里检�
 就可以保证整个CPU对old数据的引用已经退出。
 
 有些问题还没有想明白。RCU检测所有CPU都调度一次，有的CPU并没有做RCU read，那么理论
-上都不需要检测，如何做到这个？有些CPU下线了或者进入低功耗状态，应该在做检测的CPU
-集合中去掉这些CPU。
+上都不需要检测，如何做到这个？
 
 内核里提供了基于RCU的基础数据结构，比如，内核里RCU保护的链表的实现逻辑的代码位置在:
 linux/include/linux/rculist.h。
