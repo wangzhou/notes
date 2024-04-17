@@ -287,6 +287,5 @@ linux进程调度：
  最底层的调度域对么？
 
  wfe/wfi qemu实现qemu atomic分析          c
- qemu atomic分析			  topost
  rcu深入分析			          todo
  模块之间并发一般处理逻辑		  todo

@@ -1,6 +1,7 @@
 -v0.1 2023.8.3  Sherlock init
 -v0.2 2023.8.7  Sherlock 增加基本逻辑，Linux内核实现
 -v0.3 2023.8.22 Sherlock 补了一些疑问，代码随后看吧
+-v0.4 2024.4.17 Sherlock
 
 简介：本文描述RCU锁的基本原始和使用。详细代码分析需要合适的时机再补进来，太复杂了。
 
@@ -58,7 +59,7 @@ Linux内核中的RCU API
  };
 ```
 程序里用一个指针struct data __rcu *p 访问这个全局变量，那么这个变量的访问、修改
-代码大概是：
+和释放的代码大概是：
 ```
 /* 访问数据 */
 rcu_read_lock();
@@ -66,10 +67,12 @@ struct data *d = rcu_dereference(p);
 rcu_read_unlock();
 
 /* 修改数据 */
+struct data *old = p;
 struct data *new = kmalloc(sizeof(*p), GFP_KERNEL);
 new->value = 10;
 rcu_assign_pointer(p, new);
 synchronize_rcu();
+free(old);
 ```
 
 我们从朴素的逻辑出发看看这个问题，首先rcu_dereference和rcu_assign_pointer之间保持
@@ -84,19 +87,44 @@ synchronize_rcu();
 记录每个CPU的调度情况，当每个CPU都调度过一次后，之前做RCU read的CPU一定已经离开
 关抢占的临界区，这样可以认为所有对新版本数据的读者都已经离开临界区了。
 
-有几个问题还没有想明白：对一个RCU保护数据的读操作可能发生在synchronize_rcu之后，
-在这个间隙内，可以先发生一次调度，再进行RCU read，synchronize_rcu不会错误的检测到
-已经调度过，就认为没有RCU reader么？
+需要注意的是，synchronize_rcu同步等待的是所有老值使用者的退出，而不是rcu_assign_pointer
+换上的最新值。
 ```
-    CPU0                            CPU1
+ -------> time                               old can be released
+                                              /
+  rcu_assign_pointe      rcu_assign_pointer  /      rcu_assign_pointer
+         |                        |         /              |    
+         v                        |        /               |    new can be released
+      +------+                    |       /                |        /
+      | old  |----------------------------                 |       /
+      +------+                    v                        |      /
+         |                    +-------+                    |     /
+         |                    | new   |--------------------------
+         |                    +-------+                    v
+         |                        |                    +-------+
+         |                        |                    | new'  |
+         |                        |                    +-------+
+ reader1:|--old------             |                        |
+         |                        |                        |
+ reader2:|   --old------------------------                 |
+         |                        |                        |
+ reader3:|                        | ---new----------------------
+         |                        |                        |
+ reader4:|                        |   ----new---------     |
+         |                        |                        |
+ reader5:|                        |            |           |  new'
+                                  |<---------->|
+                                  synchronize_rcu
+```
+如上，rcu_assign_pointer new之后的synchronize_rcu是等待被替换的old没有用户在使用。
+对于任意一个CPU，使用old可能有几种情况：1. 没有使用过old，2. 使用过old，但是已经
+使用完结，3. 使用old一直持续到new已经更新进来。因为在old使用过程中关了内核抢占，
+old使用过程是不会发生调度的，所以只要在synchronize_rcu里检测到一个CPU上发生了调度，
+就可以保证整个CPU对old数据的引用已经退出。
 
-    rcu_assign_pointer(p, new);
-    synchronize_rcu
-                                    schedule
-                                    RCU read p
-```
-RCU检测所有CPU都调度一次，有的CPU并没有做RCU read，那么理论上都不需要检测，如何
-做到这个？有些CPU下线了或者进入低功耗状态，应该在做检测的CPU集合中去掉这些CPU。
+有些问题还没有想明白。RCU检测所有CPU都调度一次，有的CPU并没有做RCU read，那么理论
+上都不需要检测，如何做到这个？有些CPU下线了或者进入低功耗状态，应该在做检测的CPU
+集合中去掉这些CPU。
 
 内核里提供了基于RCU的基础数据结构，比如，内核里RCU保护的链表的实现逻辑的代码位置在:
 linux/include/linux/rculist.h。
