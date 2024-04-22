@@ -201,7 +201,9 @@ schedule
     +-> context_swith(rq, prev, next, &rf)
 ```
 在调用这个函数之前，先把当前线程状态切换到睡眠状态，并把当前线程挂到对应的等待队
-列里。
+列里。group schedule的逻辑可以参考[这里](todo)，简单讲，对于每个task_group，每个
+CPU上的cfs_rq里都有一个sched_entity，每一个sched_entity里的my_q指向这个task_group
+所包含的线程所组成的cfs_rq。
 
 内核里会有周期性的timer中断产生，timer中断被触发后最终调用到tick_handle_periodic
 函数，具体的调用逻辑可以参考[这里](https://wangzhou.github.io/riscv-timer的基本逻辑)。
