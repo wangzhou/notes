@@ -165,45 +165,49 @@ schedule
     +-> update_rq_clock
           /* 各个时间的概念是什么：rq->clock? */
       +-> update_rq_clock_task
-        /*
-         * 从rq里挑出下一个要运行的程序，并更新调度相关的信息。怎么和CFS结合到
-         * 一起?
-         *
-         * rq里的各个域段的含义?
-         */
-    +-> next = pick_next_task // CFS里的回调是__pick_next_task_fair
+        /* 从rq里挑出下一个要运行的程序，并更新调度相关的信息 */
+    +-> next = pick_next_task
           /*
-           * 这里do-while的逻辑和group sched有关系，如果没有group sched，这里
-           * 的循环只会执行一次。
+           * 因为大部分线程都是用cfs，所以这个函数先尝试用cfs做调度，否则这里的
+           * 调度逻辑就依次遍历每个调度类，并调用调度类中的pick_next_task回调函数。
+           *
+           * CFS里的回调是__pick_next_task_fair，我们直接看这个函数里的逻辑。
            */
-      +-> do {
-            if (curr) { // sched_entity
-              if (curr->on_rq)
-                /* 更新vruntime等调度参数 */
-                update_curr(cfs_rq)
-                  +-> delta_exec = update_curr_se()
-                        /*
-                         * 这里是当前时间减去上次更新vruntime时的时间，update_curr
-                         * 这个函数在很多地方都会调用，如果上次调用是在离开就绪
-                         * 队列，其中睡眠了很久，再次调度的时候计算出的vruntime
-                         * 就是包换睡眠的vruntime，这里没有理解？
-                         */
-                    +-> delta_exec = now - curr->exec_start
-                  +-> curr_vruntime += calc_delta_fair(delta_exec, curr)
-              else
-                curr = NULL
-            }
-            se = pick_next_entity(cfs_rq)
-            cfs_rq = group_cfs_rq(se)
-          } while (cfs_rq)
+      +-> __pick_next_task
+        +-> __pick_next_task_fair
+
     +-> clear_tsk_need_resched(prev)
     +-> clear_preempt_need_resched()
     +-> context_swith(rq, prev, next, &rf)
+
+__pick_next_task_fair
+    /*
+     * 这里do-while的逻辑和group sched有关系，如果没有group sched，这里的循环只
+     * 会执行一次。
+     */
+  +-> do {
+        if (curr) {
+          if (curr->on_rq)
+            /* 更新vruntime等调度参数 */
+            update_curr(cfs_rq)
+              +-> delta_exec = update_curr_se()
+                +-> delta_exec = now - curr->exec_start   <----- 问题1
+              +-> curr_vruntime += calc_delta_fair(delta_exec, curr)
+          else
+            curr = NULL
+        }
+        se = pick_next_entity(cfs_rq)
+        cfs_rq = group_cfs_rq(se)
+      } while (cfs_rq)
 ```
 在调用这个函数之前，先把当前线程状态切换到睡眠状态，并把当前线程挂到对应的等待队
 列里。group schedule的逻辑可以参考[这里](todo)，简单讲，对于每个task_group，每个
 CPU上的cfs_rq里都有一个sched_entity，每一个sched_entity里的my_q指向这个task_group
 所包含的线程所组成的cfs_rq。
+
+问题1: 这里是当前时间减去上次更新vruntime时的时间，update_curr这个函数在很多地方
+都会调用，如果上次调用是在离开就绪队列，其中睡眠了很久，再次调度的时候计算出的
+vruntime就是包换睡眠的vruntime，这里没有理解？
 
 内核里会有周期性的timer中断产生，timer中断被触发后最终调用到tick_handle_periodic
 函数，具体的调用逻辑可以参考[这里](https://wangzhou.github.io/riscv-timer的基本逻辑)。
