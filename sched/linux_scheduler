@@ -183,7 +183,9 @@ schedule
 __pick_next_task_fair
     /*
      * 这里do-while的逻辑和group sched有关系，如果没有group sched，这里的循环只
-     * 会执行一次。
+     * 会执行一次。对于支持group sched的情况，先从task和group_task里选出一个调度
+     * 实体，如果选出的是task_group就进入task_group的cfs继续选出一个调度实体，后
+     * 面依此类推。
      */
   +-> do {
         if (curr) {
@@ -208,6 +210,8 @@ CPU上的cfs_rq里都有一个sched_entity，每一个sched_entity里的my_q指�
 问题1: 这里是当前时间减去上次更新vruntime时的时间，update_curr这个函数在很多地方
 都会调用，如果上次调用是在离开就绪队列，其中睡眠了很久，再次调度的时候计算出的
 vruntime就是包换睡眠的vruntime，这里没有理解？
+
+todo: 这里需要搞清楚task_group的时间在它下面的调度实体中的分配情况？
 
 内核里会有周期性的timer中断产生，timer中断被触发后最终调用到tick_handle_periodic
 函数，具体的调用逻辑可以参考[这里](https://wangzhou.github.io/riscv-timer的基本逻辑)。
