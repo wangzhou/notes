@@ -289,3 +289,17 @@ linux进程调度：
  wfe/wfi qemu实现qemu atomic分析          c
  rcu代码分析				  todo
  模块之间并发一般处理逻辑		  todo
+
+ARM64:
+
+ - 中断异常定义(定义和委托情况)
+ - 虚拟化控制基础逻辑
+ - 系统寄存器基础逻辑
+ - 系统指令基础逻辑: TLB/cache/barrier
+ - VMMA基础定义: 页表
+ - PMU基础逻辑
+ - GIC基础逻辑
+
+
+
+
