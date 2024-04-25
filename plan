@@ -299,7 +299,7 @@ ARM64:
  - VMMA基础定义: 页表
  - PMU基础逻辑
  - GIC基础逻辑
+ - Timer基础逻辑
+ - NMI Watchdog
 
-
-
-
+ - softlockup/hardlockup机制/migration
