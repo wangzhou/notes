@@ -1,4 +1,5 @@
 -v0.1 2024.4.25 Sherlock init
+-v0.2 2024.4.26 Sherlock 初步完成
 
 简介：本文梳理Linux内核soft lockup检测机制的基本逻辑。分析依赖的Linux内核版本是
       v6.8-rc5
@@ -15,10 +16,102 @@ Linux内核调度各个不同的用户以及内核线程交替在CPU上运行，
 非抢占内核，没有主动让出CPU，内核中的执行流总是持续执行。
 
 注意，对于非抢占内核，中断打断一段内核执行流，中断执行后，将继续返回被打断的内核
-执行流程，如果中断打断的是一段用户态执行流，中断执行完后，返回用户态被打算点前内
+执行流程，如果中断打断的是一段用户态执行流，中断执行完后，返回用户态被打断点前内
 核会执行下调度，结果完全有可能是调度一个新的用户线程进来执行。
 
 同样的道理，对于支持抢占的内核，在禁止抢占的内核执行流上，依然有上面的逻辑成立。
 
+Linux提供用户态接口配置多长时间触发soft lockup报错，以及soft lockup后是否panic内
+核。具体的接口是，/proc/sys/kernel/watchdog_thresh的值的2倍是触发soft lockup的秒
+数，/proc/sys/kernel/softlockup_panic配置soft lockup后是否panic。
+
+我们简单构造一个触发soft lockup的场景出来。首先，编译一个非抢占的内核出来，确认
+CONFIG_PREEMPT_NONE=Y，确认打开soft lock的内核配置：CONFIG_SOFTLOCKUP_DETECTOR=y，
+再写一个内核模块，在init里做死循环。使用qemu启动这个系统，配置/proc/sys/kernel/watchdog_thresh
+为2，然后insmod如上的内核模块，我们会得到如下的日志：
+[ ... ]
+# echo 2 > /proc/sys/kernel/watchdog_thresh
+# insmod busyloop.ko 
+[   81.186060] busyloop: loading out-of-tree module taints kernel.
+[   87.420704] watchdog: BUG: soft lockup - CPU#1 stuck for 6s! [insmod:137]
+[   87.421300] Modules linked in: busyloop(O+)
+[   87.422007] CPU: 1 PID: 137 Comm: insmod Tainted: G O 6.8.0-rc5-00035-gdb6db2d782b8 #38
+[   87.422240] Hardware name: linux,dummy-virt (DT)
+[   87.424730] pstate: 40000005 (nZcv daif -PAN -UAO -TCO -DIT -SSBS BTYPE=--)
+[   87.424917] pc : busyloop_init+0x0/0x1000 [busyloop]
+[   87.425420] lr : do_one_initcall+0x70/0x1b8
+[   87.425721] sp : ffff80008050ba60
+[   87.425794] x29: ffff80008050ba60 x28: ffff80008050bcd8 x27: ffffcd4b689ca040
+[   87.425991] x26: 0000000000000000 x25: ffffcd4b689ca058 x24: ffffcd4be3ff5480
+[   87.426148] x23: 0000000000000000 x22: ffff25fbc0bbc300 x21: ffff25fbc0bbc300
+[   87.426294] x20: ffffcd4b689ce000 x19: ffffcd4be3fc9000 x18: 0000000000000002
+[   87.426446] x17: ffff800080505000 x16: ffff25fbc015eef9 x15: 0000ae0f476185e6
+[   87.426596] x14: 000000000000037d x13: 000000000000037d x12: 0000000000000000
+[   87.426730] x11: 0000000000000000 x10: 0000000000000000 x9 : 00000000000007e0
+[   87.426886] x8 : ffff25fbc1a3b200 x7 : ffff25fbc0bbc738 x6 : 0000000000000742
+[   87.427079] x5 : ffff25fbc1822c80 x4 : fffffc97ef0608a0 x3 : 0000000080800080
+[   87.427275] x2 : 0000000000000000 x1 : 0000000000000000 x0 : 0000000000000000
+[   87.427524] Call trace:
+[   87.427707]  busyloop_init+0x0/0x1000 [busyloop]
+[   87.427889]  do_init_module+0x58/0x1e4
+[   87.427989]  load_module+0x19bc/0x1a8c
+[   87.428073]  init_module_from_file+0x88/0xc8
+[   87.428164]  __arm64_sys_finit_module+0x1ec/0x320
+[   87.428262]  invoke_syscall+0x44/0x104
+[   87.428342]  el0_svc_common.constprop.0+0x40/0xe0
+[   87.428436]  do_el0_svc+0x1c/0x28
+[   87.428497]  el0_svc+0x34/0xb8
+[   87.428562]  el0t_64_sync_handler+0xc0/0xc4
+[   87.428628]  el0t_64_sync+0x190/0x194
+[ ... ]
+```
+
 代码分析
 ---------
+
+Linux内核在每个core上启动一个高精度定时器(hrtimer)支持soft lockup，hrtimer定时到
+期的处理函数的主要工作有：1. 更新hrtimer；2. 触发migration线程更新soft lockup的
+时间戳；3. 通过时间戳检查是否出现soft lockup。
+
+如果一个core长时间被一段执行流占据，虽然hrtimer总可以触发migration线程，叫它更新
+soft lockup的时间戳，但是migration得不到运行，总是无法完成具体的更新动作，超过一
+定的时间，hrtimer的处理函数就可以检测到一段流程长时间独占CPU。
+```
+/* init/main.c */
+kernel_init_freeable
+      /* kernel/watchdog.c */
+  +-> lockup_detector_init
+        /* 注意有CONFIG_SOFTLOCKUP_DETECTOR开启和关闭的版本 */
+    +-> lockup_detector_setup
+      +-> __lockup_detector_reconfigure
+        +-> softlockup_start_all
+              /*
+               * 在每个core上调用softlockup_start_fn，这里delay到了对应的work 
+               * queue里执行。
+               */
+          +-> for_each_cpu(cpu, &watchdog_allowed_mask)
+                smp_call_on_cpu(cpu, softlockup_start_fn, ...)
+
+/* 在每个cores上初始化和启动hrtimer */
+softlockup_start_fn
+  +-> watchdog_enable
+        /* 回调函数是watchdog_timer_fn */
+    +-> hrtimer_init/hrtimer_start
+
+/*
+ * 每个core对应两个时间戳变量，hrtimer每次都触发migration线程更新watchdog_touch_ts
+ * 和watchdog_report_ts。hrtimer处理函数读出当前的时间戳和watchdog_report_ts比较，
+ * 如果超过watchdog_thresh的2倍则触发soft lockup。这里为什么要两个时间戳变量？
+ */
+watchdog_timer_fn
+      /* 触发migration线程更新时间戳 */
+  +-> stop_one_cpu_nowait(smp_processor_id(), softlockup_fn, NULL, this_cpu_ptr(&softlockup_stop_work))
+```
+
+migration线程在kernel/stop_machine.c里创建，每个core上创建一个migration内核线程。
+```
+cpu_stop_init
+  +-> smpboot_register_percpu_thread(&cpu_stop_threads)
+```
+当前内核里只有soft lockup和线程迁移用到这个stop_machine的特性，stop_machine想要
+支持的语意还不清楚？

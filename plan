@@ -298,8 +298,9 @@ ARM64:
  - 系统指令基础逻辑: TLB/cache/barrier
  - VMMA基础定义: 页表
  - PMU基础逻辑
- - GIC基础逻辑
- - Timer基础逻辑
+ - GIC基础逻辑 #
+ - Timer基础逻辑(以及高精度定时器)
 
+ - ARM NMI中断 				  3
  - NMI Watchdog hard lockup		  2
  - softlockup/hardlockup机制/migration    1
