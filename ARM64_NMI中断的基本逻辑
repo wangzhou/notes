@@ -1,4 +1,5 @@
 -v0.1 2024.4.26 Sherlock init
+-v0.2 2024.4.30 Sherlock 补充相关逻辑
 
 简介：本文梳理ARM64中不可屏蔽中断(NMI)的基本逻辑。
 
@@ -6,10 +7,10 @@
 硬件基本逻辑
 -------------
 
-ARM新增加了NMI中断，GIC和CPU的逻辑做了相应的调整。
+ARM新增加了NMI中断，GIC和CPU的逻辑做了相应的调整。ARM网站的[这篇](https://community.arm.com/arm-community-blogs/b/architectures-and-processors-blog/posts/a-profile-non-maskable-interrupts)文档对此做了介绍。
 
-对于GIC，增加一种优先级更高的中断，对应的中断发给CPU时，应该要携带相关信号，用来
-告诉CPU，当前是一个NMI。
+对于GIC，增加一种优先级更高的中断，对应的中断发给CPU时，应该要携带相关信号，这个
+信号告诉CPU，当前是一个NMI。
 
 NMI并不是完全不能被mask的，所以在CPU一层，ARM定义了两种针对NMI做mask的方法。
 
@@ -43,4 +44,8 @@ NMI虚拟化相关的逻辑
 NMI使用注意事项
 ----------------
 
-(todo)
+从如上的分析中可见，CPU并不是任何时候都可以响应NMI中断，除了程序员主动控制mask掉
+NMI，在中断或异常进入和退出时，任何中断包括NMI中断都是被mask的。
+
+CPU mask掉普通中断的时候(配置PSTATE.I)，CPU是可以响应NMI的，这就需要系统程序员小
+心编程，避免因使用NMI而带来问题。
