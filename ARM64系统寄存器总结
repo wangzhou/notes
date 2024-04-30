@@ -1,0 +1,52 @@
+-v0.1 2024.4.30 Sherlock init
+
+简介：本文总结ARM64系统寄存器的基本逻辑，我们从基本的中断异常逻辑、地址翻译以及
+      虚拟化的逻辑出发，看看对应功能的基本系统寄存器。
+
+
+CPU基础配置/CPU特性位/CPU特性开关寄存器
+----------------------------------------
+
+一个CPU需要有对应的生产厂家、构架版本、支持特性、支持特性开关等的寄存器。
+
+GRP/中断异常/VMMA寄存器
+------------------------
+
+ARM64下有31个64bit通用寄存器(GPR)，其中x0-x29用作通用数据，x30时link register(lr)，
+5bit编码都是1时，表示0值。独立的SP寄存器，SP_ELx。独立的PC寄存器。
+
+中断和异常的时候需要各种系统寄存器支持。CPU状态寄存器PSTATE, 各个特权级就这一个
+统一的状态寄存器。
+
+中断异常时系统状态，SPSR_ELx。(save program status register)
+
+中断异常向量基地址，VBAR_ELx。(vector base address)
+
+中断异常原因，ESR_ELx。(exception syndrome register)
+
+中断异常PC，FAR_ELx。(fault address)
+
+中断异常返回地址，ELR_ELx。(exception link register)
+
+中断异常的路由控制，todo?
+
+各种中断的pending/enable控制，todo?
+
+页表基地址，TTBR0_ELx/TTBR0_Elx。(translation table base register)
+
+地址翻译控制，
+
+系统Timer寄存器
+----------------
+
+
+虚拟化相关寄存器
+-----------------
+
+
+PMU相关寄存器
+--------------
+
+
+GIC在核一侧的寄存器
+--------------------
