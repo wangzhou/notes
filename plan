@@ -292,16 +292,16 @@ linux进程调度：
 
 ARM64:
 
- - 中断异常定义(定义和委托情况)
- - 虚拟化控制基础逻辑                     4
+ - 中断异常定义(定义和委托情况
+ - 虚拟化控制基础逻辑                     4#
  - 系统寄存器基础逻辑			  3
  - 系统指令基础逻辑: TLB/cache/barrier
  - VMMA基础定义: 页表
  - PMU基础逻辑
- - GIC基础逻辑 #
+ - GIC基础逻辑                            5#
  - Timer基础逻辑(以及高精度定时器)
 
- - ARM NMI中断/ARM SP的逻辑 	          3
+ - ARM NMI中断/ARM SP的逻辑 	          topost
  - NMI Watchdog hard lockup		  c
  - softlockup/hardlockup机制/migration    c
 
