@@ -2,3 +2,45 @@
 
 简介：本文梳理ARM64中不可屏蔽中断(NMI)的基本逻辑。
 
+
+硬件基本逻辑
+-------------
+
+ARM新增加了NMI中断，GIC和CPU的逻辑做了相应的调整。
+
+对于GIC，增加一种优先级更高的中断，对应的中断发给CPU时，应该要携带相关信号，用来
+告诉CPU，当前是一个NMI。
+
+NMI并不是完全不能被mask的，所以在CPU一层，ARM定义了两种针对NMI做mask的方法。
+
+一种是在PSTATE寄存器里新加了AllInt的bit，这个bit可以控制所有中断，包括NMI中断的
+mask。这个bit和PSTATE.I的逻辑是基本一致的，只不过把控制范围增加上NMI。这种mask的
+逻辑和如下第二种逻辑是正交的。
+
+另一种和ELx_SP的寄存器使用有关系(todo: 还不明白为什么ARM在不同EL要使用不同的SP,
+RV应该是只有一个SP？)。ARM的ELx_SP特性的逻辑是，当PSTATE.SP为0时，各个EL都是用
+SP_EL0，当PSTATE.SP为1时，各个EL使用SP_ELx。
+
+基于如上的逻辑，如果当前是使用各个EL自己的SP_ELx(dedicated SP_ELx)，NMI就是mask
+的，当切到SP_EL0做栈指针时，NMI没有被mask。
+
+对于如上两种NMI mask的逻辑，中断或异常进入和退出时，各种中断被mask的逻辑依然存在。
+中断或异常进入和退出时，为了防止新的中断进来破坏之前要保存的上下文，硬件是自动关
+中断的。
+
+NMI相关系统寄存器
+------------------
+
+ID_AA64PFR1_EL1.NMI   表示系统是否支持NMI。
+SCTLR_ELx.NMI         表示系统是否enable NMI。
+SCTLR_ELx.SPINTMASK   表示是否使用如上的第二种mask NMI的方式。
+
+NMI虚拟化相关的逻辑
+--------------------
+
+(todo)
+
+NMI使用注意事项
+----------------
+
+(todo)
