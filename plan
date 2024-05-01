@@ -301,7 +301,7 @@ ARM64:
  - GIC基础逻辑                            5#
  - Timer基础逻辑(以及高精度定时器)
 
- - ARM NMI中断/ARM SP的逻辑 	          topost
+ - ARM NMI中断/ARM SP的逻辑 	          c
  - NMI Watchdog hard lockup		  c
  - softlockup/hardlockup机制/migration    c
 
