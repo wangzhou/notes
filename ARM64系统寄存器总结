@@ -1,4 +1,6 @@
 -v0.1 2024.4.30 Sherlock init
+-v0.2 2024.5.02 Sherlock 开始补充虚拟化部分
+-v0.2 2024.5.04 Sherlock ...
 
 简介：本文总结ARM64系统寄存器的基本逻辑，我们从基本的中断异常逻辑、地址翻译以及
       虚拟化的逻辑出发，看看对应功能的基本系统寄存器。
@@ -34,7 +36,7 @@ ARM64下有31个64bit通用寄存器(GPR)，其中x0-x29用作通用数据，x30
 
 页表基地址，TTBR0_ELx/TTBR0_Elx。(translation table base register)
 
-地址翻译控制，
+地址翻译控制，TCR_ELx。(translation control register)
 
 系统Timer寄存器
 ----------------
@@ -42,6 +44,60 @@ ARM64下有31个64bit通用寄存器(GPR)，其中x0-x29用作通用数据，x30
 
 虚拟化相关寄存器
 -----------------
+
+我们分析支持VHE时，需要增加的系统寄存器。从软件的角度看，host/guest上的软件(包括)
+内核并不清楚它们是在host还是在guest，硬件的所有设计逻辑，需要在这个前提下都是成立
+的。
+
+在VHE打开时，guest用户态运行在EL0，guest内核态运行在EL1，host用户态运行在EL0，
+host内核态运行在EL2，hypervisor运行在EL2。和riscv虚拟化下各个软件的运行状态基本
+是一样的。
+```
+ +-----+          +-----+         +----+           +-----+
+ | EL0 |          | EL0 |         | VU |           |  U  |
+ +-----+          +-----+         +----+           +-----+
+    |                |               |                |   
+ +-----+             |            +----+              |   
+ | EL1 |             |            | VS |              |   
+ +-----+             |            +----+              |   
+    |                |               |                |   
+    |     +-----+    |               |     +----+     |   
+    +-----| EL2 |----+               +-----| HS |-----+   
+          +-----+                          +----+         
+             |                               |
+          +-----+                          +----+          
+          | EL3 |                          | M  |          
+          +-----+                          +----+          
+```
+
+虚拟化综合控制的寄存器，HCR_EL2(hypervisor configure register)。其中，HCR_EL2.E2H
+表示打开VHE，即host跑在EL2。以下讨论的都是HCR_EL2.E2H为1的情况。HCR_EL2.TGE为1表
+示当前在虚拟机里，为0表示当前在host里，这个和riscv上的V状态的逻辑是一致的，不知道
+为什么起一个trap general exceptions from EL0这样的名字。
+
+EL0/EL2地址翻译使用TTBR0_EL2/TTBR1_EL2
+
+
+在VHE使能的时候，当CPU运行在EL2，寄存器有如下的映射，也就是软件访问或者硬件使用
+的寄存器实际上是右边的寄存器。
+```
+SCTLR_EL1      --->    SCTLR_EL2
+TTBR0_EL1      --->    TTBR0_EL2
+TTBR1_EL1      --->    TTBR1_EL2
+TCR_EL1        --->    TCR_EL2
+ESR_EL1        --->    ESR_EL2
+FAR_EL1        --->    FAR_EL2
+MAIR_EL1       --->    MAIR_EL2
+VBAR_EL1       --->    VBAR_EL2
+CPACR_EL1      --->    CPTR_EL2
+TRFCR_EL1      --->    TRFCR_EL2
+AFSR0_EL1      --->    AFSR0_EL2
+AFSR1_EL1      --->    AFSR1_EL2
+AMAIR_EL1      --->    AMAIR_EL2
+CONTEXTIDR_EL1 --->    CONTEXTIDR_EL2
+CNTKCTL_EL1    --->    CNTHCTL_EL2
+```
+
 
 
 PMU相关寄存器
