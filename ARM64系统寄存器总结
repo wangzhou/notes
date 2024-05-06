@@ -1,10 +1,10 @@
 -v0.1 2024.4.30 Sherlock init
 -v0.2 2024.5.02 Sherlock 开始补充虚拟化部分
--v0.3 2024.5.04 Sherlock ...
--v0.4 2024.5.06 Sherlock ...
+-v0.3 2024.5.04 Sherlock 继续补充虚拟化部分
+-v0.4 2024.5.06 Sherlock 继续补充虚拟和timer
 
 简介：本文总结ARM64系统寄存器的基本逻辑，我们从基本的中断异常逻辑、地址翻译以及
-      虚拟化的逻辑出发，看看对应功能的基本系统寄存器。
+      虚拟化的逻辑出发，看看对应功能的基本系统寄存器。参考的ARM spec的版本是J.a。
 
 
 CPU基础配置/CPU特性位/CPU特性开关寄存器
@@ -39,8 +39,19 @@ ARM64下有31个64bit通用寄存器(GPR)，其中x0-x29用作通用数据，x30
 
 地址翻译控制，TCR_ELx。(translation control register)
 
-系统Timer寄存器
+Timer相关寄存器
 ----------------
+
+ARM spec的D11章节定义了generic timer，其定义主要分两个概念：system counter和timer。
+system counter是以一定频率增加的计数器，频率和计数器的数值分别记录在对应的寄存器
+里。
+
+CNTFRQ_EL0，counter-timer frequency register。
+CNTPCT_EL0，counter-timer physical counter register。
+
+CNTP_CTL_EL0，counter-timer physical timer control register。
+CNTP_TVAL_EL0，counter-timer physical timer TimerValue register。
+CNTP_CVAL_EL0，counter-timer physical timer CompareValue register。
 
 
 虚拟化相关寄存器
@@ -97,6 +108,14 @@ AFSR1_EL1      --->    AFSR1_EL2
 AMAIR_EL1      --->    AMAIR_EL2
 CONTEXTIDR_EL1 --->    CONTEXTIDR_EL2
 CNTKCTL_EL1    --->    CNTHCTL_EL2
+
+CNTP_TVAL_EL0  --->    CNTHP_TVAL_EL2
+CNTP_CTL_EL0   --->    CNTHP_CTL_EL2
+CNTP_CVAL_EL0  --->    CNTHP_CVAL_EL2
+
+CNTV_TVAL_EL0  --->    CNTHV_TVAL_EL2
+CNTV_CTL_EL0   --->    CNTHV_CTL_EL2
+CNTV_CVAL_EL0  --->    CNTHV_CVAL_EL2
 ```
 
 如上的这些寄存器映射要和异常处理的逻辑结合起来理解。当CPU处在host用户态，发生trap
@@ -131,15 +150,13 @@ Stage1翻译相关的寄存器是TTBR_EL1/TCR_EL1，只不过在host上实际使
 guest的stage1翻译实际使用的是TTBR_EL2/TCR_EL2。Stage2翻译相关的寄存器是VTTBR_EL2/VTCR_EL2。
 
 
-
-
 todo: vtimer。
-
-todo: 普通外部中断。
 
 todo: 直接注入外部中断。
 
 todo: IPI。
+
+todo: 普通外部中断。
 
 
 PMU相关寄存器
@@ -149,12 +166,14 @@ PMU相关寄存器
 GIC在核一侧的寄存器
 --------------------
 
+todo: ICC_XXX/ICV_XXX/ICH_XXX。
 
 GIC
 ----
 
+todo: vLPI/vSGI/vNMI各自直接注入的逻辑。
 
 SMMU
 -----
 
-
+在CPU侧没有寄存器。
