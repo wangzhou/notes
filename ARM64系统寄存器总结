@@ -44,15 +44,19 @@ Timer相关寄存器
 
 ARM spec的D11章节定义了generic timer，其定义主要分两个概念：system counter和timer。
 system counter是以一定频率增加的计数器，频率和计数器的数值分别记录在对应的寄存器
-里。
+里。在每个core上有timer相关的寄存器，分别有：1. CompareValue寄存器，当counter的
+值和CompareValue的值相等时触发timer中断(PPI)；2. 相关timer中断的控制寄存器；3.
+TimerValue寄存器，这个寄存器的值从大到小递减，减到0时触发timer中断。
 
+下面以EL1 physical counter-timer寄存器为例，罗列出相关的寄存器。
+```
 CNTFRQ_EL0，counter-timer frequency register。
 CNTPCT_EL0，counter-timer physical counter register。
 
 CNTP_CTL_EL0，counter-timer physical timer control register。
 CNTP_TVAL_EL0，counter-timer physical timer TimerValue register。
 CNTP_CVAL_EL0，counter-timer physical timer CompareValue register。
-
+```
 
 虚拟化相关寄存器
 -----------------
@@ -149,7 +153,6 @@ translation regime，描述的是host的情况，只需要做stage1的翻译。
 Stage1翻译相关的寄存器是TTBR_EL1/TCR_EL1，只不过在host上实际使用的就是它们本身，
 guest的stage1翻译实际使用的是TTBR_EL2/TCR_EL2。Stage2翻译相关的寄存器是VTTBR_EL2/VTCR_EL2。
 
-
 todo: vtimer。
 
 todo: 直接注入外部中断。
@@ -162,6 +165,7 @@ todo: 普通外部中断。
 PMU相关寄存器
 --------------
 
+todo: PMU基本逻辑。
 
 GIC在核一侧的寄存器
 --------------------
