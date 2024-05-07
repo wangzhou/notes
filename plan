@@ -294,7 +294,7 @@ ARM64:
 
  - 中断异常定义(定义和委托情况            todo
  - 虚拟化控制基础逻辑                     todo
- - 系统寄存器基础逻辑			  todo
+ - 系统寄存器基础逻辑			  to post
  - GIC基础逻辑                            todo
  - 系统指令基础逻辑: TLB/cache/barrier
  - VMMA基础定义: 页表

@@ -32,9 +32,13 @@ ARM64下有31个64bit通用寄存器(GPR)，其中x0-x29用作通用数据，x30
 
 中断异常返回地址，ELR_ELx。(exception link register)
 
-中断异常的路由控制，todo?
+中断异常的路由控制，没有类似riscv上的逐个中断异常委托的机制，ARM上是整体定义和补
+充定义的方式。
 
-各种中断的pending/enable控制，todo?
+各种中断的pending/enable控制，核一侧的控制只有FIQ/IRQ的统一开关，riscv上和这个不
+一样，核一侧分了外部中断/时钟中断/软件中断等的pending/enable控制寄存器。ARM上的
+SGI(软件中断)/PPI(主要给时钟用)/SPI、LPI(主要给外设用)相关寄存器定义到了GIC上，
+核一侧的系统寄存器在下面总结。
 
 页表基地址，TTBR0_ELx/TTBR0_Elx。(translation table base register)
 
@@ -133,17 +137,15 @@ CNTV_CVAL_EL0  --->    CNTHV_CVAL_EL2
 时候也是会使用到的。(EL0/EL2地址翻译使用TTBR0_EL2/TTBR1_EL2)
 
 可以看到，ARM VHE的一部分寄存器逻辑和riscv的逻辑正好是反过来的。ARM是host的寄存器
-映射到XXX_EL2，riscv是guest的寄存器映射到V前缀的同名寄存器上。但是，考虑其中的底
-层逻辑，是否一套寄存器就可以解决虚拟化面对的问题？
-
-todo: EL2收到一个host的timer中断，打算虚拟机执行的逻辑是什么？
-      多个VM切换的时间点在哪里？除了hypervisor调度，host上的线程调度会导致VM切换么？
-      如果host上的线程调度导致VM切换，VM里的XXX_EL1不会覆盖么？
+映射到XXX_EL2，riscv是guest的寄存器映射到V前缀的同名寄存器上。从host角度看，虚拟
+机是host上的一个线程，所以虚拟机线程具有host线程的上下文，从虚拟机自己的角度看，
+整个虚拟机实例又有自己的上下文，这个上下文包括GPR和虚拟机EL1的系统寄存器，这个上
+下文是对虚拟机这个机器的描述。
 
 ARM64还定义了一堆别名系统寄存器，当CPU运行在EL2/EL3时，如果要访问EL0/EL1的寄存器，
 需要使用这些寄存器，这些寄存器的名字是XXX_EL12，对应的EL0/EL1寄存器是XXX_EL0/XXX_EL1。
-之所以要使用别名寄存器访问EL1的寄存器，是因为VHE打开时，在EL2直接使用XXX_EL1访问
-寄存器，实际访问到的是映射到的XXX_EL2寄存器。(XXX_EL0?)
+之所以要使用别名寄存器访问EL1的寄存器，是因为VHE打开时，在EL2直接使用XXX_EL0/XXX_EL1
+访问寄存器，实际访问到的是映射到的XXX_EL2寄存器。
 
 看下地址翻译相关的东西。ARM spec在描述地址翻译时引入了Translation regimes的概念，
 ARM spec D8.1.2定义了一堆Translation regime。我们先不看安全(secure)和ARM32(realm)
@@ -156,14 +158,14 @@ translation regime，描述的是host的情况，只需要做stage1的翻译。
 到stage2翻译，host(包括hypervisor)自己只会使用stage1翻译。
 
 Stage1翻译相关的寄存器是TTBR_EL1/TCR_EL1，只不过在host上实际使用的就是它们本身，
-guest的stage1翻译实际使用的是TTBR_EL2/TCR_EL2。Stage2翻译相关的寄存器是VTTBR_EL2/VTCR_EL2。
+guest的stage1翻译实际使用的是TTBR_EL2/TCR_EL2。Stage2翻译相关的寄存器是VTTBR_EL2/
+VTCR_EL2。
 
 todo: vtimer。
 
 todo: 普通外部中断。
 
 todo: vLPI/vSGI/vNMI各自直接注入的逻辑。
-
 
 PMU相关寄存器
 --------------
@@ -174,7 +176,14 @@ GIC
 ----
 
 GIC有设备一侧的MMIO寄存器以及核一层的系统寄存器，这里只描述核一侧的系统寄存器。
-GIC核一侧的系统寄存器主要有：ICC_XXX/ICV_XXX/ICH_XXX。
+GIC核一侧的系统寄存器主要有：ICC_XXX_ELn/ICV_XXX_ELn/ICH_XXX_ELn。
+
+ICC_SRE_ELn, system register enable。
+ICC_PMR_ELn, priority mask register。
+ICC_CTRL_ELn, control completion of interrupt。
+ICC_IGRPEN1_ELn，interrupt group enable。
+
+需要在独立的文档中展开逻辑，再说吧。
 
 SMMU
 -----

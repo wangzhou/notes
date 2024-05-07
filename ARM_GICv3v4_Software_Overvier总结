@@ -1,0 +1,9 @@
+-v0.1 2024.5.7 Sherlock init
+
+简介：本文是ARM的文档《GICv3 and GICv4 Software Overview》的一个学习笔记，GICv3/
+      GICv4的基本逻辑会持续的总结到这个文档里。
+
+
+基本逻辑
+---------
+
