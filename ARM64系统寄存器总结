@@ -2,6 +2,7 @@
 -v0.2 2024.5.02 Sherlock 开始补充虚拟化部分
 -v0.3 2024.5.04 Sherlock 继续补充虚拟化部分
 -v0.4 2024.5.06 Sherlock 继续补充虚拟和timer
+-v0.5 2024.5.07 Sherlock 继续补充timer
 
 简介：本文总结ARM64系统寄存器的基本逻辑，我们从基本的中断异常逻辑、地址翻译以及
       虚拟化的逻辑出发，看看对应功能的基本系统寄存器。参考的ARM spec的版本是J.a。
@@ -125,7 +126,7 @@ CNTV_CVAL_EL0  --->    CNTHV_CVAL_EL2
 如上的这些寄存器映射要和异常处理的逻辑结合起来理解。当CPU处在host用户态，发生trap
 到EL1的中断或异常时，CPU应该trap到EL2，并使用EL1的中断异常相关寄存器，按照如上的
 定义，这个时候实际使用的是EL2对应的寄存器。(看起来ARM这里的EL2寄存器和riscv上带V
-前缀的寄存器的逻辑是一样的？) 这里是通过HCR_EL2.TGE=1控制从原本的trap到EL1改成trap
+前缀的寄存器的逻辑是一样的) 这里是通过HCR_EL2.TGE=1控制从原本的trap到EL1改成trap
 到EL2。
 
 注意，其中的一些寄存器，比如TTBR0_EL1/TTBR1_EL1，当CPU处于host用户态做地址翻译的
@@ -134,6 +135,10 @@ CNTV_CVAL_EL0  --->    CNTHV_CVAL_EL2
 可以看到，ARM VHE的一部分寄存器逻辑和riscv的逻辑正好是反过来的。ARM是host的寄存器
 映射到XXX_EL2，riscv是guest的寄存器映射到V前缀的同名寄存器上。但是，考虑其中的底
 层逻辑，是否一套寄存器就可以解决虚拟化面对的问题？
+
+todo: EL2收到一个host的timer中断，打算虚拟机执行的逻辑是什么？
+      多个VM切换的时间点在哪里？除了hypervisor调度，host上的线程调度会导致VM切换么？
+      如果host上的线程调度导致VM切换，VM里的XXX_EL1不会覆盖么？
 
 ARM64还定义了一堆别名系统寄存器，当CPU运行在EL2/EL3时，如果要访问EL0/EL1的寄存器，
 需要使用这些寄存器，这些寄存器的名字是XXX_EL12，对应的EL0/EL1寄存器是XXX_EL0/XXX_EL1。
@@ -155,27 +160,21 @@ guest的stage1翻译实际使用的是TTBR_EL2/TCR_EL2。Stage2翻译相关的�
 
 todo: vtimer。
 
-todo: 直接注入外部中断。
-
-todo: IPI。
-
 todo: 普通外部中断。
+
+todo: vLPI/vSGI/vNMI各自直接注入的逻辑。
 
 
 PMU相关寄存器
 --------------
 
-todo: PMU基本逻辑。
-
-GIC在核一侧的寄存器
---------------------
-
-todo: ICC_XXX/ICV_XXX/ICH_XXX。
+PMU基本逻辑和寄存器定义在独立的文档中描述。
 
 GIC
 ----
 
-todo: vLPI/vSGI/vNMI各自直接注入的逻辑。
+GIC有设备一侧的MMIO寄存器以及核一层的系统寄存器，这里只描述核一侧的系统寄存器。
+GIC核一侧的系统寄存器主要有：ICC_XXX/ICV_XXX/ICH_XXX。
 
 SMMU
 -----
