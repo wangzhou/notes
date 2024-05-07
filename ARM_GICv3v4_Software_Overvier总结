@@ -1,9 +1,85 @@
 -v0.1 2024.5.7 Sherlock init
 
 简介：本文是ARM的文档《GICv3 and GICv4 Software Overview》的一个学习笔记，GICv3/
-      GICv4的基本逻辑会持续的总结到这个文档里。
+      GICv4的基本逻辑会持续的总结到这个文档里。这个文档貌似是基于2016的GIC协议，
+      我们参考的GICv3/GICv3的协议是H.b版本。
 
 
-基本逻辑
----------
+GIC的需求
+----------
+
+外部各种各样的原因都可以中断CPU核的执行，也就是给CPU发中断，中断控制器汇集各种
+外设的中断，通过CPU的中断接口报给CPU，CPU在收到中断后查特定的中断相关的寄存器，
+获得对应的中断ID，再通过ID查找到对应的中断处理函数，执行中断处理函数后完成整个中
+断处理流程。
+
+我们先分析中断控制器(GIC)的基本需求，然后一一看下，GIC实现各个需求的基本逻辑。
+
+1. GIC要管理每个中断和中断ID(INTID)的对应关系。CPU通过GIC的寄存器得到当前中断的
+   INTID，那么GIC硬件本身就要维护GIC输入到INTID的映射关系。
+
+2. 中断处理过程中，一个中断会处在不同的状态上。GIC要维护每个中断的状态。
+
+3. 中断可以被控制报到特性的CPU核上，GIC要维护每个中断到CPU核的路由关系。
+
+4. 各种不同的中断可能会同时报到一个CPU核，CPU处理它们有先后顺序，GIC要维护各个中
+   断的优先级。
+
+5. 中断个数持续扩展，GIC要有一定的可扩展性。 
+
+6. 对于支持虚拟化的CPU核，GIC要配合支持，并尽量降低开销。
+
+INTID和中断种类
+----------------
+
+GIC把中断分成了不同的种类：PPI，SGI，SPI和LPI。PPI(private peripheral interrupt)
+一般用来接CPU核的Timer中断，INTID在16-31，注意是每个core上都有处于16-31编号的PPI，
+一个core上多个特权态都有自己的PPI INTID，SBSA定义了固定的PPI INTID。SGI(software
+generate interrupt)，用来做IPI中断，软件写对应的GIC寄存器，触发另一个core上的SGI
+中断，INTID在0-15。SPI(shared peripheral interrupt)一般外设使用的中断类型, INTID
+在32-1019。LPI(locat peripheral interrupt)，支持PCIe设备上的消息中断(MSI)，INTID
+在8192或者更大。
+
+GIC中断控制器从v1发展到v4，v2已经支持PPI/SGI/SPI，使用GIC CPU interface(GICC)和
+GIC distributor(GICD)支持，对于每个中断，GICD上都有专门的MMIO寄存器描述(或配置)
+它的中断触发方式/中断状态/中断路由/中断优先级等信息，GICv3/GICv4继承了这样的设计，
+并在这个基础上增加了ITS和GIC redistributor(GICR)支持更多数量的MSI中断，所以GICv3/
+GICv4对于SPI也有大量的配置寄存器。
+
+MSI数量巨大，配置信息保存在内存中的表格里，下配置的方式也改用命令进行，也就有comand
+queue之类的设计。
+
+中断触发方式和中断状态
+-----------------------
+
+中断的触发方式有电平触发和边沿触发，这里触发方式是指外设中断和GIC的输入之间的信
+号。
+
+中断在不同的触发方式下具有不同的状态机。todo...
+
+
+GIC的各个模块
+--------------
+
+
+中断路由控制
+-------------
+
+
+中断优先级
+-----------
+
+
+中断虚拟化
+-----------
+
+vPPI/vSGI
+
+外设的虚拟化：软件模拟，设备直通
+
+
+中断虚拟化直通
+---------------
+
+
 
