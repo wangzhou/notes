@@ -4,8 +4,10 @@
 -v0.4 2024.5.06 Sherlock 继续补充虚拟和timer
 -v0.5 2024.5.07 Sherlock 继续补充timer
 
-简介：本文总结ARM64系统寄存器的基本逻辑，我们从基本的中断异常逻辑、地址翻译以及
-      虚拟化的逻辑出发，看看对应功能的基本系统寄存器。参考的ARM spec的版本是J.a。
+简介：本文总结ARM64系统寄存器的基本逻辑，我们从基本的CPU配置、中断异常逻辑、地址
+      翻译、时钟、GIC、SMMU以及虚拟化的逻辑出发，看看对应功能的基本系统寄存器。
+      本文重点看基础且重要的寄存器，重点是给一个整体的描述，具体功能需要在独立的
+      文档中总结。参考的ARM spec的版本是J.a。
 
 
 CPU基础配置/CPU特性位/CPU特性开关寄存器
@@ -13,7 +15,7 @@ CPU基础配置/CPU特性位/CPU特性开关寄存器
 
 一个CPU需要有对应的生产厂家、构架版本、支持特性、支持特性开关等的寄存器。
 
-GRP/中断异常/VMMA寄存器
+GPR/中断异常/VMMA寄存器
 ------------------------
 
 ARM64下有31个64bit通用寄存器(GPR)，其中x0-x29用作通用数据，x30时link register(lr)，
@@ -33,7 +35,7 @@ ARM64下有31个64bit通用寄存器(GPR)，其中x0-x29用作通用数据，x30
 中断异常返回地址，ELR_ELx。(exception link register)
 
 中断异常的路由控制，没有类似riscv上的逐个中断异常委托的机制，ARM上是整体定义和补
-充定义的方式。
+充定义相结合的方式。
 
 各种中断的pending/enable控制，核一侧的控制只有FIQ/IRQ的统一开关，riscv上和这个不
 一样，核一侧分了外部中断/时钟中断/软件中断等的pending/enable控制寄存器。ARM上的
@@ -66,8 +68,8 @@ CNTP_CVAL_EL0，counter-timer physical timer CompareValue register。
 虚拟化相关寄存器
 -----------------
 
-我们分析支持VHE时，需要增加的系统寄存器。从软件的角度看，host/guest上的软件(包括)
-内核并不清楚它们是在host还是在guest，硬件的所有设计逻辑，需要在这个前提下都是成立
+我们分析支持VHE时，需要增加的系统寄存器。从软件的角度看，host/guest上的软件(包括
+内核)并不清楚它们是在host还是在guest，硬件的所有设计逻辑，需要在这个前提下都是成立
 的。
 
 在VHE打开时，guest用户态运行在EL0，guest内核态运行在EL1，host用户态运行在EL0，
@@ -129,9 +131,8 @@ CNTV_CVAL_EL0  --->    CNTHV_CVAL_EL2
 
 如上的这些寄存器映射要和异常处理的逻辑结合起来理解。当CPU处在host用户态，发生trap
 到EL1的中断或异常时，CPU应该trap到EL2，并使用EL1的中断异常相关寄存器，按照如上的
-定义，这个时候实际使用的是EL2对应的寄存器。(看起来ARM这里的EL2寄存器和riscv上带V
-前缀的寄存器的逻辑是一样的) 这里是通过HCR_EL2.TGE=1控制从原本的trap到EL1改成trap
-到EL2。
+定义，这个时候实际使用的是EL2对应的寄存器。这里是通过HCR_EL2.TGE=1控制从原本的trap
+到EL1改成trap到EL2。
 
 注意，其中的一些寄存器，比如TTBR0_EL1/TTBR1_EL1，当CPU处于host用户态做地址翻译的
 时候也是会使用到的。(EL0/EL2地址翻译使用TTBR0_EL2/TTBR1_EL2)
@@ -148,11 +149,11 @@ ARM64还定义了一堆别名系统寄存器，当CPU运行在EL2/EL3时，如�
 访问寄存器，实际访问到的是映射到的XXX_EL2寄存器。
 
 看下地址翻译相关的东西。ARM spec在描述地址翻译时引入了Translation regimes的概念，
-ARM spec D8.1.2定义了一堆Translation regime。我们先不看安全(secure)和ARM32(realm)
-相关的东西，目前只要关注Non-secure EL1&EL0 translation regime和Non-secure EL2&EL0
-translation regime的情况，对于Non-secure EL1&EL0 translation regime，当存在Non-secure
-EL2时，描述的是虚拟机的情况，需要做stage1和stage2翻译，对于Non-secure EL2&EL0
-translation regime，描述的是host的情况，只需要做stage1的翻译。
+ARM spec D8.1.2定义了一堆Translation regime。我们先不看安全(secure)和realm相关的
+东西，目前只要关注Non-secure EL1&EL0 translation regime和Non-secure EL2&EL0 translation
+regime的情况，对于Non-secure EL1&EL0 translation regime，当存在Non-secure EL2时，
+描述的是虚拟机的情况，需要做stage1和stage2翻译，对于Non-secure EL2&EL0 translation
+regime，描述的是host的情况，只需要做stage1的翻译。
 
 可以看到，只有EL1&EL0 translation regime会使用到stage2翻译，就是只有虚拟机会使用
 到stage2翻译，host(包括hypervisor)自己只会使用stage1翻译。
@@ -163,7 +164,7 @@ VTCR_EL2。
 
 todo: vtimer。
 
-todo: 普通外部中断。
+todo: 普通外部中断虚拟化。
 
 todo: vLPI/vSGI/vNMI各自直接注入的逻辑。
 
