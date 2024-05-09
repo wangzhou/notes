@@ -1,4 +1,5 @@
 -v0.1 2024.5.7 Sherlock init
+-v0.2 2024.5.8 Sherlock ...
 
 简介：本文是ARM的文档《GICv3 and GICv4 Software Overview》的一个学习笔记，GICv3/
       GICv4的基本逻辑会持续的总结到这个文档里。这个文档貌似是基于2016的GIC协议，
@@ -53,33 +54,79 @@ queue之类的设计。
 -----------------------
 
 中断的触发方式有电平触发和边沿触发，这里触发方式是指外设中断和GIC的输入之间的信
-号。
+号。中断状态有：inactive, pending, active & pending, active，中断在不同的触发方
+式下具有不同的状态机。
 
-中断在不同的触发方式下具有不同的状态机。todo...
+对于电平中断，外设中断电平拉起(inactive -> pending)，CPU通过ICC_IARn_EL1读INTID
+(pending -> active & pending)，CPU写外设寄存器拉低外设的中断电平(active & pending -> active)，
+CPU通过ICC_CTRL_EL1配置EOI(active -> inactive)。
 
+对于边沿中断，外设发起边沿中断(inactive -> pending)，CPU通过ICC_IARn_EL1读INTID
+(pending -> active)，如果这个时候，外设又有边沿触发的中断(active -> active & pending)，
+CPU通过ICC_CTRL_EL1配置EOI(active & pending -> pending)。对于处于active的中断，
+如果CPU通过ICC_CTRL_EL1配置EOI(active -> inactive)。
+
+todo: 语意总结下。
+
+LPI只有inactive和pending?
 
 GIC的各个模块
 --------------
+
+GICC/GICR/GICD/ITS等。
+
+todo: ITS相关的逻辑。输入输出，device table/interrupt translation table/collection 
+      table，command queue，comands。
+
+      redistributor, 作用，控制方式。LPI configuration table, LPI pending table。
+
+      硬件cache。
+
+
+      SGI触发。
 
 
 中断路由控制
 -------------
 
+PPI/SGI不存在中断路由？SPI直接通过GICD的寄存器配置。LPI用发command的方式配置。
 
 中断优先级
 -----------
 
+todo: ...
 
 中断虚拟化
 -----------
 
-vPPI/vSGI
+todo: kvm里模拟gic的基本逻辑? 也就是虚拟机中外设和中断控制器的关系。
+
+      list register的情况，支持软件模拟外设，通过kvm ioctl从hypervisor向VM注入中断？
+      这种情况可以向VM注入PPI/SPI/LPI？SGI要怎么搞？
+
+      vPPI的逻辑是怎么样，也是hypervisor里起hrtimer，然后定时注入？
+
+      直通外设和list register的逻辑怎么综合到一起？
+
+vPPI/vSGI/vSPI/vLPI?
 
 外设的虚拟化：软件模拟，设备直通
+
+      vSPI不能直接注入? 只有vSGI和vLPI可以直接注入？
+
+      软件模拟的设备，直通的设备都可以直接注入？
+
+      GITS_TRANSLATER地址是host和VM公用的？
 
 
 中断虚拟化直通
 ---------------
 
 
+ICC_IAR0_EL1/ICC_IAR1_EL1, CPU从这个寄存器读到INTID。
+ICC_CTRL_ELn, control completion of interrupt，CPU通过这个寄存器设置EOI。
+
+ICC_SRE_ELn, system register enable。
+ICC_PMR_ELn, priority mask register。
+ICC_IGRPEN1_ELn，interrupt group enable。
 
