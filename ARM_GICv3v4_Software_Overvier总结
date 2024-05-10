@@ -61,32 +61,60 @@ queue之类的设计。
 
 对于电平中断，外设中断电平拉起(inactive -> pending)，CPU通过ICC_IARn_EL1读INTID
 (pending -> active & pending)，CPU写外设寄存器拉低外设的中断电平(active & pending -> active)，
-CPU通过ICC_CTRL_EL1配置EOI(active -> inactive)。
+CPU通过ICC_CTRL_EL1配置EOI(active -> inactive)。注意，这里用高电平代表有中断，只
+是为了方便描述，实际也可能是反过来。
 
 对于边沿中断，外设发起边沿中断(inactive -> pending)，CPU通过ICC_IARn_EL1读INTID
 (pending -> active)，如果这个时候，外设又有边沿触发的中断(active -> active & pending)，
 CPU通过ICC_CTRL_EL1配置EOI(active & pending -> pending)。对于处于active的中断，
 如果CPU通过ICC_CTRL_EL1配置EOI(active -> inactive)。
 
-todo: 语意总结下。
+总结下各个状态的语意，inactive是没有中断，pending是外设有中断信号，但是CPU还没有
+处理，active是CPU读了INDID，并在处理中断，active & pending在电平和边沿触发中断下
+的语意不一样，电平中断下，表示CPU还没有控制外设拉低外设和GIC之间的电平，边沿触发
+中断，表示CPU在处理当前中断的时候，外设又来了一个中断。
 
-LPI只有inactive和pending?
+LPI只有inactive和pending，为什么只有两种？和ICC_IARn_EL1/ICC_CTRL_EL1如何配合?
 
 GIC的各个模块
 --------------
 
-GICC/GICR/GICD/ITS等。
+GIC上包括的各个部件主要有GICC/GICR/GICD/ITS等，它们之间的逻辑关系如下图：
+```   
+                                           Memory:
+
+        +----------+   +-------+           +------------+ +---+ +----------------+
+        |   GICD   |   |  ITS  | --------> |device table| |ITT| |collection table|
+        +----------+   +-------+ <-------- +------------+ +---+ -----------------+
+
++-------+  +-------+  +-------+  +-------+ +-----------------------+ +-----------------+
+| GICR  |  | GICR  |  | GICR  |  | GICR  | |LPI configuration table| |LPI pending table|
++-------+  +-------+  +-------+  +-------+ +-----------------------+ +-----------------+
+                                            (every GICR has own LPI pending table, 
++-------+  +-------+  +-------+  +-------+   but share LPI configuration table)
+| GICC  |  | GICC  |  | GICC  |  | GICC  | 
+|       |  |       |  |       |  |       | 
+| core0 |  | core1 |  | core2 |  | core3 | 
++-------+  +-------+  +-------+  +-------+ 
+```
+
 
 todo: ITS相关的逻辑。输入输出，device table/interrupt translation table/collection 
       table，command queue，comands。
 
       redistributor, 作用，控制方式。LPI configuration table, LPI pending table。
 
-      硬件cache。
+用内存中的表哥保存信息，一般都会在设备上放cache，GIC也是一样。有了设备的cache，
+就会有同步的需求，GIC使用command无效化ITS中cache的配置信息。
 
+外设和GIC的接口
+----------------
 
-      SGI触发。
-
+PPI主要是做Timer的中断，Timer的中断信号和PPI的输入相连。SGI做IPI，CPU写ICC_SGI0R_EL1/
+ICC_SGI1R_EL1/ICC_ASGI1R_EL1触发SGI。外设的线中断可以直接接在GIC上做SPI中断。外
+设通过写GITS_TRANSLATER这个MMIO寄存器触发LPI，PCIe设备的MSI靠LPI来实现，MSI写的
+内容包括PCIe设备的BDF + eventID，GIC拿到这个信息后会根据提前配置好的信息查找对应
+的INTID以及路由信息，并根据提前配置的路由信息，把中断信号送到对应的CPU。
 
 中断路由控制
 -------------
@@ -123,7 +151,6 @@ vPPI/vSGI/vSPI/vLPI?
 
 中断虚拟化直通
 ---------------
-
 
 ICC_IAR0_EL1/ICC_IAR1_EL1, CPU从这个寄存器读到INTID。
 ICC_CTRL_ELn, control completion of interrupt，CPU通过这个寄存器设置EOI。
