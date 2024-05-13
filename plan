@@ -305,3 +305,5 @@ ARM64:
  - NMI Watchdog hard lockup		  c
  - softlockup/hardlockup机制/migration    c
 
+cpu hotplug流程(setend模拟)		  todo
+
