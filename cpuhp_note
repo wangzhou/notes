@@ -1,0 +1,19 @@
+-v0.1 2024.5.13 Sherlock init
+
+
+CPU在上下线的时候，需要做一堆附带的动作，比如，PMU相关功能的配置，功耗相关的功能
+的配置，指令相关功能的配置等等。
+
+Linux内核里向这些功能提供注册接口，把CPU上下电的时候需要注册的回调函数先注册到系
+统里，CPU上下电的时候直接遍历调用注册的回调函数就可以了。
+
+cpuhp_setup_state_xxx函数，比如cpuhp_setup_state_nocalls/cpuhp_setup_state_multi
+是对应的注册接口。
+
+我们在系统里搜索这些接口，就可以知道哪些部门需要注册CPU上下电的这些回调函数。
+
+现在知道的模块有：driver里perf/clocksource/irq/devfreq/cpuidle/，kernel里trace/
+fork/softirq/crash_core，mm里page-writeback.c/zswap/page_alloc/slub等，kvm里，
+arch/arm64里cpuinfo/armv8_deprecated/cpufeature/fpsimd等。
+
+
