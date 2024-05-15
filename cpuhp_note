@@ -16,4 +16,7 @@ cpuhp_setup_state_xxx函数，比如cpuhp_setup_state_nocalls/cpuhp_setup_state_
 fork/softirq/crash_core，mm里page-writeback.c/zswap/page_alloc/slub等，kvm里，
 arch/arm64里cpuinfo/armv8_deprecated/cpufeature/fpsimd等。
 
+比较奇怪的事，内核里用一个大数组(struct cpuhp_step cpuhp_hp_states[])保存所有的
+cpu上下线的回调，各种厂家的五花八门的回到都塞到这个里面...
+
 

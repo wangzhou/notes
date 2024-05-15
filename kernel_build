@@ -1,0 +1,4 @@
+
+
+make help
+make -j10 binrpm-pkg
