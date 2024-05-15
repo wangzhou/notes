@@ -308,4 +308,10 @@ ARM64:
 cpu hotplug流程(setend模拟)		  todo
 kernel_build
 stress-ng
+文件系统和存储简介
+page_cache
+sync/syncfs
+block层
+blktrace/blkparse/btt使用和原理
+nvme和disk
 
