@@ -306,4 +306,6 @@ ARM64:
  - softlockup/hardlockup机制/migration    c
 
 cpu hotplug流程(setend模拟)		  todo
+kernel_build
+stress-ng
 
