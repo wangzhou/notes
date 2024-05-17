@@ -1,0 +1,11 @@
+-v0.1 2024.5.17 Sherlock init
+
+Linux上的线程在进入D状态超过一定时间，一般是120s，得不到调度后，内核会报hung 120
+的warning。
+
+相关检测代码在kernel/hung_task.c。
+
+在这个特性使能的内核上，需要注意的是，/proc/sys/kernel/hung_task_warnings这个接口
+可以配置可以显示warning的次数，这个值默认是10，每显示一次warning，这个值会减少1，
+如果这个值变成0，即使有线程进入D状态hung超过一定的时间，也不会显示warning。
+
