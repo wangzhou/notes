@@ -316,4 +316,4 @@ blktrace/blkparse/btt使用和原理
 nvme和disk
 lsscsi - 控制器和盘的关系
 arm copy_to/from_user
-
+linux内核alternative机制
