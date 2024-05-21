@@ -317,3 +317,6 @@ nvme和disk
 lsscsi - 控制器和盘的关系
 arm copy_to/from_user
 linux内核alternative机制
+block设备驱动
+mpam基本逻辑
+快速跟踪函数调用栈
