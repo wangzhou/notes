@@ -1,0 +1,85 @@
+-v0.1 2024.5.22 Sherlock init
+-v0.2 2024.5.23 Sherlock ...
+
+简介：本文分析Linux内核的writeback的基本逻辑，分析依赖的内核版本是v6.8-rc5。
+
+
+基本逻辑
+---------
+
+一般情况下Linux的write系统调用是把数据写到page cache，随后会有专门的内核线程把
+page cache里的脏数据写回到持久存储设备上。
+
+Linux也提供了强制会刷脏数据的系统调用(它们的代码在kernel/fs/sync.c)，比如，sync()
+把系统上所有分区上的脏数据写回硬盘(后面我们不区分ssd/hhd/nvme等不同的存储介质，
+统一都称硬盘)，syncfs(fd)同步回刷fd所在的分区上的文件系统上的脏数据。
+
+代码分析
+---------
+
+先看write系统调用的基本逻辑。
+
+/* kernel/fs/read_write.c */
+write->ksys_write->vfs_write->new_sync_write->call_write_iter->ext4_file_write_iter
+->ext4_buffered_write_iter
+
+如上逻辑，在ext4_buffered_write_iter中的generic_perform_write写page cache，并且
+标记脏数据。
+
+其中的逻辑有：ext4_write_begin，更新数据，ext4_write_end。
+重点看怎么标记脏页的。
+
+ext4_write_end -> block_write_end -> __block_commit_write -> mark_buffer_dirty
+-> __mark_inode_dirty -> sb->s_op->dirty_inode。找到挂到哪个链表上了?
+
+syncfs的基本逻辑。syncfs -> sync_filesystem -> sync_inodes_sb -> bdi_split_work_to_wbs，
+-> wb_queue_work。注意，这里把一个writeback work提交给内核的writeback线程。
+
+writeback线程为bdi_wq，线程处理函数是wb_workfn，在fs/fs-writeback.c。writeback线
+程中的流程是：wb_workfn->wb_do_writeback-> wb_writeback -> writeback_sb_inodes，
+对于syncfs，这里调用的是writeback_sb_inodes。
+
+注意，writeback_sb_inodes里，从bdi_writeback->b_io里取出每个要会写的脏inode，
+依次执行__writeback_single_inode。所以，这里要看write什么时候把脏页加到这个b_io上？
+
+另外，__writeback_single_inode会更新inode和实际的脏数据。__writeback_single_inode
+-> do_writepages -> mapping->a_ops->writepages(ext4_writepages)
+
+do_writepages还在vfs的writeback逻辑里，writepages已经到对应的文件系统回调函数里。
+注意ext4在处理了自己的逻辑后，把请求转成bio，下发block层。
+
+ext4_writepages->ext4_do_writepages->ext4_io_submit->submit_bio。注意，这里的submit_bio
+已经进入block层(linux/block/blk-core.c)。
+
+submit_bio->submit_bio_noacct->submit_bio_noacct_nocheck。注意，这里要搞清楚bio
+进来的请求是怎么缓存的？看起来是有个current->bio_list。如果有current->bio_list，
+那么把请求挂在bio_list就返回了。
+
+submit_bio_noacct_nocheck->__submit_bio_noacct_mq->__submit_bio->blk_mq_submit_bio,
+这里进入block层的多队列处理。
+
+trace_block_getrq是blktrace/blkparse/btt统计数据的G那个点。submit_bio_noacct_nocheck
+中的trace_block_bio_queue是Q点。所以，Q2G的延时比较大，就是bio在bio_list堵了很久。
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
