@@ -62,7 +62,9 @@ trace_block_getrq是blktrace/blkparse/btt统计数据的G那个点。submit_bio_
 中的trace_block_bio_queue是Q点。所以，Q2G的延时比较大，就是bio在bio_list堵了很久。
 
 
+todo: bdi的逻辑，mm/backing-dev.c。
 
+perf trace -a -e ext4:ext4_writepages_result -o ext4_writepages_result_log --time
 
 
 

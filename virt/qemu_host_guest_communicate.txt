@@ -56,7 +56,9 @@ of variables...
 
 Or you can -s -S in qemu command line, then in another window, run gdb;
 target remote:1234 to connect gdb server in qemu. Then you can set breakpoint,
-run and so on.
+run and so on. If you have done like above steps, but fail to set a breakpoint,
+please disable kaslr, and retry it. For disable kaslr, adding nokaslr in kernel
+command line, you can do this in qemu -append, like, -append "xxxx nokaslr"
 
 For debug qemu itself, you can run qemu and get the pid of qemu, then run gdb;
 attach <qemu_pid>

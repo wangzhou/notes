@@ -1,0 +1,8 @@
+
+
+qemu-img create -f raw block.img 10MB
+mkfs.ext4 block.img
+
+qemu-system-arm64 -hda block.img
+
+then you will find a hardware disk in qemu, like /dev/vda, mount and use it.
