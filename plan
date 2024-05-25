@@ -324,3 +324,6 @@ qemu nokalr 				 repost
 qemu addd hda
 cond_resched显示调度
 writeback的逻辑			         todo
+arm spe硬件逻辑，可以具体干什么		 todo
+gdb跟踪内存watchpoint			 repost
+gcov的基本逻辑
