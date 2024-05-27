@@ -1,3 +1,5 @@
+-v0.1 2024.5.25 Sherlock init
+
 code:
 ```
 #include <stdio.h>
@@ -18,3 +20,7 @@ int main()
 
 gcc test.c -c -fprofile-arcs -ftest-coverage -o main.o
 gcc main.o -lgcov -o test
+
+对比正常情况和gcov情况程序的反汇编，可以大概看出来，gcov应该是在程序运行的时候建
+立了一个跳转位置的表，然后在跳转前插入指令更新表里的统计系统。这样，程序运行完，
+把对应的数据也生成出来，然后用工具就可以统计出程序运行的覆盖率。

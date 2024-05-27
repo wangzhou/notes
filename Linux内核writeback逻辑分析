@@ -1,5 +1,7 @@
 -v0.1 2024.5.22 Sherlock init
 -v0.2 2024.5.23 Sherlock ...
+-v0.3 2024.5.25 Sherlock ...
+-v0.4 2024.5.26 Sherlock ...
 
 简介：本文分析Linux内核的writeback的基本逻辑，分析依赖的内核版本是v6.8-rc5。
 
@@ -8,11 +10,14 @@
 ---------
 
 一般情况下Linux的write系统调用是把数据写到page cache，随后会有专门的内核线程把
-page cache里的脏数据写回到持久存储设备上。
+page cache里的脏数据写回到持久存储设备上。当脏数据超过一定的比例时，write系统调
+用会同步等待一定的脏数据会写完成。
 
 Linux也提供了强制会刷脏数据的系统调用(它们的代码在kernel/fs/sync.c)，比如，sync()
 把系统上所有分区上的脏数据写回硬盘(后面我们不区分ssd/hhd/nvme等不同的存储介质，
 统一都称硬盘)，syncfs(fd)同步回刷fd所在的分区上的文件系统上的脏数据。
+
+Linux通过proc文件系统提供了writeback相关的配置接口。
 
 代码分析
 ---------
@@ -65,23 +70,4 @@ trace_block_getrq是blktrace/blkparse/btt统计数据的G那个点。submit_bio_
 todo: bdi的逻辑，mm/backing-dev.c。
 
 perf trace -a -e ext4:ext4_writepages_result -o ext4_writepages_result_log --time
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 

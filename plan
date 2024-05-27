@@ -305,9 +305,8 @@ ARM64:
  - NMI Watchdog hard lockup		  c
  - softlockup/hardlockup机制/migration    c
 
-cpu hotplug流程(setend模拟)		  todo
+cpu hotplug流程(setend模拟)		  #
 kernel_build
-stress-ng
 文件系统和存储简介
 page_cache的实现			  todo
 sync/syncfs
@@ -315,15 +314,12 @@ block层
 blktrace/blkparse/btt使用和原理
 nvme和disk
 lsscsi - 控制器和盘的关系
-arm copy_to/from_user
-linux内核alternative机制
+arm copy_to/from_user    #
+linux内核alternative机制 #
 block设备驱动
 mpam基本逻辑
-快速跟踪函数调用栈
-qemu nokalr 				 repost
-qemu addd hda
-cond_resched显示调度
+快速跟踪函数调用栈(gdb/ftrace/strace/用户态backtrace)
 writeback的逻辑			         todo
-arm spe硬件逻辑，可以具体干什么		 todo
+arm spe硬件逻辑，可以具体干什么		 todo #
 gdb跟踪内存watchpoint			 repost
-gcov的基本逻辑
+qemu nokalr 				 repost
