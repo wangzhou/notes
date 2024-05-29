@@ -31,8 +31,10 @@ write->ksys_write->vfs_write->new_sync_write->call_write_iter->ext4_file_write_i
 如上逻辑，在ext4_buffered_write_iter中的generic_perform_write写page cache，并且
 标记脏数据。
 
-其中的逻辑有：ext4_write_begin，更新数据，ext4_write_end。
-重点看怎么标记脏页的。
+其中的逻辑有：ext4_write_begin，更新数据，ext4_write_end。重点看怎么标记脏页的。
+ext4_write_end之后有balance_dirty_pages_ratelimited，这个函数里会检测脏页的比例
+是否超过一定，如果超过一定的比例，启动触发会写，并同步等待，注意这里怎么同步等待
+了。
 
 ext4_write_end -> block_write_end -> __block_commit_write -> mark_buffer_dirty
 -> __mark_inode_dirty -> sb->s_op->dirty_inode。找到挂到哪个链表上了?
@@ -66,8 +68,10 @@ submit_bio_noacct_nocheck->__submit_bio_noacct_mq->__submit_bio->blk_mq_submit_b
 trace_block_getrq是blktrace/blkparse/btt统计数据的G那个点。submit_bio_noacct_nocheck
 中的trace_block_bio_queue是Q点。所以，Q2G的延时比较大，就是bio在bio_list堵了很久。
 
+bdi的逻辑的代码路径在mm/backing-dev.c，内核初始化的时候创建一个名字为writeback的
+unbound workqueue, default_bdi_init->alloc_workqueue。
 
-todo: bdi的逻辑，mm/backing-dev.c。
+wb_wakeup_delayed实现定义的writeback。
 
 perf trace -a -e ext4:ext4_writepages_result -o ext4_writepages_result_log --time
 
