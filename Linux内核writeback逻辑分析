@@ -75,3 +75,4 @@ wb_wakeup_delayed实现定义的writeback。
 
 perf trace -a -e ext4:ext4_writepages_result -o ext4_writepages_result_log --time
 
+writeback:global_dirty_state
