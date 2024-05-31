@@ -18,7 +18,7 @@ SPE和传统的PMU采样的最大区别有两点：第一，采样过程是硬�
 传统PMU事件偏向微架构级别的事件，SPE偏向架构基本的行为(一般是程序员可以直接看到的)。
 
 看个具体的例子，比如，SPE增加了对load/store指令的event：SAMPLE_FEED_LD/SAMPLE_FEED_ST。
-程序员可以配置跟踪load/store，并配置counter的初始值，当硬件更具load/store的操作
+程序员可以配置跟踪load/store，并配置counter的初始值，当硬件根据load/store的操作
 改变counter里的数值，当counter里的数值满足一定的条件时，硬件自动做load/store对应
 影响的采样，并写入到采样buffer里，同时硬件自动重新继续用counter进行跟踪。可以看
 到，用SPE可以获得系统中比较准确的冷热页的信息。

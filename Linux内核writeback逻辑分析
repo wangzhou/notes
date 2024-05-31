@@ -2,12 +2,13 @@
 -v0.2 2024.5.23 Sherlock ...
 -v0.3 2024.5.25 Sherlock ...
 -v0.4 2024.5.26 Sherlock ...
+-v0.5 2024.5.30 Sherlock ...
+-v0.6 2024.5.31 Sherlock ...
 
 简介：本文分析Linux内核的writeback的基本逻辑，分析依赖的内核版本是v6.8-rc5。
 
 
-基本逻辑
----------
+## 基本逻辑
 
 一般情况下Linux的write系统调用是把数据写到page cache，随后会有专门的内核线程把
 page cache里的脏数据写回到持久存储设备上。当脏数据超过一定的比例时，write系统调
@@ -17,46 +18,95 @@ Linux也提供了强制会刷脏数据的系统调用(它们的代码在kernel/f
 把系统上所有分区上的脏数据写回硬盘(后面我们不区分ssd/hhd/nvme等不同的存储介质，
 统一都称硬盘)，syncfs(fd)同步回刷fd所在的分区上的文件系统上的脏数据。
 
-Linux通过proc文件系统提供了writeback相关的配置接口。
+Linux通过proc文件系统提供了writeback相关的配置接口，proc/sysfs提供了对应的统计参
+数对外展示接口。
 
-代码分析
----------
 
-先看write系统调用的基本逻辑。
+## 数据结构
 
+struct super_block *sb: 表示一个文件系统的实例。
+
+struct backing_dev_info *bdi: 表示一个文件系统实例对应的回写设备, sb->s_bdi是其引用。
+
+struct bdi_writeback: 表示一组回写任务，bdi上的wb_list收集所有bdi_writeback。
+
+struct wb_writeback_work: 表示一个回写任务，挂在bdi_writeback的work_list。
+
+file/inode/address_space/bdi/bio/request/gendisk/queue
+
+bdi_writeback的语意，在哪里初始化的?
+
+fs/fs-writeback.c __inode_attach_wb
+
+
+## 代码分析
+
+### write系统调用
+
+先看write系统调用的基本逻辑，基本的调用逻辑如下：
+```
 /* kernel/fs/read_write.c */
-write->ksys_write->vfs_write->new_sync_write->call_write_iter->ext4_file_write_iter
+ksys_write->vfs_write->new_sync_write->call_write_iter->ext4_file_write_iter
 ->ext4_buffered_write_iter
+```
 
 如上逻辑，在ext4_buffered_write_iter中的generic_perform_write写page cache，并且
-标记脏数据。
+标记脏数据。其中的逻辑有：(以ext4为例说明)
+```
+generic_perform_write
+  +-> ext4_write_begin
+  +-> 更新数据
+  +-> ext4_write_end
+    +-> block_write_end
+      +-> __block_commit_write
+        +-> -> mark_buffer_dirty
+          +-> __mark_inode_dirty
+            +-> sb->s_op->dirty_inode /* 挂到哪个链表上了? */
+  +-> balance_dirty_pages_ratelimited
+```
+标记脏页的逻辑在ext4_write_end里，其中会标记inode、对应页面为脏页、相关脏页相关
+的统计数据等等。
 
-其中的逻辑有：ext4_write_begin，更新数据，ext4_write_end。重点看怎么标记脏页的。
 ext4_write_end之后有balance_dirty_pages_ratelimited，这个函数里会检测脏页的比例
-是否超过一定，如果超过一定的比例，启动触发会写，并同步等待，注意这里怎么同步等待
-了。
+是否超过一定比例，如果超过一定的比例，启动触发会写，并同步等待，注意这里怎么同步
+等待？
 
-ext4_write_end -> block_write_end -> __block_commit_write -> mark_buffer_dirty
--> __mark_inode_dirty -> sb->s_op->dirty_inode。找到挂到哪个链表上了?
+### syncfs等系统调用
 
-syncfs的基本逻辑。syncfs -> sync_filesystem -> sync_inodes_sb -> bdi_split_work_to_wbs，
--> wb_queue_work。注意，这里把一个writeback work提交给内核的writeback线程。
+syncfs的基本逻辑如下：(kernel/sync.c)
+```
+syncfs
+  +-> sync_filesystem
+    +-> sync_inodes_sb
+      +-> bdi_split_work_to_wbs
+        +-> wb_queue_work
+```
+syncfs(fd)把fd所在分区上的文件系统上的脏页写回硬盘，syncfs所在的线程把回写任务交
+给内核writeback线程，然后同步等待，直到脏页回写完成解开syncfs的等待。
 
-writeback线程为bdi_wq，线程处理函数是wb_workfn，在fs/fs-writeback.c。writeback线
-程中的流程是：wb_workfn->wb_do_writeback-> wb_writeback -> writeback_sb_inodes，
-对于syncfs，这里调用的是writeback_sb_inodes。
+### writeback内核线程
+
+writeback线程的名字就是writeback，相关的代码路径在mm/backing-dev.c，内核初始化的
+时候创建一个名字为writeback的unbound workqueue, default_bdi_init->alloc_workqueue。
+创建的workqueue为bdi_wq，所以，系统里其它地方的回写任务会都发到bdi_wq。
+
+线程处理函数是wb_workfn，在fs/fs-writeback.c。writeback线
+程中的流程是：wb_workfn->wb_do_writeback-> wb_writeback -> writeback_sb_inodes。
+(对于syncfs，这里调用的是writeback_sb_inodes)
 
 注意，writeback_sb_inodes里，从bdi_writeback->b_io里取出每个要会写的脏inode，
 依次执行__writeback_single_inode。所以，这里要看write什么时候把脏页加到这个b_io上？
 
 另外，__writeback_single_inode会更新inode和实际的脏数据。__writeback_single_inode
--> do_writepages -> mapping->a_ops->writepages(ext4_writepages)
+-> do_writepages -> mapping->a_ops->writepages(ext4_writepages)。
 
 do_writepages还在vfs的writeback逻辑里，writepages已经到对应的文件系统回调函数里。
 注意ext4在处理了自己的逻辑后，把请求转成bio，下发block层。
 
 ext4_writepages->ext4_do_writepages->ext4_io_submit->submit_bio。注意，这里的submit_bio
 已经进入block层(linux/block/blk-core.c)。
+
+### block层
 
 submit_bio->submit_bio_noacct->submit_bio_noacct_nocheck。注意，这里要搞清楚bio
 进来的请求是怎么缓存的？看起来是有个current->bio_list。如果有current->bio_list，
@@ -68,11 +118,12 @@ submit_bio_noacct_nocheck->__submit_bio_noacct_mq->__submit_bio->blk_mq_submit_b
 trace_block_getrq是blktrace/blkparse/btt统计数据的G那个点。submit_bio_noacct_nocheck
 中的trace_block_bio_queue是Q点。所以，Q2G的延时比较大，就是bio在bio_list堵了很久。
 
-bdi的逻辑的代码路径在mm/backing-dev.c，内核初始化的时候创建一个名字为writeback的
-unbound workqueue, default_bdi_init->alloc_workqueue。
 
-wb_wakeup_delayed实现定义的writeback。
+wb_wakeup_delayed中的超时时间定义的固定时间间隔的writeback机制。
+
+
+## writeback相关的观测手段
 
 perf trace -a -e ext4:ext4_writepages_result -o ext4_writepages_result_log --time
 
-writeback:global_dirty_state
+writeback:global_dirty_state中可以的到和脏页相关的统计数据。
