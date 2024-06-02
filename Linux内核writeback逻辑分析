@@ -28,15 +28,15 @@ struct super_block *sb: 表示一个文件系统的实例。
 
 struct backing_dev_info *bdi: 表示一个文件系统实例对应的回写设备, sb->s_bdi是其引用。
 
-struct bdi_writeback: 表示一组回写任务，bdi上的wb_list收集所有bdi_writeback。
+struct bdi_writeback: 表示bdi上和writeback相关的数据，bdi上的wb_list收集所有
+                      bdi_writeback。
 
 struct wb_writeback_work: 表示一个回写任务，挂在bdi_writeback的work_list。
 
-file/inode/address_space/bdi/bio/request/gendisk/queue
 
 bdi_writeback的语意，在哪里初始化的?
-
 fs/fs-writeback.c __inode_attach_wb
+file/inode/address_space/bdi/bio/request/gendisk/queue
 
 
 ## 代码分析
