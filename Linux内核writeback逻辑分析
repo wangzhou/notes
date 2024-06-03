@@ -45,10 +45,10 @@ blk_alloc_queue
           /* 根据是否支持cgroup writeback与否，有两个不同的版本 */
       +-> cgwb_bdi_init
             /*
-	     * 初始化bdi里的wb，回写相关的数据结构，参数配置，回写线程函数在这里
-	     * 初始化。其中就包括：wb->b_dirty/b_io/b_more_io等，wb->dwork的wb_workfn,
-	     * wb_workfn为回写workqueue上执行的函数。
-	     */
+             * 初始化bdi里的wb，回写相关的数据结构，参数配置，回写线程函数在这里
+             * 初始化。其中就包括：wb->b_dirty/b_io/b_more_io等，wb->dwork的wb_workfn,
+             * wb_workfn为回写workqueue上执行的函数。
+             */
         +-> wb_init
 ```
 
@@ -117,8 +117,8 @@ wb_workfn
     +-> wb_writeback
       +-> writeback_sb_inodes。
         +-> __writeback_single_inode
-	  +-> do_writepages
-	    +-> mapping->a_ops->writepages(ext4_writepages)
+          +-> do_writepages
+            +-> mapping->a_ops->writepages(ext4_writepages)
 ```
 
 对于syncfs，这里调用的是writeback_sb_inodes。注意，writeback_sb_inodes里，从
@@ -138,7 +138,19 @@ ext4_writepages
       +->submit_bio。
 ```
 
-todo: 固定间隔writeback，wb_wakeup_delayed中的超时时间定义的固定时间间隔的writeback机制。
+除了像sync这样由用户直接触发page cache回写，内核还有定时的回写任务。内核在wb_workfn
+以及inode标脏(__mark_inode_dirty)的时候，通过一个delay workqueue任务，唤醒writeback
+线程工作，其中delay时间是可以配置的。
+```
+wb_workfn/__mark_inode_dirty
+  +->wb_wakeup_delayed
+        /*
+         * timeout为dirty_writeback_internal通过一定的单位变化得到，这个值对应的
+         * 的接口是/proc/sys/vm/dirty_writeback_centisecs，单位是10ms，也就是proc
+         * 文件系统中的值除以100的秒数值，默认为5s。
+         */
+    +-> queue_delay_work(bdi_wq, &wb->dwork, timeout)
+```
 
 ### block层
 
@@ -148,7 +160,7 @@ submit_bio
     +->submit_bio_noacct_nocheck
       +->__submit_bio_noacct_mq
         +->__submit_bio
-	     /* 这里进入block层的多队列处理 */
+             /* 这里进入block层的多队列处理 */
           +->blk_mq_submit_bio
 ```
 注意，这里要搞清楚bio进来的请求是怎么缓存的？看起来是有个current->bio_list。如果
@@ -159,5 +171,10 @@ trace_block_getrq是blktrace/blkparse/btt统计数据的G那个点。submit_bio_
 
 ## writeback相关的观测手段
 
+
+
 perf trace -a -e ext4:ext4_writepages_result -o ext4_writepages_result_log --time
 writeback:global_dirty_state中可以的到和脏页相关的统计数据。
+
+
+
