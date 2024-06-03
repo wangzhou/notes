@@ -166,15 +166,27 @@ submit_bio
 注意，这里要搞清楚bio进来的请求是怎么缓存的？看起来是有个current->bio_list。如果
 有current->bio_list，那么把请求挂在bio_list就返回了。
 
-trace_block_getrq是blktrace/blkparse/btt统计数据的G那个点。submit_bio_noacct_nocheck
-中的trace_block_bio_queue是Q点。所以，Q2G的延时比较大，就是bio在bio_list堵了很久。
 
-## writeback相关的观测手段
+## writeback相关的观测和控制手段
 
+/proc/sys/vm目录有和writeback相关的配置，除了如上的dirty_writeback_centisecs还有：
+dirty_backgroud_bytes表示周期性的回写线程在脏页超过对应的bytes时启动回写，默认是0，
+dirty_backgroud_ratio表示周期性的回写线程在脏页超过对应的比例时启动回写，默认是
+10%，dirty_bytes/dirty_ratio表示write系统调用在脏页超过一定的bytes或者比例时启动
+回写，向drop_caches写1，释放相应的page cache。
 
+Linux内核在文件系统、writeback逻辑、block层里添加了大量的tracepoint，可以根据这些
+tracepoint点观测系统的运行情况。基于tracepoint封装的block层观测工具有blktrace系列
+(blktrace/blkparse/btt)工具等。
 
-perf trace -a -e ext4:ext4_writepages_result -o ext4_writepages_result_log --time
-writeback:global_dirty_state中可以的到和脏页相关的统计数据。
+对于blktrace，我们可以把trace点和btt输出中的各个点对应起来，其中trace_block_getrq
+btt统计数据中G那个点，submit_bio_noacct_nocheck中的trace_block_bio_queue是Q点。
+所以，Q2G的延时比较大，就是bio在bio_list堵了很久。
 
+writeback:global_dirty_state中可以的到和脏页相关的统计数据。可以使用如下命令得到
+相关统计log：
+perf trace -a -e writeback:global_dirty_state -o log --time
 
-
+内核在运行时，打点记录了相关writeback统计信息，并通过proc和sysfs导出了这些信息。
+相关的接口有/proc/vmstat、/sys/kernel/debug/bdi/x:x/stats。Linux的一些工具基于如
+上接口封装出了使用更加方便的工具，比如sar。
