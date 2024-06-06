@@ -26,6 +26,8 @@ SPE和传统的PMU采样的最大区别有两点：第一，采样过程是硬�
 影响的采样，并写入到采样buffer里，同时硬件自动重新继续用counter进行跟踪。可以看
 到，用SPE可以获得系统中比较准确的冷热页的信息。
 
+协议里提到，硬件里会有一个SPU的设备完成SPE这个特性的相关逻辑。
+
 控制寄存器
 -----------
 
@@ -82,7 +84,24 @@ init_kernel_el->init_el2->init_el2_state
   +->__init_el2_debug
 ```
 
-PMBSR_EL1(buffer status register)
+ARM spec里没有明确指出PMBPTR_EL1的值会随着SPU写入数据而更新，我们直接先理解成这样。
+这样看来，PMBPTR_EL1/PMBLIMITR_EL1定义的buffer的方式相当粗放，当硬件持续写入数据
+导致buffer满时，SPU向CPU报"profiling buffer management event"，具体就是一个PPI，
+软件取走数据后需要重新配置PMBPTR_EL1或PMBLIMITR_EL1，重新启动SPU做profiling。
+
+todo: 驱动怎么分配buffer内存?
+
+SPU在做profile的时候，可以会产生各种异常行为，协议里把这些行为统称profiling buffer
+management event，并把异常行为参数写入PMBSR_EL1(buffer status register)。这些event
+大概可以分为：队列满的中断，buffer地址翻译的"fault"，external abort。
+
+如上的这个buffer地址翻译的“fault”协议上说不是一个同步异常，而是一个中断，没有说
+是一个怎么样的中断？而且spec上提示，对于一个buffer地址翻译的异常，PMBSR_EL1.EA/DL
+可能只是这个过程有external abort或者data loss，看起来是一个无法恢复的异常。另外，
+buffer地址翻译的异常上下文会保存在PMBSR_EL1和PMBPTR_EL1，这个和一般的异常行为是
+不一样的。感觉这里spec上的逻辑有点错乱?
+
+PMSIDR_EL1(sampling profiling ID register)，SPE的配置参数寄存器。
 
 
 考虑VHE下虚拟机里SPE的配置，初步看需要解决如下几个问题：
