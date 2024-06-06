@@ -326,4 +326,13 @@ qemu nokalr 				 repost
 存储性能测试工具：iostat/blktrace(blkparse/btt)/sar/fio/vmstat/proc_meminfo/proc_vmstat
 coresight/ETM基本逻辑
 
-arm寄存器		repost
+arm寄存器				 repost
+网络虚拟化，virtio-net			 todo
+存储虚拟化，virtio-blk/scsi?		 todo
+虚拟化qemu上层的组件，libvirt，virsh等   todo
+虚拟化热迁移的基本逻辑？		 todo
+
+
+
+
+

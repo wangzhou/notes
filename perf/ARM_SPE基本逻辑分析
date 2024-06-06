@@ -2,6 +2,7 @@
 -v0.2 2024.2.21 Sherlock 增加部分基本逻辑
 -v0.3 2024.6.04 Sherlock 继续增加寄存器部分
 -v0.4 2024.6.05 Sherlock ...
+-v0.5 2024.6.06 Sherlock
 
 简介：本文记录ARM SPE这个特性的软硬件接口基本逻辑。
 
@@ -106,6 +107,7 @@ PMBSR_EL1(buffer status register)
 3. KVM社区对这个有讨论：KVM: arm64: A new approach for SPE support。
 
 
-
+todo: buffer内信息的处理逻辑。
+todo: SPU的中断和虚拟化的逻辑。
 
 
