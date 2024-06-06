@@ -4,7 +4,7 @@
 -v0.4 2024.5.26 Sherlock ...
 -v0.5 2024.5.30 Sherlock ...
 -v0.6 2024.5.31 Sherlock ...
--v0.6 2024.6.03 Sherlock ...
+-v0.7 2024.6.03 Sherlock ...
 
 简介：本文分析Linux内核的writeback的基本逻辑，分析依赖的内核版本是v6.8-rc5。
 
@@ -188,5 +188,5 @@ writeback:global_dirty_state中可以的到和脏页相关的统计数据。可�
 perf trace -a -e writeback:global_dirty_state -o log --time
 
 内核在运行时，打点记录了相关writeback统计信息，并通过proc和sysfs导出了这些信息。
-相关的接口有/proc/vmstat、/sys/kernel/debug/bdi/x:x/stats。Linux的一些工具基于如
-上接口封装出了使用更加方便的工具，比如sar。
+相关的接口有/proc/vmstat、/proc/meminfo、/sys/kernel/debug/bdi/x:x/stats。Linux
+的一些工具基于如上接口封装出了使用更加方便的工具，比如sar、vmstat、iostat等。

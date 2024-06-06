@@ -95,8 +95,10 @@ host内核态运行在EL2，hypervisor运行在EL2。和riscv虚拟化下各个�
 
 需要在EL2增加拟化综合控制的寄存器，HCR_EL2(hypervisor configure register)。其中，
 HCR_EL2.E2H表示打开VHE，即host跑在EL2。以下讨论的都是HCR_EL2.E2H为1的情况。HCR_EL2.TGE
-为1表示当前在虚拟机里，为0表示当前在host里，这个和riscv上的V状态的逻辑是一致的，
-不知道为什么起一个trap general exceptions from EL0这样的名字。
+为1表示当前在host里，为0表示当前在guest里，这个和riscv上的V状态的逻辑是一致的，
+只不过语意正好反过来。TGE=1在host里，这时所有原来到EL1的异常被送到EL2处理，但是
+VHE使能时如下EL1寄存器被映射到对应的EL2寄存器，所以host的运行逻辑实际被如下EL2的
+寄存器控制。TGE的名字trap general exceptions from EL0正是对这中异常路由改动的描述。
 
 在VHE使能的时候，当CPU运行在EL2，寄存器有如下的映射，也就是软件访问或者硬件使用
 的寄存器实际上是右边的寄存器。CPU运行在EL2，系统状态可能在hypervisor也可能在host

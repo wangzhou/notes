@@ -1,5 +1,7 @@
 -v0.1 2024.2.20 Sherlock init
--v0.3 2024.2.21 Sherlock 增加部分基本逻辑
+-v0.2 2024.2.21 Sherlock 增加部分基本逻辑
+-v0.3 2024.6.04 Sherlock 继续增加寄存器部分
+-v0.4 2024.6.05 Sherlock ...
 
 简介：本文记录ARM SPE这个特性的软硬件接口基本逻辑。
 
@@ -22,4 +24,88 @@ SPE和传统的PMU采样的最大区别有两点：第一，采样过程是硬�
 改变counter里的数值，当counter里的数值满足一定的条件时，硬件自动做load/store对应
 影响的采样，并写入到采样buffer里，同时硬件自动重新继续用counter进行跟踪。可以看
 到，用SPE可以获得系统中比较准确的冷热页的信息。
+
+控制寄存器
+-----------
+
+PMSICR_EL1，这个是operation的counter，operation执行时，counter的数值减小，数值到
+0，就触发对当前operation执行参数的采样。(注意在VHE下，guest和host上这里的逻辑?)
+
+PMSICR_EL1如果非0，就从当前值开始计数，PMSICR_EL1如是是0，PMSICR_EL1的初始值从
+PMSIRR_EL1(sampling interval reload register)中加载(其中有加入随机值的逻辑，先不
+看相关的逻辑)。这里使用PMSIRR_EL1也是为了在采样的同时，把PMSIRR_EL1加载为计数的
+初始值。
+
+todo: sample collisions.
+
+PMSCR_EL1/PMSCR_EL2(sampling control register)，是SPE的控制寄存器。其中PMSCR_EL1.EOSPE
+控制EL0 SPE的使能，没有EL2的环境这个比较直白。在有EL2的环境，HCR_EL2.TGE为0时，
+依然控制EL0 SPE，但是，HCR_EL2.TGE为1时，忽略这个bit。PMSCR_EL1.E1SPE的逻辑和E0SPE
+类似。
+
+这里的逻辑是，PMSCR_EL1.ExSPE不控制host用户态和内核态的SPE使能。TGE=1表示系统在
+host。
+
+PMSCR_EL2.E2SPE，是EL2 SPE的使能控制，MDCR_EL2.E2PB控制“owning translation regime”
+PMSCR_EL2.E0HSPE，Host EL0 SPE的使能控制。在有EL2的环境，HCR_EL2.TGE为0时，忽略该
+bit。基本逻辑是，虚拟化guest的情况不受这个控制，E0HSPE只控制host的EL0。
+
+
+PMSFCR_EL1(sampling filter control register)，fitler的配置寄存器，控制对load/store/
+branch/各种event的过滤。看起来EL2也用这个寄存器，进出guest要做恢复和保存？
+
+todo: PMSEVFR_EL1(sampling event filter register)
+
+todo: 对CNTVCT_EL0的记录
+
+PMBPTR_EL1/PMBLIMITR_EL1，buffer的当前写入地址和buffer结尾地址。这里ARM并没有多余
+的EL2的寄存器控制虚拟机和host的buffer，而是引入了owning exception level的定义控制
+虚拟机和host下机器对buffer地址的翻译逻辑。这里先只看non-secure的两种情况：non-secure
+EL1和non-secure EL2，配置MDCR_EL2/MDCR_EL3的相关域段可以使机器处于对应的状态。
+non-secure EL1的定义是，buffer的地址使用non-secure EL1&0 translation regime的翻译
+逻辑，在有EL2的情况下，其实就是虚拟机两级地址翻译逻辑。non-secure EL2，在VHE的情况
+下，就是host的翻译逻辑。
+
+具体配置是：MDCR_EL3.NSPB为0b10或0b11，这些配置是为了区分non-secure，MDCR_EL2.E2PB
+为0b00是non-secure EL2，为0b10或0b11是non-secure EL1，0b10在EL1访问Buffer control
+register(?)要trap到EL2。
+
+如上针对VHE host的情况的配置在PMSCR_EL2/MDCR_EL2，先考虑代VHE下host的配置逻辑是
+怎么样的。首先在EL2+VHE下，PMSCR_EL1被映射(redirect)到PMSCR_EL2，配置PMSCR_EL1实
+际上配置的是PMSCR_EL2，PMSCR_EL2控制的就是host的EL0和EL2。MDCR_EL2.E2PB在在host
+内核启动的时候会被配置为0b11:
+```
+/* arch/arm64/kernel/head.S */
+init_kernel_el->init_el2->init_el2_state
+     /* arch/arm64/include/asm/el2_setup.h */ 
+  +->__init_el2_debug
+```
+
+PMBSR_EL1(buffer status register)
+
+
+考虑VHE下虚拟机里SPE的配置，初步看需要解决如下几个问题：
+
+1. VHE下在guest和host上的运行逻辑
+2. 记录data在host/guest上有区别：虚拟时间戳、PA、context id?, todo
+3. buffer的page fault, todo
+4. 使用SPE具体功能的考虑：false sharing，冷热页识别，还有什么？
+
+逐个看下如上的问题：
+
+1. KVM启动虚拟机前需要把MDCR_EL2.E2PB配置成0b00，PMSCR_EL1/PMSFCR_EL1等，虚拟机
+   里自行使用。注意要区分哪些是虚拟机上下文，需要做保存和回复。
+
+2. 如果是guest，从CNTVCT_EL0拿虚拟时间？(需要看到vtimer的逻辑，FEAT_ECV?)
+   PMSCR_EL2.PCT和虚拟机里的时间戳有关系，todo。
+
+   spec上看不出来，guest上收集的PA是IPA还是最终的PA。todo。
+
+   虚拟机里收集CONTEXTIDR_EL1，host上收集CONTEXTIDR_EL2。todo, contextid的实际语意。
+
+3. KVM社区对这个有讨论：KVM: arm64: A new approach for SPE support。
+
+
+
+
 

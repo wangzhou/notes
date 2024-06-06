@@ -325,3 +325,5 @@ gdb跟踪内存watchpoint			 repost
 qemu nokalr 				 repost
 存储性能测试工具：iostat/blktrace(blkparse/btt)/sar/fio/vmstat/proc_meminfo/proc_vmstat
 coresight/ETM基本逻辑
+
+arm寄存器		repost
