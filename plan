@@ -305,6 +305,9 @@ ARM64:
  - NMI Watchdog hard lockup		  c
  - softlockup/hardlockup机制/migration    c
 
+Linux内核:
+writeback的逻辑			          c
+
 cpu hotplug流程(setend模拟)		  #
 kernel_build
 文件系统和存储简介
@@ -320,11 +323,7 @@ block设备驱动
 mpam基本逻辑
 快速跟踪函数调用栈(gdb/ftrace/strace/用户态backtrace)
 
-writeback的逻辑			         todo
-arm spe硬件逻辑，可以具体干什么		 todo #
-gdb跟踪内存watchpoint			 repost
-qemu nokalr 				 repost
-arm寄存器				 repost
+arm spe硬件逻辑，可以具体干什么		 doing #
 
 存储性能测试工具：iostat/blktrace(blkparse/btt)/sar/fio/vmstat/proc_meminfo/proc_vmstat
 coresight/ETM基本逻辑
