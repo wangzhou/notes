@@ -319,19 +319,24 @@ linux内核alternative机制 #
 block设备驱动
 mpam基本逻辑
 快速跟踪函数调用栈(gdb/ftrace/strace/用户态backtrace)
+
 writeback的逻辑			         todo
 arm spe硬件逻辑，可以具体干什么		 todo #
 gdb跟踪内存watchpoint			 repost
 qemu nokalr 				 repost
+arm寄存器				 repost
+
 存储性能测试工具：iostat/blktrace(blkparse/btt)/sar/fio/vmstat/proc_meminfo/proc_vmstat
 coresight/ETM基本逻辑
 
-arm寄存器				 repost
-网络虚拟化，virtio-net			 todo
-存储虚拟化，virtio-blk/scsi?		 todo
-虚拟化qemu上层的组件，libvirt，virsh等   todo
-虚拟化热迁移的基本逻辑？		 todo
+虚拟化：
 
+ - 网络虚拟化，virtio-net			 todo
+ - 存储虚拟化，virtio-blk/scsi?		         todo
+ - 虚拟化qemu上层的组件，libvirt，virsh等        todo
+ - 虚拟化热迁移的基本逻辑？		         todo
+ - arm no-VHE的逻辑			         todo #
+ - timer虚拟化					 todo
 
 
 

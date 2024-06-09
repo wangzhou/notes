@@ -115,7 +115,7 @@ LPI需要PCIe设备写GITS_TRANSLATER寄存器触发，虚拟机中断需要hype
 对于ITS表格里的信息，软件需要通过向command queue下发comand的方式更新，表格的具体
 格式是硬件实现相关的。LPI相关的表格需要怎么配置？
 
-用内存中的表哥保存信息，一般都会在设备上放cache，GIC也是一样。有了设备的cache，
+用内存中的表格保存信息，一般都会在设备上放cache，GIC也是一样。有了设备的cache，
 就会有同步的需求，GIC使用command无效化ITS中cache的配置信息。
 
 外设和GIC的接口
@@ -131,6 +131,8 @@ ICC_SGI1R_EL1/ICC_ASGI1R_EL1触发SGI。外设的线中断可以直接接在GIC�
 -------------
 
 PPI/SGI不存在中断路由？SPI直接通过GICD的寄存器配置。LPI用发command的方式配置。
+其实，如果我们更加全面的看待中断路由，就应该把中断路由到不同CPU的不同EL层级也考虑
+进来，相关逻辑和虚拟化有关系，我们放在中断虚拟化中讨论。
 
 中断优先级
 -----------
@@ -169,3 +171,6 @@ ICC_CTRL_ELn, control completion of interrupt，CPU通过这个寄存器设置EO
 ICC_SRE_ELn, system register enable。
 ICC_PMR_ELn, priority mask register。
 ICC_IGRPEN1_ELn，interrupt group enable。
+
+
+
