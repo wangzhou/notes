@@ -2,9 +2,10 @@
 -v0.2 2024.2.21 Sherlock 增加部分基本逻辑
 -v0.3 2024.6.04 Sherlock 继续增加寄存器部分
 -v0.4 2024.6.05 Sherlock ...
--v0.5 2024.6.06 Sherlock
+-v0.5 2024.6.06 Sherlock ...
+-v0.6 2024.6.11 Sherlock 重新整理了基本逻辑
 
-简介：本文记录ARM SPE这个特性的软硬件接口基本逻辑。
+简介：本文记录ARM SPE这个特性的软硬件接口基本逻辑，基于SPE v1p3版本。
 
 
 基本逻辑
@@ -12,21 +13,23 @@
 
 SPE是ARM上的statistical profile extention，这个特性是PMU的增强。SPE增加了少量的
 采样事件计数器，当计数器的值满足采样条件的时候，硬件可以把采样信息记录在提前配置
-的buffer里。ARM spec D14章节有SPE的定义。
+的buffer里。ARM spec D14章节有SPE的定义，协议里提到，硬件里会有一个SPU的设备完成
+SPE这个特性的相关逻辑。
 
-SPE和传统的PMU采样的最大区别有两点：第一，采样过程是硬件自动完成的，比如，传统
-的PMU counter在条件满足时会触发中断，随后软件进行必要的采样，显然传统PMU采样会影
-响被采样代码的执行，而SPE是硬件把采样信息写到提前配置的buffer的，SPE不会影响被测
-试程序的执行，但是采样行为也就被硬件固定了；第二，SPE和传统PMU事件的语意有所不同，
-传统PMU事件偏向微架构级别的事件，SPE偏向架构基本的行为(一般是程序员可以直接看到的)。
+SPE和传统的PMU采样的最大区别是SPE的采样过程是硬件自动完成的，比如，传统的PMU counter
+在条件满足时会触发中断，随后软件进行必要的采样，显然传统PMU采样会影响被采样代码
+的执行，而SPE是硬件把采样信息写到提前配置的buffer的，SPE不会影响被测试程序的执行，
+但是采样行为也就被硬件固定了。
 
-看个具体的例子，比如，SPE增加了对load/store指令的event：SAMPLE_FEED_LD/SAMPLE_FEED_ST。
-程序员可以配置跟踪load/store，并配置counter的初始值，当硬件根据load/store的操作
-改变counter里的数值，当counter里的数值满足一定的条件时，硬件自动做load/store对应
-影响的采样，并写入到采样buffer里，同时硬件自动重新继续用counter进行跟踪。可以看
-到，用SPE可以获得系统中比较准确的冷热页的信息。
+展开看下SPE定义，计数器的初始值是可以配置的，但是有最小值的限制，所以SPE还是一个
+基于采样的PMU，不能用来做trace。触发计数器递减的动作叫operation，SPE目前的定义中，
+指令都是operation，并不能针对特定类型的指令做配置，所以它的采样基数是比较大的，
+采样的准确度收到了限制。SPE可以对采样的对象配置过滤器(filter)，比如，只记录load/store，
+只记录branch等等。SPE记录的采样信息，除了load/store/branch/指令latency等外，还可
+以记录指令对应的微架构信息，比如load/store的存储位置、snoop信息等，利用这些信息，
+可以分析cache false sharing的问题。
 
-协议里提到，硬件里会有一个SPU的设备完成SPE这个特性的相关逻辑。
+目前，直接看到的SPE的应用有cache false sharing和系统冷热页检测。
 
 控制寄存器
 -----------
@@ -39,8 +42,6 @@ PMSIRR_EL1(sampling interval reload register)中加载(其中有加入随机值�
 看相关的逻辑)。这里使用PMSIRR_EL1也是为了在采样的同时，把PMSIRR_EL1加载为计数的
 初始值。
 
-todo: sample collisions.
-
 PMSCR_EL1/PMSCR_EL2(sampling control register)，是SPE的控制寄存器。其中PMSCR_EL1.EOSPE
 控制EL0 SPE的使能，没有EL2的环境这个比较直白。在有EL2的环境，HCR_EL2.TGE为0时，
 依然控制EL0 SPE，但是，HCR_EL2.TGE为1时，忽略这个bit。PMSCR_EL1.E1SPE的逻辑和E0SPE
@@ -51,15 +52,10 @@ host。
 
 PMSCR_EL2.E2SPE，是EL2 SPE的使能控制，MDCR_EL2.E2PB控制“owning translation regime”
 PMSCR_EL2.E0HSPE，Host EL0 SPE的使能控制。在有EL2的环境，HCR_EL2.TGE为0时，忽略该
-bit。基本逻辑是，虚拟化guest的情况不受这个控制，E0HSPE只控制host的EL0。
-
+bit。所以基本逻辑是，虚拟化guest的情况不受这个控制，E0HSPE只控制host的EL0。
 
 PMSFCR_EL1(sampling filter control register)，fitler的配置寄存器，控制对load/store/
 branch/各种event的过滤。看起来EL2也用这个寄存器，进出guest要做恢复和保存？
-
-todo: PMSEVFR_EL1(sampling event filter register)
-
-todo: 对CNTVCT_EL0的记录
 
 PMBPTR_EL1/PMBLIMITR_EL1，buffer的当前写入地址和buffer结尾地址。这里ARM并没有多余
 的EL2的寄存器控制虚拟机和host的buffer，而是引入了owning exception level的定义控制
@@ -73,10 +69,10 @@ non-secure EL1的定义是，buffer的地址使用non-secure EL1&0 translation r
 为0b00是non-secure EL2，为0b10或0b11是non-secure EL1，0b10在EL1访问Buffer control
 register(?)要trap到EL2。
 
-如上针对VHE host的情况的配置在PMSCR_EL2/MDCR_EL2，先考虑代VHE下host的配置逻辑是
+如上针对VHE host的情况的配置在PMSCR_EL2/MDCR_EL2，先考虑在VHE下host的配置逻辑是
 怎么样的。首先在EL2+VHE下，PMSCR_EL1被映射(redirect)到PMSCR_EL2，配置PMSCR_EL1实
-际上配置的是PMSCR_EL2，PMSCR_EL2控制的就是host的EL0和EL2。MDCR_EL2.E2PB在在host
-内核启动的时候会被配置为0b11:
+际上配置的是PMSCR_EL2，PMSCR_EL2控制的就是host的EL0和EL2。MDCR_EL2.E2PB在host内核
+启动的时候会被配置为0b11，这个和如上分析是可以对应起来。
 ```
 /* arch/arm64/kernel/head.S */
 init_kernel_el->init_el2->init_el2_state
@@ -89,44 +85,48 @@ ARM spec里没有明确指出PMBPTR_EL1的值会随着SPU写入数据而更新�
 导致buffer满时，SPU向CPU报"profiling buffer management event"，具体就是一个PPI，
 软件取走数据后需要重新配置PMBPTR_EL1或PMBLIMITR_EL1，重新启动SPU做profiling。
 
-todo: 驱动怎么分配buffer内存?
-
 SPU在做profile的时候，可以会产生各种异常行为，协议里把这些行为统称profiling buffer
 management event，并把异常行为参数写入PMBSR_EL1(buffer status register)。这些event
 大概可以分为：队列满的中断，buffer地址翻译的"fault"，external abort。
 
 如上的这个buffer地址翻译的“fault”协议上说不是一个同步异常，而是一个中断，没有说
 是一个怎么样的中断？而且spec上提示，对于一个buffer地址翻译的异常，PMBSR_EL1.EA/DL
-可能只是这个过程有external abort或者data loss，看起来是一个无法恢复的异常。另外，
-buffer地址翻译的异常上下文会保存在PMBSR_EL1和PMBPTR_EL1，这个和一般的异常行为是
-不一样的。感觉这里spec上的逻辑有点错乱?
+表示这个过程有external abort或者data loss，看起来是一个无法恢复的异常。另外，buffer
+地址翻译的异常上下文会保存在PMBSR_EL1和PMBPTR_EL1，这个和一般的异常行为是不一样的。
+感觉这里spec上的逻辑有点错乱?
 
 PMSIDR_EL1(sampling profiling ID register)，SPE的配置参数寄存器。
 
+SPE虚拟化要解决的问题
+----------------------
 
 考虑VHE下虚拟机里SPE的配置，初步看需要解决如下几个问题：
 
-1. VHE下在guest和host上的运行逻辑
-2. 记录data在host/guest上有区别：虚拟时间戳、PA、context id?, todo
-3. buffer的page fault, todo
-4. 使用SPE具体功能的考虑：false sharing，冷热页识别，还有什么？
+1. VHE下在guest和host上的基础运行逻辑。
+2. 记录data在host/guest上有区别，比如，虚拟时间戳、PA、context id等，如何正确支持这些记录。
+3. buffer的page fault是个大问题，如何解决虚拟化下stage 2 page fault的问题。
 
 逐个看下如上的问题：
 
 1. KVM启动虚拟机前需要把MDCR_EL2.E2PB配置成0b00，PMSCR_EL1/PMSFCR_EL1等，虚拟机
-   里自行使用。注意要区分哪些是虚拟机上下文，需要做保存和回复。
+   里自行使用。注意要区分哪些是虚拟机上下文，需要做保存和回复？
 
-2. 如果是guest，从CNTVCT_EL0拿虚拟时间？(需要看到vtimer的逻辑，FEAT_ECV?)
-   PMSCR_EL2.PCT和虚拟机里的时间戳有关系，todo。
-
-   spec上看不出来，guest上收集的PA是IPA还是最终的PA。todo。
-
-   虚拟机里收集CONTEXTIDR_EL1，host上收集CONTEXTIDR_EL2。todo, contextid的实际语意。
+2. 如果是guest，从CNTVCT_EL0拿虚拟时间？(需要看到vtimer的逻辑/FEAT_ECV等)
+   PMSCR_EL2.PCT和虚拟机里的时间戳有关系？spec上看不出来，guest上收集的PA是IPA还是最终的PA？
+   虚拟机里收集CONTEXTIDR_EL1，host上收集CONTEXTIDR_EL2。需要看看contextid的实际语意？
 
 3. KVM社区对这个有讨论：KVM: arm64: A new approach for SPE support。
 
 
+No post:
+
 todo: buffer内信息的处理逻辑。
 todo: SPU的中断和虚拟化的逻辑。
+todo: sample collisions.
+todo: PMSEVFR_EL1(sampling event filter register)
+todo: 对CNTVCT_EL0的记录
+todo: 驱动怎么分配buffer内存?
+
+
 
 
