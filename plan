@@ -187,7 +187,6 @@ cpu flush			 #
 cpu mmu/cache/tlb		 #
 spinlock实现分析		 #
 协程的使用和原理		 #
-IPI详细分析			 to do
 io_uring分析			 4. c
 
 qemu tlb同步逻辑	         to do
@@ -304,6 +303,7 @@ ARM64:
  - ARM NMI中断/ARM SP的逻辑 	          c
  - NMI Watchdog hard lockup		  c
  - softlockup/hardlockup机制/migration    c
+ - IPI详细分析			          to do #
 
 Linux内核:
 writeback的逻辑			          c
