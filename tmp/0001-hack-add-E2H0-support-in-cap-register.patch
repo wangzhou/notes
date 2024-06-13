@@ -1,0 +1,66 @@
+From d21bc1e6ba59f1ec56d9280a4b40c098e1e17bf0 Mon Sep 17 00:00:00 2001
+From: Zhou Wang <wangzhou89@126.com>
+Date: Thu, 13 Jun 2024 11:51:47 +0800
+Subject: [PATCH] hack: add E2H0 support in cap register
+
+Signed-off-by: Zhou Wang <wangzhou89@126.com>
+---
+ target/arm/cpu.h    | 3 +++
+ target/arm/cpu64.c  | 1 +
+ target/arm/helper.c | 4 ++--
+ 3 files changed, 6 insertions(+), 2 deletions(-)
+
+diff --git a/target/arm/cpu.h b/target/arm/cpu.h
+index c097cae988..6197e5f61c 100644
+--- a/target/arm/cpu.h
++++ b/target/arm/cpu.h
+@@ -1020,6 +1020,7 @@ struct ArchCPU {
+         uint64_t id_aa64mmfr0;
+         uint64_t id_aa64mmfr1;
+         uint64_t id_aa64mmfr2;
++        uint64_t id_aa64mmfr4;
+         uint64_t id_aa64dfr0;
+         uint64_t id_aa64dfr1;
+         uint64_t id_aa64zfr0;
+@@ -2245,6 +2246,8 @@ FIELD(ID_AA64MMFR2, BBM, 52, 4)
+ FIELD(ID_AA64MMFR2, EVT, 56, 4)
+ FIELD(ID_AA64MMFR2, E0PD, 60, 4)
+ 
++FIELD(ID_AA64MMFR4, E2H0, 24, 4)
++
+ FIELD(ID_AA64DFR0, DEBUGVER, 0, 4)
+ FIELD(ID_AA64DFR0, TRACEVER, 4, 4)
+ FIELD(ID_AA64DFR0, PMUVER, 8, 4)
+diff --git a/target/arm/cpu64.c b/target/arm/cpu64.c
+index 0fb07cc7b6..c276402db2 100644
+--- a/target/arm/cpu64.c
++++ b/target/arm/cpu64.c
+@@ -934,6 +934,7 @@ static void aarch64_a76_initfn(Object *obj)
+     cpu->isar.id_aa64mmfr0 = 0x0000000000101122ull;
+     cpu->isar.id_aa64mmfr1 = 0x0000000010212122ull;
+     cpu->isar.id_aa64mmfr2 = 0x0000000000001011ull;
++    cpu->isar.id_aa64mmfr4 = 0x000000000f000000ull;
+     cpu->isar.id_aa64pfr0  = 0x1100000010111112ull; /* GIC filled in later */
+     cpu->isar.id_aa64pfr1  = 0x0000000000000010ull;
+     cpu->id_afr0       = 0x00000000;
+diff --git a/target/arm/helper.c b/target/arm/helper.c
+index 0b7fd2e7e6..0913f19bc8 100644
+--- a/target/arm/helper.c
++++ b/target/arm/helper.c
+@@ -8254,11 +8254,11 @@ void register_cp_regs_for_features(ARMCPU *cpu)
+               .access = PL1_R, .type = ARM_CP_CONST,
+               .accessfn = access_aa64_tid3,
+               .resetvalue = 0 },
+-            { .name = "ID_AA64MMFR4_EL1_RESERVED", .state = ARM_CP_STATE_AA64,
++            { .name = "ID_AA64MMFR4_EL1", .state = ARM_CP_STATE_AA64,
+               .opc0 = 3, .opc1 = 0, .crn = 0, .crm = 7, .opc2 = 4,
+               .access = PL1_R, .type = ARM_CP_CONST,
+               .accessfn = access_aa64_tid3,
+-              .resetvalue = 0 },
++              .resetvalue = cpu->isar.id_aa64mmfr4 },
+             { .name = "ID_AA64MMFR5_EL1_RESERVED", .state = ARM_CP_STATE_AA64,
+               .opc0 = 3, .opc1 = 0, .crn = 0, .crm = 7, .opc2 = 5,
+               .access = PL1_R, .type = ARM_CP_CONST,
+-- 
+2.25.1
+
