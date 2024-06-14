@@ -155,7 +155,6 @@ ELF/PE启动			 continue(uboot EFI)
 unix编程艺术读书笔记		 todo
 csr寄存器整理		         todo
 qemu goto tb再分析		 c(制造tb清理) -- 自修改代码分析 5
-arm qemu模型分析		 c
 linux timer内核代码分析          todo
 qemu tlb分析			 c
 qemu 内存模拟			 to do
@@ -338,5 +337,7 @@ coresight/ETM基本逻辑
  - timer虚拟化					 todo
 
 内核hack的relaxation VHE/VHE下arm的启动路径EL2->EL1->EL2/arm qemu内核启动地址/
+arm qemu模型分析(VHE的实现)		 c #
+pKVM的基本逻辑					 todo
 
 
