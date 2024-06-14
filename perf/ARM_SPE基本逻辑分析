@@ -4,8 +4,10 @@
 -v0.4 2024.6.05 Sherlock ...
 -v0.5 2024.6.06 Sherlock ...
 -v0.6 2024.6.11 Sherlock 重新整理了基本逻辑
+-v0.6 2024.6.13 Sherlock ...
 
-简介：本文记录ARM SPE这个特性的软硬件接口基本逻辑，基于SPE v1p3版本。
+简介：本文记录ARM SPE这个特性的软硬件接口基本逻辑，基于SPE v1p3版本，ARM spec的
+      版本是J.a。分析中涉及内核时，使用v6.10-rc2。
 
 
 基本逻辑
@@ -35,7 +37,7 @@ SPE和传统的PMU采样的最大区别是SPE的采样过程是硬件自动完�
 -----------
 
 PMSICR_EL1，这个是operation的counter，operation执行时，counter的数值减小，数值到
-0，就触发对当前operation执行参数的采样。(注意在VHE下，guest和host上这里的逻辑?)
+0，就触发对当前operation执行参数的采样。没有对应的EL2寄存器。
 
 PMSICR_EL1如果非0，就从当前值开始计数，PMSICR_EL1如是是0，PMSICR_EL1的初始值从
 PMSIRR_EL1(sampling interval reload register)中加载(其中有加入随机值的逻辑，先不
@@ -54,6 +56,9 @@ PMSCR_EL2.E2SPE，是EL2 SPE的使能控制，MDCR_EL2.E2PB控制“owning trans
 PMSCR_EL2.E0HSPE，Host EL0 SPE的使能控制。在有EL2的环境，HCR_EL2.TGE为0时，忽略该
 bit。所以基本逻辑是，虚拟化guest的情况不受这个控制，E0HSPE只控制host的EL0。
 
+注意，ARM spec没有明确说VHE时，PMSCR_EL1 redirect到PMSCR_EL2，但是spec里PMSCR_EL1
+访问的伪代码中可以看到是有这个redirect的。
+
 PMSFCR_EL1(sampling filter control register)，fitler的配置寄存器，控制对load/store/
 branch/各种event的过滤。看起来EL2也用这个寄存器，进出guest要做恢复和保存？
 
@@ -66,7 +71,7 @@ non-secure EL1的定义是，buffer的地址使用non-secure EL1&0 translation r
 下，就是host的翻译逻辑。
 
 具体配置是：MDCR_EL3.NSPB为0b10或0b11，这些配置是为了区分non-secure，MDCR_EL2.E2PB
-为0b00是non-secure EL2，为0b10或0b11是non-secure EL1，0b10在EL1访问Buffer control
+为0b00是non-secure EL2，为0b10或0b11是non-secure EL1，其中0b10在EL1访问Buffer control
 register(?)要trap到EL2。
 
 如上针对VHE host的情况的配置在PMSCR_EL2/MDCR_EL2，先考虑在VHE下host的配置逻辑是
@@ -78,6 +83,7 @@ register(?)要trap到EL2。
 init_kernel_el->init_el2->init_el2_state
      /* arch/arm64/include/asm/el2_setup.h */ 
   +->__init_el2_debug
+     /* 这里的逻辑比较错乱... */
 ```
 
 ARM spec里没有明确指出PMBPTR_EL1的值会随着SPU写入数据而更新，我们直接先理解成这样。
@@ -96,6 +102,9 @@ management event，并把异常行为参数写入PMBSR_EL1(buffer status registe
 感觉这里spec上的逻辑有点错乱?
 
 PMSIDR_EL1(sampling profiling ID register)，SPE的配置参数寄存器。
+PMBIDR_EL1(buffer ID register)，其中PMBIDR_EL1.P综合其它的控制寄存器表示当前EL级
+别是否可以使用buffer。
+PMSEVFR_EL1(sampling event filter register)，对event(各种微架构参数)做过滤。
 
 SPE虚拟化要解决的问题
 ----------------------
@@ -118,15 +127,11 @@ SPE虚拟化要解决的问题
 3. KVM社区对这个有讨论：KVM: arm64: A new approach for SPE support。
 
 
-No post:
+No post
+--------
 
 todo: buffer内信息的处理逻辑。
 todo: SPU的中断和虚拟化的逻辑。
 todo: sample collisions.
-todo: PMSEVFR_EL1(sampling event filter register)
 todo: 对CNTVCT_EL0的记录
 todo: 驱动怎么分配buffer内存?
-
-
-
-

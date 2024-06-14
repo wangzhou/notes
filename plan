@@ -337,6 +337,6 @@ coresight/ETM基本逻辑
  - arm no-VHE的逻辑			         todo #
  - timer虚拟化					 todo
 
-
+内核hack的relaxation VHE/VHE下arm的启动路径EL2->EL1->EL2/arm qemu内核启动地址/
 
 
