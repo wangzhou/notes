@@ -4,7 +4,8 @@
 -v0.4 2024.6.05 Sherlock ...
 -v0.5 2024.6.06 Sherlock ...
 -v0.6 2024.6.11 Sherlock 重新整理了基本逻辑
--v0.6 2024.6.13 Sherlock ...
+-v0.7 2024.6.13 Sherlock ...
+-v0.8 2024.6.15 Sherlock 
 
 简介：本文记录ARM SPE这个特性的软硬件接口基本逻辑，基于SPE v1p3版本，ARM spec的
       版本是J.a。分析中涉及内核时，使用v6.10-rc2。
@@ -106,8 +107,13 @@ PMBIDR_EL1(buffer ID register)，其中PMBIDR_EL1.P综合其它的控制寄存�
 别是否可以使用buffer。
 PMSEVFR_EL1(sampling event filter register)，对event(各种微架构参数)做过滤。
 
-SPE虚拟化要解决的问题
-----------------------
+SPE软件代码分析
+---------------
+
+todo: ...
+
+SPE虚拟化支持分析
+------------------
 
 考虑VHE下虚拟机里SPE的配置，初步看需要解决如下几个问题：
 
