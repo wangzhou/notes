@@ -132,6 +132,8 @@ SPE虚拟化支持分析
 
 3. KVM社区对这个有讨论：KVM: arm64: A new approach for SPE support。
 
+perf record -e arm_spe_0/branch_filter=1,load_filter=1,store_filter=1,pa_enable=1,ts_enable=1,pct_enable=1,min_latency=20 test_program
+
 
 No post
 --------
