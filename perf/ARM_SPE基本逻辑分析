@@ -112,6 +112,13 @@ SPE软件代码分析
 
 todo: ...
 
+struct arm_spe_pmu {
+    struct perf_output_handle __percpu *handle;
+        void *addr(unsigned long head);
+        struct perf_buffer *rb;
+            void *aux_priv; // struct arm_spe_pmu_buf *buf;
+}
+
 SPE虚拟化支持分析
 ------------------
 
