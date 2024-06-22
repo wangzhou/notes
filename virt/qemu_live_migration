@@ -1,0 +1,52 @@
+-v0.1 2024.6.22 Sherlock init
+
+简介：先记录下qemu热迁移的一个小测试。
+
+
+qemu热迁移示意
+---------------
+
+迁入端启动qemu：
+```
+qemu-system-aarch64 \
+-smp 4 \
+-cpu cortex-a57 \
+-machine virt \
+-append "console=ttyAMA0 nokaslr" \
+-nographic -m 4096m \
+-kernel ~/repos/linux/arch/arm64/boot/Image \
+-initrd ~/rootfs.cpio.gz \
+-device virtio-9p-pci,fsdev=p9fs,mount_tag=p9,bus=pcie.0 \
+-fsdev local,id=p9fs,path=/home/sherlock/p9root,security_model=mapped \
+-incoming tcp:0:6666 \
+-serial telnet:localhost:9000,server,nowait
+```
+qemu启动后会停在monitor界面，通过telnet 127.0.0.1 9000可以接入qemu串口。
+
+迁出端启动qemu：
+```
+qemu-system-aarch64 \
+-smp 4 \
+-cpu cortex-a57 \
+-machine virt \
+-append "console=ttyAMA0 nokaslr" \
+-nographic -m 4096m \
+-kernel ~/repos/linux/arch/arm64/boot/Image \
+-initrd ~/rootfs.cpio.gz \
+-device virtio-9p-pci,fsdev=p9fs,mount_tag=p9,bus=pcie.0 \
+-fsdev local,id=p9fs,path=/home/sherlock/p9root,security_model=mapped \
+-serial telnet:localhost:8000,server,nowait
+```
+qemu启动后会停在monitor界面，通过telnet 127.0.0.1 8000可以接入qemu串口。接入qemu
+里的linux系统，随意起个执行的任务，比如：
+```
+for i in `seq 1 1000`
+do
+sleep 1
+echo $i
+done
+```
+在monitor里运行：migrate -d tcp:0:6666
+
+可以看到热迁移开始数秒后，迁出端qemu的打印停止，迁入端的串口上开始接着迁出端的打
+印持续的输出。
