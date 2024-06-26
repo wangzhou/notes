@@ -317,12 +317,12 @@ blktrace/blkparse/btt使用和原理
 nvme和disk
 lsscsi - 控制器和盘的关系
 arm copy_to/from_user    #
-linux内核alternative机制 #
+linux内核alternative机制 # 5
 block设备驱动
 mpam基本逻辑
 快速跟踪函数调用栈(gdb/ftrace/strace/用户态backtrace)
 
-arm spe硬件逻辑，可以具体干什么		 doing #
+arm spe硬件逻辑，可以具体干什么		 doing # 4
 
 存储性能测试工具：iostat/blktrace(blkparse/btt)/sar/fio/vmstat/proc_meminfo/proc_vmstat
 coresight/ETM基本逻辑
@@ -332,14 +332,14 @@ coresight/ETM基本逻辑
  - 网络虚拟化，virtio-net			 todo
  - 存储虚拟化，virtio-blk/scsi?		         todo
  - 虚拟化qemu上层的组件，libvirt，virsh等        todo
- - 虚拟化热迁移的基本逻辑？		         todo
+ - 虚拟化热迁移的基本逻辑？		         todo #
  - arm no-VHE的逻辑			         todo #
- - timer虚拟化					 todo #
+ - timer虚拟化					 todo # 1
 
 内核hack的relaxation VHE/VHE下arm的启动路径EL2->EL1->EL2/arm qemu内核启动地址/
 arm qemu模型分析(VHE的实现)		 	 c #
 pKVM的基本逻辑					 todo
 CCA/realm基本逻辑				 todo
-vm live migration/heterogenous: 基本逻辑/用法	 todo
-arm CPU ID regs and errata的基本逻辑		 todo
+vm live migration/heterogenous: 基本逻辑/用法	 todo # 3
+arm CPU ID regs and errata的基本逻辑		 todo # 2
 ARM CNP特性
