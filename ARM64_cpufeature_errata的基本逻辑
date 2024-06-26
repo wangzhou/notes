@@ -1,0 +1,61 @@
+Linux内核ARM64 cpufeature和errata的基本逻辑
+
+-v0.1 2024.6.26 Sherlock init
+
+简介：本文梳理Linux内核里ARM64下CPU特性和errata的基本逻辑。
+
+
+基本逻辑
+---------
+
+ARM64里先定义了feature/errata的全局的静态描述表，这写是当前内核可以支持的最大
+feature/errata列表：struct arm64_cpu_capabilities arm64_features[], arm64_errata[]
+
+如上静态表中的宏可能没有打开，内核重新把运行时的全局feature/errata表记录在：
+struct arm64_cpu_capabilities *cpucap_ptrs[]
+
+把经过检测得到的当前系统上支持的feature/errata保存在这个bitmap：system_cpucaps
+
+系统全局的feature寄存器保存的位置，似乎是各个core上的feature寄存器通过一定整理后
+保存到这个结构里：
+```
+static const struct __ftr_reg_entry {
+        u32                     sys_id;
+        struct arm64_ftr_reg    *reg;
+} arm64_ftr_regs[]
+```
+
+```
+start_kernel
+      /* arch/arm64/kernel/smp.c */ 
+  +-> smp_prepare_boot_cpu
+        /*
+	 * 这里各个core把CPU ID寄存器中的值读出来保存在per-cpu的cpu_data里，再
+	 * 更新arm64_ftr_regs[]中的对应项。(struct cpuinfo_arm64 *cpu_data.)
+	 *
+	 * todo：具体更新逻辑。
+	 */
+    +-> cpuinfo_store_boot_cpu
+    +-> setup_user_features
+```
+
+```
+setup_boot_cpu_features
+      /* 把arm64_features/errata静态表中定义的cap/errata保存到cpucap_ptrs */
+  +-> init_cpucap_indirect_list
+      /* 注意，这里只处理特定cap类型，全部类型：system/local_cpu/boot_cpu/all */
+  +-> setup_boot_cpu_capabilities
+        /* 
+	 * 检测对应的特性是否存在，如果存在记录在system_cpucaps，如果是boot_cpu，
+	 * 记录在boot_cpucaps。
+	 * 
+	 * 注意，errata也被当作特性，统一考虑。所以下面的函数中的capabilities
+	 * 包括feature和errata。即cap = feature + errata。
+	 */
+    +-> update_cpu_capabilities
+        /* 对于满足条件的特性，调用cpu_enable回调，使用对应cap */
+    +-> enable_cpu_capabilities
+
+        /* 相关逻辑单独考虑 */
+    +-> apply_boot_alternatives
+```
