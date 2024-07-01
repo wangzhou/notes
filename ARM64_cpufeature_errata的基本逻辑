@@ -62,11 +62,16 @@ setup_boot_cpu_features
     +-> apply_boot_alternatives
 ```
 
+SCOPE_SYSTEM cap的检测和配置流程如下：
 /* 拉起一号进程的函数 */
 ```
 kernel_init
   +-> kernel_init_freeable
+        /* 这里启动所有从核 */
     +-> smp_init
+        ...
+        /* 这里从核已经起来 */
+
       +-> smp_cpus_done
         +-> setup_system_features
 ```
