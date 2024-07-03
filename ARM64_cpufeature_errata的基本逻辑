@@ -1,7 +1,7 @@
 Linux内核ARM64 cpufeature和errata的基本逻辑
 
 -v0.1 2024.6.26 Sherlock init
--v0.2 2024.7.02 Sherlock 增加kvm CPU ID模拟逻辑的分析
+-v0.2 2024.7.03 Sherlock 增加kvm CPU ID模拟逻辑的分析
 
 简介：本文梳理Linux内核里ARM64下CPU特性和errata的基本逻辑，分析基于Linux内核
       v6.10-rc4。
