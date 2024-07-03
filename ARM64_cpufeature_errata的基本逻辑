@@ -1,6 +1,7 @@
 Linux内核ARM64 cpufeature和errata的基本逻辑
 
 -v0.1 2024.6.26 Sherlock init
+-v0.2 2024.7.02 Sherlock 增加kvm CPU ID模拟逻辑的分析
 
 简介：本文梳理Linux内核里ARM64下CPU特性和errata的基本逻辑，分析基于Linux内核
       v6.10-rc4。
@@ -18,12 +19,16 @@ struct arm64_cpu_capabilities *cpucap_ptrs[]
 把经过检测得到的当前系统上支持的feature/errata保存在这个bitmap：system_cpucaps
 
 系统全局的feature寄存器保存的位置，似乎是各个core上的feature寄存器通过一定整理后
-保存到这个结构里：
+保存到这个结构里。对于每个ID寄存器，都在arm64_ftr_regs有静态的定义。
 ```
 static const struct __ftr_reg_entry {
         u32                     sys_id;
         struct arm64_ftr_reg    *reg;
-} arm64_ftr_regs[]
+          +-> name/strict_mask/user_mask/sys_val/user_val
+          +-> struct arm64_ftr_override *override
+              /* 定义寄存器里各个域段的值，但是只定义了一部分 */
+          +-> struct arm64_ftr_bits *ftr_bits
+} arm64_ftr_regs[] = { ... }
 ```
 
 具体的执行流程如下：
@@ -38,14 +43,17 @@ start_kernel
          * todo：具体更新逻辑。
          */
     +-> cpuinfo_store_boot_cpu
-    +-> setup_user_features
+    +-> setup_boot_cpu_features
 ```
 
 ```
 setup_boot_cpu_features
       /* 把arm64_features/errata静态表中定义的cap/errata保存到cpucap_ptrs */
   +-> init_cpucap_indirect_list
-      /* 注意，这里只处理特定cap类型，全部类型：system/local_cpu/boot_cpu/all */
+      /*
+       * 注意，这里只处理特定cap类型，全部类型：system/local_cpu/boot_cpu/all。
+       * 大部分是system的。
+       */
   +-> setup_boot_cpu_capabilities
         /* 
          * 检测对应的特性是否存在，如果存在记录在system_cpucaps，如果是boot_cpu，
@@ -55,7 +63,7 @@ setup_boot_cpu_features
          * 包括feature和errata。即cap = feature + errata。
          */
     +-> update_cpu_capabilities
-        /* 对于满足条件的特性，调用cpu_enable回调，使用对应cap */
+        /* 对于满足条件的特性，调用cpu_enable回调，使能对应cap */
     +-> enable_cpu_capabilities
 
         /* 相关逻辑单独考虑 */
@@ -76,11 +84,34 @@ kernel_init
         +-> setup_system_features
 ```
 
+KVM虚拟机里的ID寄存器
+----------------------
 
+CPU ID寄存器本质上其实只是一个标记，对应功能的使能会另有寄存器控制。ARM64的vCPU
+在EL1读CPU ID寄存器时可能会(可以配置的)trap到EL2，这就给了KVM模拟vCPU CPU ID寄存
+器的机会。KVM可以把vCPU的CPU ID寄存器静态写死，QEMU也可以通过KVM_SET_ONE_REG这个
+ioctl接口调整KVM vCPU内部数据结构里的CPU ID值。
 
-
-
-
+ARM64 KVM的异常向量表的定义在linux/arch/arm64/kvm/hyp/hyp-entry.S。发生异常，trap
+到EL2，执行异常向量，然后执行__guest_exit，然后执行虚拟机退出的处理。所以，vCPU
+在EL1读CPU ID寄存器，触发trap到EL2的模拟流程大致如下：
+```
+/* 拉起虚拟机以及虚拟机退出处理逻辑都在这里，我们只关注虚拟机退出的处理 */
+kvm_arch_vcpu_ioctl_run
+  [...]
+  +-> handle_exit
+    +-> handle_trap_exceptions
+          /* 
+           * 通过退出原因拿到对应的处理函数，所有的退出处理函数在arm_exit_handlers
+           * 这个表里。这里我们主要看访问CPU ID寄存器的trap，这个时候拿到的处理
+           * 函数应该是kvm_handle_sys_reg。
+           */
+      +-> exit_handler // kvm_handle_sys_reg, 定义在arch/arm64/kvm/sys_regs.c。
+        +-> desc = &sys_regs_descs[sr_idx]
+            /* 可见是通过access回调去读模拟的CPU ID的值的 */
+        +-> perform_access
+        +-> vcpu_set_reg // ?
+```
 
 
 
