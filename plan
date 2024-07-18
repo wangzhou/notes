@@ -347,3 +347,4 @@ qemu vfio框架					 todo
 rcu stall分析
 kernel guard
 ARM中断虚拟化
+硬狗的逻辑
