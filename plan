@@ -345,6 +345,8 @@ arm CPU ID regs and errata的基本逻辑		 todo # 2
 ARM CNP特性
 qemu vfio框架					 todo
 rcu stall分析
-kernel guard
+
+arm qemu生成ACPI表格
 ARM中断虚拟化
 硬狗的逻辑
+kernel guard
