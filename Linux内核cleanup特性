@@ -1,0 +1,13 @@
+-v0.1 Sherlock 2024.7.22 init
+
+简介：本文梳理Linux内核中的cleanup特性的基本逻辑。梳理基于的内核版本是v6.10-rc4。
+
+
+基本介绍
+---------
+
+Linux内核补丁“[v3,00/57] Scope-based Resource Management”
+
+
+原理分析
+---------
