@@ -1,8 +1,7 @@
 -v0.1 Sherlock 2024.7.22 init
--v0.2 Sherlock 2024.7.23
+-v0.2 Sherlock 2024.7.23 增加原理分析
 
 简介：本文梳理Linux内核中的cleanup特性的基本逻辑。梳理基于的内核版本是v6.10-rc4。
-
 
 基本介绍
 ---------
@@ -137,6 +136,11 @@ make: Leaving directory '/home/sherlock/repos/linux'
 可以看到在busyloop.i中展开guard()的结果。
 ```
 [...]
+
+typedef struct { spinlock_t *lock; ; } class_spinlock_irq_t; static inline __attribute__((__gnu_inline__)) __attribute__((__unused__)) __attribute__((__no_instrument_function__)) void class_spinlock_irq_destructor(class_spinlock_irq_t *_T) { if (_T->lock) { spin_unlock_irq(_T->lock); } } static inline __attribute__((__gnu_inline__)) __attribute__((__unused__)) __attribute__((__no_instrument_function__)) void *class_spinlock_irq_lock_ptr(class_spinlock_irq_t *_T) { return _T->lock; } static inline __attribute__((__gnu_inline__)) __attribute__((__unused__)) __attribute__((__no_instrument_function__)) class_spinlock_irq_t class_spinlock_irq_constructor(spinlock_t *l) { class_spinlock_irq_t _t = { .lock = l }, *_T = &_t; spin_lock_irq(_T->lock); return _t; }
+
+[...]
+
 static int __attribute__((__section__(".init.text"))) busyloop_init(void)
 {
  spinlock_t lock;
@@ -151,5 +155,57 @@ static int __attribute__((__section__(".init.text"))) busyloop_init(void)
 
         return 0;
 }
+
 [...]
 ```
+从上面的宏展开可以看到，guard静态定义了一个类型为class_spinlock_irq_t的匿名对象，
+在初始化函数里把锁脂针传入对象中，并调用下加锁函数。在cleanup函数中出入锁指针，并
+在cleanup函数中调用释放锁的函数。因为匿名对象的生命周期是busyloop_init这个函数，
+所以在这个函数结束的时候会调用cleanup函数。
+
+如果busyloop_init变成了如下，我只想对tmp和tmp1上锁，那么就需要使用scoped_guard宏，
+所示如下：
+```
+static int __init busyloop_init(void)
+{
+	spinlock_t lock;
+	spinlock_t s_lock;
+	int tmp, tmp1, tmp2;
+
+	spin_lock_init(&lock);
+
+	guard(spinlock_irq)(&lock);
+	while (1) {
+		scoped_guard(spinlock_irq, &s_lock) {
+			tmp++;
+			tmp1++;
+		}
+		tmp2++;
+	}
+
+        return 0;
+}
+```
+宏展开是这样的：
+```
+static int __attribute__((__section__(".init.text"))) busyloop_init(void)
+{
+ spinlock_t lock;
+ spinlock_t s_lock;
+ int tmp, tmp1, tmp2;
+
+ do { spinlock_check(&lock); *(&lock) = (spinlock_t) { { .rlock = { .raw_lock = { { .val = { (0) } } }, } } }; } while (0);
+
+ class_spinlock_irq_t __UNIQUE_ID_guard339 __attribute__((__cleanup__(class_spinlock_irq_destructor))) = class_spinlock_irq_constructor(&lock);
+ while (1) {
+  for (class_spinlock_irq_t scope __attribute__((__cleanup__(class_spinlock_irq_destructor))) = class_spinlock_irq_constructor(&s_lock), *done = ((void *)0); class_spinlock_irq_lock_ptr(&scope) && !done; done = (void *)1) {
+   tmp++;
+   tmp1++;
+  }
+  tmp2++;
+ }
+
+        return 0;
+}
+```
+如果scoped_guard这里换成guard，会变成在每次while循环中对tmp/tmp1/tmp2加锁和释放锁。
