@@ -11,7 +11,7 @@ Linux内核补丁“[v3,00/57] Scope-based Resource Management”向内核增加
 使用的加锁和释放锁操作。
 
 这个特性的原理其实比较直白，就是使用了GCC里的cleanup属性，在定义变量的时候cleanup
-属性容许为这个变量添加一个函数，gcc编译的时候在这个变量生命周期结束的地方插入对应
+属性容许为这个变量添加一个函数，GCC编译的时候在这个变量生命周期结束的地方插入对应
 的函数调用。
 
 一个简单的C代码的示例如下：
@@ -59,8 +59,8 @@ cleanup: 10
 Linux内核用宏封装了如上特性，include cleanup.h后就可以直接使用。比如，我们可以把
 kernel/sched/core.c的sched_getaffinity中原来保护cpumask_and()的锁的写法改成：
 ```
-        guard(raw_spinlock_irqsave)(&p->pi_lock);
-        cpumask_and(mask, &p->cpus_mask, cpu_active_mask);
+	guard(raw_spinlock_irqsave)(&p->pi_lock);
+	cpumask_and(mask, &p->cpus_mask, cpu_active_mask);
 ```
 
 原理分析
@@ -69,13 +69,13 @@ kernel/sched/core.c的sched_getaffinity中原来保护cpumask_and()的锁的写�
 内核在include/linux/cleanup.h定义各种宏来封装cleanup属性，在各个头文件中，比如锁
 的头文件中，使用cleanup.h中的宏定义class类型。所以，具体使用的时候，只要在文件里
 include对应资源的头文件和cleanup.h就好。在需要使用cleanup的地方就可以直接用宏静态
-定义对应class类型的变量。
+定义对应class类型的对象变量。
 
 直接看cleanup.h中的宏会有点不直观。我们可以在编译内核或者驱动的时候加上V=1，这样
 会打印出详细的编译命令，然后我们把对应的编译命令改成只做预编译，再次单独运行对应
-的编译命令，从得到的预编译后的文件看会比较直观。
+的编译命令，得到的预编译后的文件看上去会比较直观。
 
-我们以一个简单的驱动编译为例看下，现在有简单的驱动：
+我们以一个简单的驱动编译为例看下，这个驱动的具体内容如下：
 ```
 #include <linux/kernel.h>
 #include <linux/module.h>
@@ -95,7 +95,7 @@ static int __init busyloop_init(void)
 		tmp++;
 	}
 
-        return 0;
+	return 0;
 }
 
 static void __exit busyloop_exit(void) {}
@@ -129,11 +129,12 @@ make -f ./scripts/Makefile.modfinal
 /sherlock/tests/softlockup/busyloop.mod.o
 make: Leaving directory '/home/sherlock/repos/linux'
 ```
-我们进入内核源码路径，gcc的参数加上-E, 重新制定输出文件。
+
+我们进入内核源码路径，GCC的参数加上-E, 重新指定输出文件:
 ```
   gcc -E -Wp,-MMD,/home/sherlock/tests/softlockup/.busyloop.o.d  -nostdinc -I./arch/arm64/include -I./arch/arm64/include/generated  -I./include -I./arch/arm64/include/uapi -I./arch/arm64/include/generated/uapi -I./include/uapi -I./include/generated/uapi -include ./include/linux/compiler-version.h -include ./include/linux/kconfig.h -include ./include/linux/compiler_types.h -D__KERNEL__ -mlittle-endian -DKASAN_SHADOW_SCALE_SHIFT= -fmacro-prefix-map=./= -std=gnu11 -fshort-wchar -funsigned-char -fno-common -fno-PIE -fno-strict-aliasing-mgeneral-regs-only -DCONFIG_CC_HAS_K_CONSTRAINT=1 -Wno-psabi -mabi=lp64 -fno-asynchronous-unwind-tables -fno-unwind-tables -mbranch-protection=pac-ret -Wa,-march=armv8.5-a -DARM64_ASM_ARCH='"armv8.5-a"' -DKASAN_SHADOW_SCALE_SHIFT= -fno-delete-null-pointer-checks -O2 --param=allow-store-data-races=0 -fstack-protector-strong -fno-omit-frame-pointer -fno-optimize-sibling-calls -fno-stack-clash-protection -falign-functions=4 -fno-strict-overflow -fno-stack-check -fconserve-stack -Wall -Wundef -Werror=implicit-function-declaration -Werror=implicit-int -Werror=return-type -Werror=strict-prototypes -Wno-format-security -Wno-trigraphs -Wno-frame-address -Wno-address-of-packed-member -Wmissing-declarations -Wmissing-prototypes -Wframe-larger-than=2048 -Wno-main -Wvla -Wno-pointer-sign -Wcast-function-type -Wno-stringop-overflow -Wno-array-bounds -Wno-alloc-size-larger-than -Wimplicit-fallthrough=5 -Werror=date-time -Werror=incompatible-pointer-types -Werror=designated-init -Wextra -Wunused -Wno-unused-but-set-variable -Wno-unused-const-variable -Wno-packed-not-aligned -Wno-format-overflow -Wno-format-truncation -Wno-stringop-truncation -Wno-override-init -Wno-missing-field-initializers -Wno-type-limits -Wno-shift-negative-value -Wno-maybe-uninitialized -Wno-sign-compare -Wno-unused-parameter -g -fno-var-tracking -femit-struct-debug-baseonly -mstack-protector-guard=sysreg -mstack-protector-guard-reg=sp_el0 -mstack-protector-guard-offset=1224  -DMODULE  -DKBUILD_BASENAME='"busyloop"' -DKBUILD_MODNAME='"busyloop"' -D__KBUILD_MODNAME=kmod_busyloop -c -o /home/sherlock/tests/softlockup/busyloop.i /home/sherlock/tests/softlockup/busyloop.c  
 ```
-可以看到在busyloop.i中展开guard()的结果。
+可以看到在busyloop.i中展开guard()的结果:
 ```
 [...]
 
@@ -153,17 +154,17 @@ static int __attribute__((__section__(".init.text"))) busyloop_init(void)
   tmp++;
  }
 
-        return 0;
+	return 0;
 }
 
 [...]
 ```
 从上面的宏展开可以看到，guard静态定义了一个类型为class_spinlock_irq_t的匿名对象，
-在初始化函数里把锁脂针传入对象中，并调用下加锁函数。在cleanup函数中出入锁指针，并
+在初始化函数里把锁指针传入对象中，并调用下加锁函数。在cleanup函数中获得锁指针，并
 在cleanup函数中调用释放锁的函数。因为匿名对象的生命周期是busyloop_init这个函数，
 所以在这个函数结束的时候会调用cleanup函数。
 
-如果busyloop_init变成了如下，我只想对tmp和tmp1上锁，那么就需要使用scoped_guard宏，
+如果busyloop_init变成了如下，只想对tmp和tmp1上锁，那么就需要使用scoped_guard宏，
 所示如下：
 ```
 static int __init busyloop_init(void)
@@ -183,7 +184,7 @@ static int __init busyloop_init(void)
 		tmp2++;
 	}
 
-        return 0;
+	return 0;
 }
 ```
 宏展开是这样的：
@@ -205,7 +206,7 @@ static int __attribute__((__section__(".init.text"))) busyloop_init(void)
   tmp2++;
  }
 
-        return 0;
+	return 0;
 }
 ```
 如果scoped_guard这里换成guard，会变成在每次while循环中对tmp/tmp1/tmp2加锁和释放锁。
