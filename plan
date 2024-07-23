@@ -350,5 +350,5 @@ arm qemu生成ACPI表格
 ARM中断虚拟化
 
 硬狗的逻辑
-kernel guard
+kernel guard					 topost
 ipi_benckmard分析
