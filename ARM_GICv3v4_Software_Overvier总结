@@ -4,6 +4,7 @@
 -v0.4 2024.5.10 Sherlock ...
 -v0.5 2024.5.11 Sherlock ...
 -v0.6 2024.6.11 Sherlock 继续整理SGI
+-v0.7 2024.7.25 Sherlock 
 
 简介：本文是ARM的文档《GICv3 and GICv4 Software Overview》的一个学习笔记，GICv3/
       GICv4的基本逻辑会持续的总结到这个文档里。这个文档貌似是基于2016的GIC协议，
@@ -119,14 +120,28 @@ LPI需要PCIe设备写GITS_TRANSLATER寄存器触发，虚拟机中断需要hype
 用内存中的表格保存信息，一般都会在设备上放cache，GIC也是一样。有了设备的cache，
 就会有同步的需求，GIC使用command无效化ITS中cache的配置信息。
 
-外设和GIC的接口
-----------------
+GIC和关联模块的接口
+--------------------
 
 PPI主要是做Timer的中断，Timer的中断信号和PPI的输入相连。SGI做IPI，CPU写ICC_SGI0R_EL1/
 ICC_SGI1R_EL1/ICC_ASGI1R_EL1触发SGI。外设的线中断可以直接接在GIC上做SPI中断。外
 设通过写GITS_TRANSLATER这个MMIO寄存器触发LPI，PCIe设备的MSI靠LPI来实现，MSI写的
 内容包括PCIe设备的BDF + eventID，GIC拿到这个信息后会根据提前配置好的信息查找对应
 的INTID以及路由信息，并根据提前配置的路由信息，把中断信号送到对应的CPU。
+
+GIC编程接口
+------------
+
+GICR寄存器：
+
+GICD寄存器：
+
+GICC寄存器：
+
+ITS寄存器:
+
+
+
 
 中断路由控制
 -------------
