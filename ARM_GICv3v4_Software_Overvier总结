@@ -140,7 +140,23 @@ GICC寄存器：
 
 ITS寄存器:
 
+ITS的寄存器以64KB为划分，GICv3/v4.0有两个64KB，GICv4.1以及以后有3个64KB。第一个
+64KB放控寄存器，第二个64K放MSI的doorbell寄存器，第三个64K放vSGI有关的寄存器。
 
+ITS的控制寄存器是很少的：GITS_CTRL是ITS的全局控制寄存器，GITS的配置是靠command
+queue下发的，所以需要有寄存器定义这个command queue，其中GITS_CBASER是队列的base，
+GITS_CREADR/GITS_CWRITER是队列的读取指针和写入指针，软件向队列中写入命令，硬件从
+队列中读命令。GITS_BASER<n>(n 0-7)，这些寄存器定义Device Table、Collection Table、
+vPE table的基地址，其中寄存器里的Type域段描述当前寄存器具体定义哪个表的基地址。
+这里预留了一些寄存器没有用，估计是为了以后扩展。
+
+ITS在第二个64KB上现在只留了一个GITS_TRANSLATER寄存器用来接收MSI中断，从协议上看
+这个寄存器中写的内容是EventID，那DeviceID是通过message中的其它域段承载？总之，ITS
+在收到DeviceID/EventID后，以DeviceID做Device Table Entry的索引找见设备对应的ITT表，
+以EventID做ITT entry的索引找见对应的Collection Table entry和pINTID，其中Collection
+Table entry里保存着当前中断要被送往的核号。需要注意的是，如果对应中断是个虚拟中断，
+ITT entry的输出是vINTID，vPE号或者是一个物理LPI，vPE ID继续作为vPE table的索引找见
+vPE entry，其中
 
 
 中断路由控制
