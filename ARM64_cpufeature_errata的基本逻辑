@@ -2,6 +2,7 @@ Linux内核ARM64 cpufeature和errata的基本逻辑
 
 -v0.1 2024.6.26 Sherlock init
 -v0.2 2024.7.03 Sherlock 增加kvm CPU ID模拟逻辑的分析
+-v0.3 2024.7.28 Sherlock 补全kvm CPU ID逻辑
 
 简介：本文梳理Linux内核里ARM64下CPU特性和errata的基本逻辑，分析基于Linux内核
       v6.10-rc4。
@@ -10,7 +11,7 @@ Linux内核ARM64 cpufeature和errata的基本逻辑
 基本逻辑
 ---------
 
-ARM64里先定义了feature/errata的全局的静态描述表，这写是当前内核可以支持的最大
+ARM64里先定义了feature/errata的全局的静态描述表，这些是当前内核可以支持的最大
 feature/errata列表：struct arm64_cpu_capabilities arm64_features[], arm64_errata[]
 
 如上静态表中的宏可能没有打开，内核重新把运行时的全局feature/errata表记录在：
@@ -39,10 +40,10 @@ start_kernel
         /*
          * 这里各个core把CPU ID寄存器中的值读出来保存在per-cpu的cpu_data里，再
          * 更新arm64_ftr_regs[]中的对应项。(struct cpuinfo_arm64 *cpu_data.)
-         *
-         * todo：具体更新逻辑。
          */
     +-> cpuinfo_store_boot_cpu
+          /* todo: 不清楚这里的逻辑 */
+      +-> init_cpu_features
     +-> setup_boot_cpu_features
 ```
 
@@ -52,7 +53,7 @@ setup_boot_cpu_features
   +-> init_cpucap_indirect_list
       /*
        * 注意，这里只处理特定cap类型，全部类型：system/local_cpu/boot_cpu/all。
-       * 大部分是system的。
+       * 大部分是system的。todo: 各种类型cap的语意？
        */
   +-> setup_boot_cpu_capabilities
         /* 
@@ -71,13 +72,19 @@ setup_boot_cpu_features
 ```
 
 SCOPE_SYSTEM cap的检测和配置流程如下：
-/* 拉起一号进程的函数 */
 ```
+/* 拉起一号进程的函数 */
 kernel_init
   +-> kernel_init_freeable
         /* 这里启动所有从核 */
     +-> smp_init
-        ...
+      ...
+	+-> secondary_start_kernel
+          ...
+              /* SCOPE_LOCAL_CPU cap的检测和配置*/
+          +-> check_lock_cpu_capabilities
+          ...
+
         /* 这里从核已经起来 */
 
       +-> smp_cpus_done
@@ -108,11 +115,25 @@ kvm_arch_vcpu_ioctl_run
            */
       +-> exit_handler // kvm_handle_sys_reg, 定义在arch/arm64/kvm/sys_regs.c。
         +-> desc = &sys_regs_descs[sr_idx]
-            /* 可见是通过access回调去读模拟的CPU ID的值的 */
+            /*
+             * 可见是通过access回调去读模拟的CPU ID的值的，读写的操作都是在这个
+             * 函数里通过具体系统寄存器对应的access回调函数完成的。对于读操作，
+             * 完整的模拟过程需要把读出来的系统寄存器的值更新到被模拟MRS指令的
+             * GPR上，这个由下面的vcpu_set_reg完成，这个函数把读到的值更新到vCPU
+             * 的对应GPR上，下次vCPU上位后，对应GPR自然就是读到的值。
+             */
         +-> perform_access
-        +-> vcpu_set_reg // ?
+        +-> vcpu_set_reg
 ```
+可以看到，这把所有的系统寄存器都定义在sys_regs_descs数组里，不同回调函数完成不同
+的功能。比如，access处理KVM模拟guest系统寄存器读写的逻辑，通过ioctl KVM_SET_ONE_REG/
+KVM_GET_ONE_REG进来的访问最终会走到get_user/set_user。val提示系统寄存器哪些域段
+是ioctl KVM_SET_ONE_REG可写的，多一个控制约束而已。
 
+QEMU可以通过KVM_SET_ONE_REG控制vCPU的CPU ID寄存器的值，从而控制暴露给VM的vCPU特性。
+这个特性的一个常见用处就是做不同代CPU上的VM迁移，不同代CPU上的特性可能有不同，VM
+在不同代CPU迁移时可能会出问题，一个简单的办法就是QEMU控制VM上的特性，使得VM上的
+特性是所有不同种类CPU上特性的最小集。
 
-
-
+QEMU里对如上实现的vCPU做了进一步的封装(主要是针对X86 vCPU)，定义了种类繁多的vCPU
+类型，QEMU里把整个逻辑叫做QEMU CPU model，具体的说明可以参考[这里](https://qemu-project.gitlab.io/qemu/system/qemu-cpu-models.html)。
