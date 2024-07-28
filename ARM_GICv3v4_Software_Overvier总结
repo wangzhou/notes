@@ -154,9 +154,21 @@ ITS在第二个64KB上现在只留了一个GITS_TRANSLATER寄存器用来接收M
 这个寄存器中写的内容是EventID，那DeviceID是通过message中的其它域段承载？总之，ITS
 在收到DeviceID/EventID后，以DeviceID做Device Table Entry的索引找见设备对应的ITT表，
 以EventID做ITT entry的索引找见对应的Collection Table entry和pINTID，其中Collection
-Table entry里保存着当前中断要被送往的核号。需要注意的是，如果对应中断是个虚拟中断，
-ITT entry的输出是vINTID，vPE号或者是一个物理LPI，vPE ID继续作为vPE table的索引找见
-vPE entry，其中
+Table entry里保存着当前中断要被送往的PE ID。
+
+需要注意的是，如果对应中断是个虚拟中断，ITT entry的输出是vINTID、vPE号或者是一个
+物理LPI，vPE ID继续作为vPE table的索引找见vPE entry，其中保存当前vPE对应的GICR和
+vPE的vLPI pending table的base，其中保存的GICR实际上表示vPE可能运行的物理核，vPE
+当前可能在位也可能不在位。这里会有硬件检测机制判断vPE是否在位，如果在位就直接报
+中断到当前vPE的上下文上(GIC4.0)，如果不在位，给物理核报一个物理LPI。
+
+ITS协议并没有定义表里具体的格式，具体实现者需要在GITS_BASER<n>需要提供表格的entry
+size，这样软件就可以根据情况，决定分配多少内存。(todo: 软件如何处理内存一次没有分够?)
+
+ITS中的这些中断配置，需要软件提前通过ITS命令配置到ITS的各种表里。我们关注ITS这些
+命令的输入参数。
+
+
 
 
 中断路由控制
@@ -206,6 +218,3 @@ ICC_CTRL_ELn, control completion of interrupt，CPU通过这个寄存器设置EO
 ICC_SRE_ELn, system register enable。
 ICC_PMR_ELn, priority mask register。
 ICC_IGRPEN1_ELn，interrupt group enable。
-
-
-

@@ -342,7 +342,6 @@ pKVM的基本逻辑					 todo
 CCA/realm基本逻辑				 todo
 vm live migration/heterogenous: 基本逻辑/用法	 todo # 3
 arm CPU ID regs and errata的基本逻辑		 todo # 2
-ARM CNP特性
 qemu vfio框架					 todo
 rcu stall分析
 
@@ -353,3 +352,7 @@ ARM中断虚拟化
 kernel guard					 topost
 ipi_benckmard分析
 基于iommufd的vSVA基本逻辑
+ARM CNP特性
+ARM 内核启动流程分析
+大页会缺页么？
+malloc.hugetlb
