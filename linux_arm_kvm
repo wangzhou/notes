@@ -1,0 +1,103 @@
+Linux内核ARM64 KVM虚拟化的基本逻辑
+
+-v0.1 2024.7.29 Sherlock init
+
+简介：本文梳理Linux内核中ARM64虚拟化的基本逻辑，本文只梳理基于KVM的虚拟化。梳理
+      基于的Linux内核版本是v6.10-rc4，基于的QEMU版本是v9.0.50。
+
+
+## 基本逻辑
+
+Linux内核KVM的分析可以参考[这里](https://wangzhou.github.io/riscv-KVM虚拟化分析/)，不过这个分析是基于RISCV的。Linux的KVM基本框架可以
+参考基于RISCV的这个文档，我们这里着重分析ARM KVM的实现。
+
+
+## CPU虚拟化
+
+拉起vCPU的入口
+```
+/* arch/arm64/kvm/arm.c */
+kvm_arch_vcpu_ioctl_run
+  [...}]
+      /* 拉起vCPU的核心逻辑 */
+  +-> kvm_arm_vcpu_enter_exit
+  ...
+      /* VM退出到KVM的入口，arch/arm64/kvm/handle_exit.c */
+  +-> handle_exit
+        /* trap到KVM的逻辑入口 */
+    +-> handle_trap_exceptions
+          /*
+           * 根据trap时报的EC类型选择不同的处理函数，整个处理函数的列表定义在:
+           * arm_exit_handlers数组。
+           */
+      +-> kvm_get_exit_handler
+      +-> exit_handler
+```
+
+对于系统寄存器触发的trap在kvm_handle_sys_reg中处理。
+```
+/* arch/arm64/kvm/sys_regs.c */
+kvm_handle_sys_reg
+ +-> ...
+```
+
+Stage2的缺页trap在kvm_handle_guest_debug中处理。这个里面既处理内存的缺页，也处理
+MMIO的缺页，ARM64 VM里的ITS/GICD/GICR就是通过访问对应的MMIO寄存器时，触发trap到
+KVM里模拟实现的。
+```
+/* arch/arm64/kvm/mmu.c */
+kvm_handle_guest_abort
+     /* MMIO模拟的入口, arch/arm64/kvm/mmio.c */
+ +-> io_mem_abort
+       /* virt/kvm/kvm_main.c */
+   +-> kvm_io_bus_write/read
+     +-> __kvm_io_bus_write
+       +-> kvm_iodevice_write
+```
+
+其中相关的KVM层面的数据结构有：kvm_io_device/kvm_io_bus/kvm_io_range等。kvm_io_device
+描述一个kvm(内核虚拟机)里的IO设备，kvm_io_bus是kvm_io_device的bus，kvm_io_bus被
+划分位多个range，每个range都有对应的kvm_io_range。
+
+具体到ARM64 ITS的虚拟化逻辑，每层数据结构以面向对象的方式组织起来。
+```
+   kvm_io_device 
+     - kvm_io_device_ops *op = kvm_io_gic_ops
+         ^
+         |
+
+   vgic_io_device
+     - vgic_io_device *regions = its_registers
+
+         ^
+         |
+
+      vgic_its
+```
+基于如上的数据结构，vgic_register_its_iodev(struct kvm, struct vgic_its, addr)把
+VM的ITS向KVM注册。
+
+更高一层的注册逻辑。
+
+## 内存虚拟化
+
+todo: 如上stage2 fault的逻辑。
+
+
+## 中断虚拟化
+
+todo：host上中断的基本逻辑。
+
+todo: 中断虚拟化的基本逻辑。
+
+### PPI虚拟化
+
+### SGI虚拟化
+
+### LPI虚拟化
+
+## SMMU虚拟化
+
+todo：vSVA的基本逻辑。
+
+kvm_arm_init // todo: 一路上有gic的初始化... module的init函数...

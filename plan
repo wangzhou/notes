@@ -353,9 +353,9 @@ arm CPU ID regs and errata的基本逻辑		 topost
 gic硬件笔记				         todo
 ARM中断虚拟化					 todo
 arm spe硬件逻辑，可以具体干什么		         doing # 4
+基于iommufd的vSVA基本逻辑			 todo
 
 ipi_benckmard分析
-基于iommufd的vSVA基本逻辑
 ARM CNP特性
 ARM 内核启动流程分析
 大页会缺页么？
