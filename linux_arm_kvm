@@ -100,4 +100,24 @@ todo: 中断虚拟化的基本逻辑。
 
 todo：vSVA的基本逻辑。
 
-kvm_arm_init // todo: 一路上有gic的初始化... module的init函数...
+ARM64 KVM的初始化入口。
+```
+kvm_arm_init
+      /* 注意，这里初始化的是各个子系统的类，而不是实例。从下面的实例会看的更清楚 */
+  +-> init_subsystems
+        /* arch/arm64/kvm/vgic/vgic-init.c */
+    +-> kvm_vgic_hyp_init
+      +-> vgic_v3_probe
+        +-> kvm_register_vgic_device
+	  +-> kvm_register_device_ops(&kvm_arm_vgic_v3_ops, KVM_DEV_TYPE_ARM_VGIC_V3)
+	  +-> kvm_vgic_register_its_device
+
+      /* 创建/dev/kvm，后续的VM/vCPU等资源都从这里创建出来 */
+  +-> kvm_init
+```
+
+实例的初始化接口是各个ioctl接口。
+
+
+
+

@@ -360,3 +360,5 @@ ARM CNP特性
 ARM 内核启动流程分析
 大页会缺页么？
 malloc.hugetlb
+
+死锁检测blog
