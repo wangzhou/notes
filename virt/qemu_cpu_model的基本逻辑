@@ -60,5 +60,3 @@ kvm_arch_init_vcpu
   +-> kvm_x86_build_cpuid
     +-> cpu_x86_cpuid
 ```
-
-
