@@ -11,7 +11,7 @@
 把用这样方式定义虚拟机CPU叫做CPU model。QEMU里X86定义了种类繁多的vCPU类型，具体
 的说明可以参考[这里](https://qemu-project.gitlab.io/qemu/system/qemu-cpu-models.html)。
 
-在基于KVM的QEMU上，需要KVM支持vCPU的特性可以被配置，具体逻辑可以参考[这里](todo)。
+在基于KVM的QEMU上，需要KVM支持vCPU的特性可以被配置，具体逻辑可以参考[这里](https://wangzhou.github.io/Linux内核ARM64-cpufeature和errata的基本逻辑/)。
 
 QEMU里需要定义不同类型vCPU的具体特性列表，并根据QEMU启动参数传入的CPU model类型
 打开或者关闭对应的CPU特性。在基于KVM的QEMU上，打开或者关闭CPU特性是通过KVM的ioctl
