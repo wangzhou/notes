@@ -1,0 +1,5 @@
+-v0.1 2024.8.6 Sherlock init
+
+简介：本文是对Linux内核里cpufreq使用的一个速记。
+
+Linux内核里对core调频调压的子系统是cpufreq系统。
