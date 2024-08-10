@@ -286,13 +286,13 @@ QMP分析和使用
            +-> qemu_chr_new_mux_mon
              +-> qemu_chr_new_permit_mux_mon
                +-> qemu_chr_new_noreplay
-	         +-> monitor_init_hmp
-		   +-> qemu_char_fe_set_handlers  <--- 这里所谓的前端似乎只是抽象了一个统一的后端配置入口
-		     +-> qemu_char_fe_set_handlers_full
-		       +-> mux_chr_update_read_handlers
-		         +-> qemu_char_fe_set_handlers_full
-		           +-> fd_chr_update_read_handlers
-			     +-> g_source_attach  <--- 最后在这里加入到事件监控
+                 +-> monitor_init_hmp
+                   +-> qemu_char_fe_set_handlers  <--- 这里所谓的前端似乎只是抽象了一个统一的后端配置入口
+                     +-> qemu_char_fe_set_handlers_full
+                       +-> mux_chr_update_read_handlers
+                         +-> qemu_char_fe_set_handlers_full
+                           +-> fd_chr_update_read_handlers
+                             +-> g_source_attach  <--- 最后在这里加入到事件监控
 ```
 
  在qemu代码里的hmp_info_kvm的函数上打断点，使用gdb运行qemu，在断点处打印调用栈如下：
@@ -304,13 +304,13 @@ QMP分析和使用
          +-> glib_pollfds_poll
            +-> g_main_context_dispatch
              +-> fd_chr_read
-	       +-> mux_chr_read
-	         +-> monitor_read
-	           +-> readline_handle_byte
-	             +-> monitor_command_cb
-	               +-> handle_hmp_command
-	                 +-> handle_hmp_command_exec
-	                   +-> hmp_info_kvm
+               +-> mux_chr_read
+                 +-> monitor_read
+                   +-> readline_handle_byte
+                     +-> monitor_command_cb
+                       +-> handle_hmp_command
+                         +-> handle_hmp_command_exec
+                           +-> hmp_info_kvm
 ```
  可以看出当monitor上有输入的时候，qemu主线程会poll到相关fd，然后以来glib的事件处理
  模型做事件分发处理，然后一路调用下来。
