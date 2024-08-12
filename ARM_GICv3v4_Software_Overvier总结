@@ -4,7 +4,7 @@
 -v0.4 2024.5.10 Sherlock ...
 -v0.5 2024.5.11 Sherlock ...
 -v0.6 2024.6.11 Sherlock 继续整理SGI
--v0.7 2024.7.25 Sherlock 
+-v0.7 2024.7.25 Sherlock ...
 
 简介：本文是ARM的文档《GICv3 and GICv4 Software Overview》的一个学习笔记，GICv3/
       GICv4的基本逻辑会持续的总结到这个文档里。这个文档貌似是基于2016的GIC协议，
@@ -138,6 +138,13 @@ GICD寄存器：
 
 GICC寄存器：
 
+ICC_IAR0_EL1/ICC_IAR1_EL1, CPU从这个寄存器读到INTID。
+ICC_CTRL_ELn, control completion of interrupt，CPU通过这个寄存器设置EOI。
+
+ICC_SRE_ELn, system register enable。
+ICC_PMR_ELn, priority mask register。
+ICC_IGRPEN1_ELn，interrupt group enable。
+
 ITS寄存器:
 
 ITS的寄存器以64KB为划分，GICv3/v4.0有两个64KB，GICv4.1以及以后有3个64KB。第一个
@@ -156,6 +163,8 @@ ITS在第二个64KB上现在只留了一个GITS_TRANSLATER寄存器用来接收M
 以EventID做ITT entry的索引找见对应的Collection Table entry和pINTID，其中Collection
 Table entry里保存着当前中断要被送往的PE ID。
 
+(todo: GITS_TRANSLATER地址是host和VM公用的？)
+
 需要注意的是，如果对应中断是个虚拟中断，ITT entry的输出是vINTID、vPE号或者是一个
 物理LPI，vPE ID继续作为vPE table的索引找见vPE entry，其中保存当前vPE对应的GICR和
 vPE的vLPI pending table的base，其中保存的GICR实际上表示vPE可能运行的物理核，vPE
@@ -168,7 +177,21 @@ size，这样软件就可以根据情况，决定分配多少内存。(todo: 软
 ITS中的这些中断配置，需要软件提前通过ITS命令配置到ITS的各种表里。我们关注ITS这些
 命令的输入参数。
 
+如下是ITS命令总结:
 
+MAPD device_id, ITT_base, ITT_size 
+告诉ITS去哪里找device_id对应的ITT表。
+
+MAPI device_id, event_id, collection_id
+MAPTI device_id, event_id, INTID, collection_id
+
+如上的命令是把(device_id, event_id)->INTID的对应关系告诉硬件，并且把collection
+table中的索引collection_id也告诉硬件。后面中断流程中就可以用(device_id, event_id)
+作为输入，得到(INTID，collection_id)的输出。注意，这里collection table的base需要
+提前配置到ITS上。
+
+MAPC collection_id, target_GICR 
+配置collection table的collection_id entry里的目标GICR。
 
 
 中断路由控制
@@ -189,32 +212,22 @@ todo: ...
 中断虚拟化
 -----------
 
-todo: kvm里模拟gic的基本逻辑? 也就是虚拟机中外设和中断控制器的关系。
+我们这里先只看GIC硬件对于中断虚拟化的支持，KVM对GIC的模拟是独立的逻辑，在独立的
+文档里再描述吧。
+
+todo: CPU侧接口。
+
+todo: GICv3中断注入的逻辑。(只能注入vLPI?)
 
       list register的情况，支持软件模拟外设，通过kvm ioctl从hypervisor向VM注入中断？
-      这种情况可以向VM注入PPI/SPI/LPI？SGI要怎么搞？
 
-      vPPI的逻辑是怎么样，也是hypervisor里起hrtimer，然后定时注入？
+todo: GICv4中断虚拟化的基本逻辑。(vLPI直通)
 
-      直通外设和list register的逻辑怎么综合到一起？
+todo: GICv4.1中断虚拟化的基本逻辑。(vLPI直通)
 
-vPPI/vSGI/vSPI/vLPI?
+todo: GICv4.1中断虚拟化的基本逻辑。(vSGI直通) (vSPI和vPPI直通?)
 
-外设的虚拟化：软件模拟，设备直通
+vPPI的逻辑
+-----------
 
-      vSPI不能直接注入? 只有vSGI和vLPI可以直接注入？
-
-      软件模拟的设备，直通的设备都可以直接注入？
-
-      GITS_TRANSLATER地址是host和VM公用的？
-
-
-中断虚拟化直通
----------------
-
-ICC_IAR0_EL1/ICC_IAR1_EL1, CPU从这个寄存器读到INTID。
-ICC_CTRL_ELn, control completion of interrupt，CPU通过这个寄存器设置EOI。
-
-ICC_SRE_ELn, system register enable。
-ICC_PMR_ELn, priority mask register。
-ICC_IGRPEN1_ELn，interrupt group enable。
+todo: vPPI的逻辑是怎么样，也是hypervisor里起hrtimer，然后定时注入？
