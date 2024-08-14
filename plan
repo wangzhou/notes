@@ -366,3 +366,4 @@ ARM continue bit
 KCSAN
 KASAN
 x86 cpu model					 topost
+qemu -name VM,debug_threads=on
