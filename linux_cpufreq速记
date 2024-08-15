@@ -1,4 +1,5 @@
--v0.1 2024.8.6 Sherlock init
+-v0.1 2024.8.6  Sherlock init
+-v0.2 2024.8.15 Sherlock 增加使用接口
 
 简介：本文是对Linux内核里cpufreq使用的一个速记。
 
@@ -13,7 +14,6 @@ BIOS中的其他逻辑的控制，实际的控制结果是两个逻辑综合的�
 CPU工作在合理的物理环境下。比如，用户控制全部CPU满频率运行，如果CPU的散热不好，
 就会导致CPU的工作温度过高，BIOS中的逻辑会监控温度，并对CPU的频率做必要的调整。
 
-
 使用接口
 ---------
 
@@ -25,17 +25,17 @@ policy0  policy1  policy2  policy3
 sherlock@test:/sys/devices/system/cpu/cpufreq$ cd policy0
 sherlock@test:/sys/devices/system/cpu/cpufreq/policy0$ tree 
 .
-├── affected_cpus
+├── affected_cpus  <-- 作用的CPU核
 ├── cpuinfo_max_freq
 ├── cpuinfo_min_freq
 ├── cpuinfo_transition_latency
 ├── energy_performance_available_preferences
 ├── energy_performance_preference
 ├── related_cpus
-├── scaling_available_governors    <-- 这里查看可选的调频策略，这个版本的内核支持performance
+├── scaling_available_governors    <-- 这里查看可选的调频策略，这个版本的内核支持performance和powersave
 ├── scaling_cur_freq
 ├── scaling_driver
-├── scaling_governor  <-
+├── scaling_governor  <-- 当前选择的调频策略
 ├── scaling_max_freq
 ├── scaling_min_freq
 └── scaling_setspeed
