@@ -2,4 +2,41 @@
 
 简介：本文是对Linux内核里cpufreq使用的一个速记。
 
-Linux内核里对core调频调压的子系统是cpufreq系统。
+基本逻辑
+---------
+
+Linux内核里对core调频调压的子系统是cpufreq系统。用户可以通过cpufreq向往暴露的sysfs
+接口控制CPU调频调压的策略，但是具体落实在物理CPU上的实际调频调压的动作还是会收到
+BIOS中的其他逻辑的控制，实际的控制结果是两个逻辑综合的结果。
+
+这样的控制逻辑也是合理的，sysfs接口表示用户的意愿，而BIOS中的控制逻辑主要是使得
+CPU工作在合理的物理环境下。比如，用户控制全部CPU满频率运行，如果CPU的散热不好，
+就会导致CPU的工作温度过高，BIOS中的逻辑会监控温度，并对CPU的频率做必要的调整。
+
+
+使用接口
+---------
+
+```
+sherlock@test:~$ cd /sys/devices/system/cpu/
+sherlock@test:/sys/devices/system/cpu$ cd cpufreq/
+sherlock@test:/sys/devices/system/cpu/cpufreq$ ls
+policy0  policy1  policy2  policy3
+sherlock@test:/sys/devices/system/cpu/cpufreq$ cd policy0
+sherlock@test:/sys/devices/system/cpu/cpufreq/policy0$ tree 
+.
+├── affected_cpus
+├── cpuinfo_max_freq
+├── cpuinfo_min_freq
+├── cpuinfo_transition_latency
+├── energy_performance_available_preferences
+├── energy_performance_preference
+├── related_cpus
+├── scaling_available_governors    <-- 这里查看可选的调频策略，这个版本的内核支持performance
+├── scaling_cur_freq
+├── scaling_driver
+├── scaling_governor  <-
+├── scaling_max_freq
+├── scaling_min_freq
+└── scaling_setspeed
+```
