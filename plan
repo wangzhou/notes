@@ -350,8 +350,8 @@ arm qemu生成ACPI表格
 
 kernel guard					 topost
 arm CPU ID regs and errata的基本逻辑		 topost
-gic硬件笔记				         todo
-ARM中断虚拟化					 todo
+gic硬件笔记				         doing
+ARM中断虚拟化					 doing
 arm spe硬件逻辑，可以具体干什么		         doing # 4
 基于iommufd的vSVA基本逻辑			 todo
 
