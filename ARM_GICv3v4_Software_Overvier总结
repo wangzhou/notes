@@ -6,6 +6,7 @@
 -v0.6 2024.6.11 Sherlock 继续整理SGI
 -v0.7 2024.7.25 Sherlock ...
 -v0.8 2024.8.14 Sherlock ...
+-v0.9 2024.8.17 Sherlock ...
 
 简介：本文是ARM的文档《GICv3 and GICv4 Software Overview》的一个学习笔记，GICv3/
       GICv4的基本逻辑会持续的总结到这个文档里。这个文档貌似是基于2016的GIC协议，
@@ -140,16 +141,13 @@ SGI做IPI，CPU写ICC_SGI0R_EL1/ICC_SGI1R_EL1/ICC_ASGI1R_EL1触发SGI。
 到这个信息后会根据提前配置好的信息查找对应的INTID以及路由信息，并根据提前配置的
 路由信息，把中断信号送到对应的CPU。
 
-hypervisor可以写ICH_LRn_EL2向vCPU注入中断。(todo: 展开细节)
+hypervisor可以写ICH_LRn_EL2向vCPU注入中断。
+(todo: 展开细节)
 
 GIC编程接口
 ------------
 
 GIC中保存的各种状态和路由信息可以通过GIC的编程接口进行操作。
-
-GICR寄存器：todo
-
-GICD寄存器：todo
 
 GICC寄存器：
 
@@ -159,16 +157,36 @@ ICC_xxx_ELx、ICV_xxx_ELx、ICH_xxx_ELx。其中，前两种是中断业务要�
 在host上使用，一个在虚拟机里使用，第三种是对虚拟中断的配置寄存器，在hypervisor里
 使用。
 
-ICC_IAR0_EL1/ICC_IAR1_EL1:                       CPU从这个寄存器读到INTID。
-ICC_CTRL_ELn(control completion of interrupt):   CPU通过这个寄存器设置EOI。
-ICC_SRE_ELn, system register enable。
-ICC_PMR_ELn, priority mask register。
-ICC_IGRPEN1_ELn，interrupt group enable。
-todo: ...
+ICC_xxx_ELx/ICV_xxx_ELx的设计逻辑和系统寄存器虚拟化的设计逻辑是一样的，这两组寄存
+器在功能上基本上是一一对应的，软件实际访问的时候看到的寄存器名字也是ICC_xxx_ELx，
+只不过软件在host下实际访问的寄存器是ICC_xxx_ELx，而在guest下实际访问的寄存器是
+ICV_xxx_ELx。
 
-todo: ICV_xxx_ELx
+这里看起来ICC/ICV寄存器的语意是一样的，其实在同一时刻，它们代表着不同的上下文语意。
+比如，host上的vCPU线程在被host上的中断打断的时候，软件要保存的上下文有vCPU这个机
+器的上下文和host线程自己的上下文，其中vCPU的上下文就包括ICV相关寄存器。
 
-todo: ICH_xxx_ELx
+ICC_IAR0/1_EL1:                                  CPU从这个寄存器读到INTID。
+ICC_SGI0/1_EL1:                                  CPU通过这个寄存器发SGI中断。
+ICC_EOIR0/1_EL1:                                 CPU通过这个寄存器给中断发EOI。
+ICC_CTRL_EL1/3:                                  各种中断功能的控制寄存器。
+ICC_IGRPEN0/1_ELn(interrupt group enable):       中断group的使能寄存器。
+ICC_SRE_ELn(system register enable):             IRQ/FRQ/ERROR中断的使能位。
+ICC_PMR_ELn(priority mask register):             中断优先级过滤的配置。
+
+ICV_xxx_ELx在guest里使用，寄存器和如上ICC_xxx_ELx的寄存器一样。
+
+ICH_AP1R<n>_EL2:
+ICH_VTR_EL2:      GIC虚拟化相关的规格配置寄存器。
+ICH_HCR_EL2:      GIC虚拟化的核心控制寄存器。
+ICH_LR<n>_EL2:    虚拟中断注入寄存器。
+ICH_ELRSR_EL2
+ICH_EISR_EL2
+ICH_MISR_EL2: 
+
+GICR寄存器:
+
+GICD寄存器:
 
 ITS寄存器:
 
@@ -249,22 +267,63 @@ todo: ...
 中断虚拟化
 -----------
 
-我们这里先只看GIC硬件对于中断虚拟化的支持，KVM对GIC的模拟是独立的逻辑，在独立的
-文档里再描述吧。
+我们这里先只看GIC硬件对于中断虚拟化的支持。GIC的KVM模拟方案中，GICD/GICR/ITS都是
+用软件模拟的，访问对应模块的寄存器会trap的KVM里，KVM调用host上的GIC驱动把guest的
+中断(虚拟中断)的硬件通路配置好，这样vCPU的中断实际报上来时就可以沿着之前配置好的
+硬件通路报到hypervisor(KVM)或者vCPU。KVM对GIC的模拟是独立的逻辑，在独立的文档里
+再描述吧。
 
-todo: CPU侧接口，ICV_xxx_ELx/ICH_xxx_ELx。
+虚拟中断可以被送到vCPU要解决两个问题: 一个是GIC里需要维护虚拟中断的路由和状态信息，
+这就需要有配置和维护如上信息的接口和硬件支持；一个是要解决怎么把中断发给vCPU，host
+上的中断没有这个问题，中断来了，硬件直接切到对应的EL状态去处理，vCPU可能在运行，
+也可能不在运行，对于在运行的vCPU，虚拟中断可以直接发给它(打断其运行，使其执行流
+跳到中断处理向量)，对于下线的vCPU，虚拟中断可以由hypervisor(KVM)接管，hypervisor
+再向对应的vCPU中注入虚拟中断。
 
-GICv3中断注入的逻辑。(只能注入vLPI?)
+GICv3不支持中断直通，虚拟中断必须先trap到KVM里，KVM通过ICH_LRn_EL2注入vCPU。
+(todo: 怎么配置这里?)(只能注入vLPI?)
 
-      list register的情况，支持软件模拟外设，通过kvm ioctl从hypervisor向VM注入中断？
+GICv4.0/4.1中维护中断路由和状态信息的设计是基本一致的，GIC4.0在GICv3的基础上增加
+了中断直通，GIC4.1改进了中断直通并且增加了vSGI的直通。但是，GIC4.0和GIC4.1在协议
+上是不兼容的，感觉这里设计的很糟糕。如下的这些带V前缀的命令是GICv4里新加的，GICv3
+里没有。
 
-GICv4中断虚拟化的基本逻辑。(vLPI直通)
+- VMAPI device_id, event_id, vPEID, doorbell
+- VMAPTI device_id, event_id, vPEID, vINTID, doorbell
 
-GICv4.1中断虚拟化的基本逻辑。(vLPI直通)
+和MAPI/MAPTI的功能一样，不过这里的映射多了vPEID，就是告诉硬件对应的中断要发给哪
+个vCPU。doorbell中断是无法直通的时候(vCPU不在位)需要触发的host上的中断。
 
-GICv4.1中断虚拟化的基本逻辑。(vSGI直通) (vSPI和vPPI有直通么?)
+- VMAPP vPEID, RD_base, VPT_addr, VPT_size (4.0)
+	vPEID, RD_base, VPT_addr, VPT_size, V (4.1)
+
+告诉硬件某个vCPU上的中断发往哪个物理CPU，并把这个vCPU的VPT表的base/size信息告诉
+硬件。一个虚拟中断报给GICR，GICR判断对应的vCPU是否在位就是通过虚拟中断信号中携带
+的vCPU相关信息和GICR中标记的vCPU信息做对比。对于中断直通的基本逻辑，GIC和RISCV的
+AIA其实都是一样的。可以看到VMAPP和VMAPI/VMAPTI的逻辑是独立的。
+
+- VMOVP vPEID, RD_base, ITS_list, Sequence_number (v4.0)
+        vPEID, RD_base, ITS_list, Sequence_number, doorbell (v4.1)
+
+把一个vCPU上的中断配置发往另一个物理CPU。
+
+- VMOVI device_id, event_id, vPEID, doorbell
+
+去掉一个虚拟中断的映射。
+
+GICv4.1中增加了vSGI直通，GICv3和GICv4.0中，一个vCPU给另外一个vCPU发送SGI，发送方
+会trap到KVM里，KVM再向接收方GICR发信息，接收方GICR会给接收方CPU发中断，接收方CPU
+进入KVM，在KVM里注入中断。GICv4.1中的vSGI直通，是对后半段做了优化，发送方KVM在向
+接收方注入SGI中断的时候，如果当时接收方vCPU正好在位，SGI可以直通vCPU。
+
+接收方GICR可以根据如上LPI直通的配置确定是否vCPU在位(?)，但是GICR还需要知道vSGI
+的其它配置信息，这些配置信息包括是否enable、优先级、中断group等。GIC现在的设计是
+把这些信息塞到了vLPI的pending table表的空余空间里，然后新增加了一个VSGI的命令去
+下对应的配置。似乎GIC最初设计没有考虑到这里，这里打了一个丑陋的打补丁。
+
+- VSGI vPEID, vINTID, enable, group, priority, clear
 
 vPPI的逻辑
 -----------
 
-todo: vPPI的逻辑是怎么样，也是hypervisor里起hrtimer，然后定时注入？
+vPPI的逻辑是怎么样，也是hypervisor里起hrtimer，然后定时注入？
