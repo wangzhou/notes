@@ -1,6 +1,7 @@
 Linux内核ARM64 KVM虚拟化的基本逻辑
 
 -v0.1 2024.7.29 Sherlock init
+-v0.2 2024.8.18 Sherlock ...
 
 简介：本文梳理Linux内核中ARM64虚拟化的基本逻辑，本文只梳理基于KVM的虚拟化。梳理
       基于的Linux内核版本是v6.10-rc4，基于的QEMU版本是v9.0.50。
@@ -11,27 +12,113 @@ Linux内核ARM64 KVM虚拟化的基本逻辑
 Linux内核KVM的分析可以参考[这里](https://wangzhou.github.io/riscv-KVM虚拟化分析/)，不过这个分析是基于RISCV的。Linux的KVM基本框架可以
 参考基于RISCV的这个文档，我们这里着重分析ARM KVM的实现。
 
+ARM64 KVM的初始化入口。
+```
+kvm_arm_init
+      /* 注意，这里初始化的是各个子系统的类，而不是实例。从下面的实例会看的更清楚 */
+  +-> init_subsystems
+        /* arch/arm64/kvm/vgic/vgic-init.c */
+    +-> kvm_vgic_hyp_init
+      +-> vgic_v3_probe
+        +-> kvm_register_vgic_device
+	  +-> kvm_register_device_ops(&kvm_arm_vgic_v3_ops, KVM_DEV_TYPE_ARM_VGIC_V3)
+	  +-> kvm_vgic_register_its_device
+
+        /* 注册各个timer的中断处理函数 */
+    +-> kvm_timer_hyp_init
+          /*
+	   * 拿到drivers/clocksource/arm_arch_timer.c里定义的arch_timer_kvm_info，
+	   * 读取count的方法在timecounter，也在KVM里得到，注意这里读的是CNTVCT。
+	   */
+      +-> info = arch_timer_get_kvm_info()
+          timecounter = &info->timecounter
+
+
+      /* 创建/dev/kvm，后续的VM/vCPU等资源都从这里创建出来 */
+  +-> kvm_init
+```
+
+实例的初始化接口是各个ioctl接口。
+
+
+
+
+## 创建VM
+
+```
+kvm_dev_ioctl_create_vm
+  +-> kvm_create_vm
+        /* 具体构架相关，VM */
+    +-> kvm_arch_init_vm
+      +-> kvm_vgic_early_init
+      +-> kvm_timer_init_vm
+```
+
+基本数据结构：
+
+kvm
+  +-> kvm_arch arch                    // arm64 kvm结构
+    +-> arch_timer_vm_data timer_data  //
+      +-> voffset
+      +-> ppi[]
+
+    +-> vgic_dist vgic
+
+kvm_vcpu 
+  +-> kvm_vcpu_arch arch               // arm64 vcpu结构
+    +-> arch_timer_cpu timer_cpu       // arm64 vcpu timer结构
+      +-> arch_timer_context timers[]  // 一个vcpu上多种类型timer
+        +-> arch_timer_offset offset
+          +-> vm_offset指针
+        +-> hrtimer
+
+```
+kvm_arch_vcpu_create
+      /* */
+  +-> kvm_timer_vcpu_init
+        /* 把如上vm_offset指针指向内容更新为当前CNTVCT的值 */
+    +-> timer_set_offset(vcpu_vtimer(vcpu), kvm_phys_timer_read())
+        /* todo: ... */
+    +-> hrtimer_init
+
+  +-> kvm_vgic_vcpu_init(vcpu)
+```
+
+```
+kvm_arch_vcpu_ioctl_vcpu_init
+  +-> kvm_vcpu_set_target
+    +-> kvm_reset_vcpu
+          /* todo: ... */
+      +-> kvm_timer_vcpu_reset
+```
 
 ## CPU虚拟化
+
+
 
 拉起vCPU的入口
 ```
 /* arch/arm64/kvm/arm.c */
 kvm_arch_vcpu_ioctl_run
-  [...}]
-      /* 拉起vCPU的核心逻辑 */
-  +-> kvm_arm_vcpu_enter_exit
-  ...
-      /* VM退出到KVM的入口，arch/arm64/kvm/handle_exit.c */
-  +-> handle_exit
-        /* trap到KVM的逻辑入口 */
-    +-> handle_trap_exceptions
-          /*
-           * 根据trap时报的EC类型选择不同的处理函数，整个处理函数的列表定义在:
-           * arm_exit_handlers数组。
-           */
-      +-> kvm_get_exit_handler
-      +-> exit_handler
+  /*
+   * 控制vCPU运行的核心逻辑，注意这里如果vCPU退到KVM里可以处理，KVM处理完后会马
+   * 上再次进入vCPU执行。
+   */
+  while (ret > 0) {
+        /* 拉起vCPU的核心逻辑 */
+    +-> kvm_arm_vcpu_enter_exit
+    ...
+        /* VM退出到KVM的入口，arch/arm64/kvm/handle_exit.c */
+    +-> handle_exit
+          /* trap到KVM的逻辑入口 */
+      +-> handle_trap_exceptions
+            /*
+             * 根据trap时报的EC类型选择不同的处理函数，整个处理函数的列表定义在:
+             * arm_exit_handlers数组。
+             */
+        +-> kvm_get_exit_handler
+        +-> exit_handler
+  }
 ```
 
 对于系统寄存器触发的trap在kvm_handle_sys_reg中处理。
@@ -99,24 +186,6 @@ todo: 中断虚拟化的基本逻辑。
 ## SMMU虚拟化
 
 todo：vSVA的基本逻辑。
-
-ARM64 KVM的初始化入口。
-```
-kvm_arm_init
-      /* 注意，这里初始化的是各个子系统的类，而不是实例。从下面的实例会看的更清楚 */
-  +-> init_subsystems
-        /* arch/arm64/kvm/vgic/vgic-init.c */
-    +-> kvm_vgic_hyp_init
-      +-> vgic_v3_probe
-        +-> kvm_register_vgic_device
-	  +-> kvm_register_device_ops(&kvm_arm_vgic_v3_ops, KVM_DEV_TYPE_ARM_VGIC_V3)
-	  +-> kvm_vgic_register_its_device
-
-      /* 创建/dev/kvm，后续的VM/vCPU等资源都从这里创建出来 */
-  +-> kvm_init
-```
-
-实例的初始化接口是各个ioctl接口。
 
 
 

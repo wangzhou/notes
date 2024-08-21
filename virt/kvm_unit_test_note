@@ -1,0 +1,41 @@
+-v0.1 2024.8.21 Sherlock init
+
+简介：kvm_unit_test的一个使用速记
+
+
+kvm_unit_test是一个kvm的测试套，代码仓库路径在[这里](https://github.com/kvm-unit-tests/kvm-unit-tests.git)。
+
+./configure; make 编译后会生成对应的elf和flat文件，这些文件不是直接使用，需要作为
+qemu的参数使用。
+
+还可以使用./configure; make standalone编译，这样会在tests生成对应的脚本，这些脚本
+是可以直接直接使用的。这些脚本里调用qemu去执行对应的测试程序。
+
+看一个make standalone编译运行micro-bench测试的例子，把编程生成的micro-bench中的
+最后一行中的kvm改成tcg，这样随便找个tcg的qemu也可以做测试。
+```
+sherlock@m1:~/repos/kvm-unit-tests/tests$ export QEMU=/home/sherlock/repos/qemu/build/qemu-system-aarch64
+sherlock@m1:~/repos/kvm-unit-tests/tests$ ./micro-bench 
+BUILD_HEAD=220ac1e0
+Test marked not to be run by default, are you sure (y/N)? y
+timeout -k 1s --foreground 90s /home/sherlock/repos/qemu/build/qemu-system-aarch64 -nodefaults -machine virt -accel tcg -cpu cortex-a57 -device virtio-serial-device -device virtc
+onsole,chardev=ctd -chardev testdev,id=ctd -device pci-testdev -display none -serial stdio -kernel /tmp/tmp.yrCCPNO4tn -smp 2 # -initrd /tmp/tmp.fkPDjJfrO8
+Timer Frequency 62500000 Hz (Output in microseconds)
+
+name                                    total ns                         avg ns             
+--------------------------------------------------------------------------------------------
+hvc                                   7711984.0                          117.0              
+mmio_read_user                       16534304.0                          252.0              
+mmio_read_vgic                       14945696.0                          228.0              
+eoi                                  17121360.0                          261.0              
+ipi                                 549007696.0                         8377.0              
+ipi_hw test skipped
+lpi test skipped
+timer_10ms                          214614144.0                       838336.0              
+
+EXIT: STATUS=1
+PASS micro-bench 
+```
+
+可以看见kvm_unit_test的脚本会拉起一个qemu做测试，被测试内容被隔离到了一个vm里，
+理论上是不会对系统运行的其他qemu有影响的。

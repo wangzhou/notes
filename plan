@@ -340,7 +340,6 @@ coresight/ETM基本逻辑
 arm qemu模型分析(VHE的实现)		 	 c #
 pKVM的基本逻辑					 todo
 CCA/realm基本逻辑				 todo
-vm live migration/heterogenous: 基本逻辑/用法	 todo # 3
 qemu vfio框架					 todo
 rcu stall分析
 
@@ -367,3 +366,7 @@ KCSAN
 KASAN
 x86 cpu model					 topost
 qemu -name VM,debug_threads=on
+kvm unit test					 todo
+vm live migration/heterogenous: 基本逻辑/用法/trace	 todo
+
+GICv4与GICv3，host是GICV4，CPU利用率，绑核。

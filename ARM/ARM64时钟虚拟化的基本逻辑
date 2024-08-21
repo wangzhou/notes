@@ -1,4 +1,5 @@
 -v0.1 Sherlock 2024.8.17 init
+-v0.2 Sherlock 2024.8.18 ...
 
 简介：文本整理Linux下基于KVM的ARM64时钟虚拟化的基本逻辑。
 
@@ -6,4 +7,42 @@
 硬件逻辑
 ---------
 
+ARM spec的D11章节定义了generic timer，其定义主要分两个概念：system counter和timer。
+system counter是以一定频率增加的计数器，频率和计数器的数值分别记录在对应的寄存器
+里。在每个core上有timer相关的寄存器，分别有：1. CompareValue寄存器，当counter的
+值和CompareValue的值相等时触发timer中断(PPI)；2. 相关timer中断的控制寄存器；3.
+TimerValue寄存器，这个寄存器的值从大到小递减，减到0时触发timer中断。
 
+下面以EL1 physical counter-timer寄存器为例，罗列出相关的寄存器。
+```
+CNTFRQ_EL0，counter-timer frequency register。
+CNTPCT_EL0，counter-timer physical counter register。
+
+CNTP_CTL_EL0，counter-timer physical timer control register。
+CNTP_TVAL_EL0，counter-timer physical timer TimerValue register。
+CNTP_CVAL_EL0，counter-timer physical timer CompareValue register。
+```
+ARM spec里还定义了其它特权级的对应counter和timer寄存器，这些异常级别timer还有：
+EL1 virtual timer，非安全EL2 physical timer, 非安全EL2 virtual timer，EL3以及安全
+态下的各种timer。
+
+对于virtual timer，它的触发逻辑有一些不同，ARM引入了一个CNTVOFFSET_EL2寄存器，
+物理counter减去这个值是CNTVCT_EL0的值，即CNTVCT_EL0 = CNTPCT_EL0 - CNTVOFFSET_EL2。
+在这样的硬件设计下，物理count是一直在走的，对于一个特定的vCPU想要得到它在线的count
+数，只要用物理count减去vCPU下线时间对应的count数就好。
+
+virtual timer对应的中断被触发的逻辑是vitual timer的CompareValue寄存器和CNTVCT_EL0
+做比较。
+
+各个timer分别有自己的中断号，不考虑EL3和安全的话，常用的就是如下这几个：
+```
++------------------------------+-----------+
+| EL1 physical timer           |       30  |
++------------------------------+-----------+
+| EL1 virtual timer            |       27  |
++------------------------------+-----------+
+| 非安全EL2 physical timer     |       26  |
++------------------------------+-----------+
+| 非安全EL2 virtual timer      |       28  |
++------------------------------+-----------+
+```
