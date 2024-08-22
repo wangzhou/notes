@@ -370,3 +370,4 @@ kvm unit test					 todo
 vm live migration/heterogenous: 基本逻辑/用法/trace	 todo
 
 GICv4与GICv3，host是GICV4，CPU利用率，绑核。
+ARM HCR.IMO 中断路由
