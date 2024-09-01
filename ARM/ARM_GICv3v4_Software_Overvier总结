@@ -111,7 +111,8 @@ GICD主要是用来支持SPI的基本功能，GICR支持PPI/SGI的基本功能�
 分别看下每种中断，对应的信息是怎么记录的。
 
 SPI的路由信息和各种状态信息保存在硬件里，通过GICD上的大量寄存器搞定，这里的设计
-感觉比较丑陋，(todo: SPI的物理中断号是定死的么?)。
+感觉比较丑陋，注意，SPI的物理中断号是定死的，也就是说GIC的SPI中断线的输出和最终
+ICC_IARn_EL1上报的数值是硬件已经固定的。
 
 PPI/SGI的各种状态信息保存在GICR的寄存器上，PPI/SGI一共也没有几个中断，而且都和CPU
 核相关，放到和CPU核一一对应的GICR寄存器上是合理的。PPI/SGI不存在路由信息，PPI总是
@@ -206,7 +207,7 @@ ITS在第二个64KB上现在只留了一个GITS_TRANSLATER寄存器用来接收M
 以EventID做ITT entry的索引找见对应的Collection Table entry和pINTID，其中Collection
 Table entry里保存着当前中断要被送往的PE ID。
 
-(todo: GITS_TRANSLATER地址是host和VM公用的？)
+(todo: GITS_TRANSLATER地址是host和VM公用的?)
 
 需要注意的是，如果对应中断是个虚拟中断，ITT entry的输出是vINTID、vPE号或者是一个
 物理LPI，vPE ID继续作为vPE table的索引找见vPE entry，其中保存当前vPE对应的GICR和
@@ -326,4 +327,4 @@ GICv4.1中增加了vSGI直通，GICv3和GICv4.0中，一个vCPU给另外一个vC
 vPPI的逻辑
 -----------
 
-vPPI的逻辑是怎么样，也是hypervisor里起hrtimer，然后定时注入？
+todo: vPPI的逻辑是怎么样，也是hypervisor里起hrtimer，然后定时注入？
