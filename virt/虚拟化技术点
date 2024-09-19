@@ -1,0 +1,88 @@
+-v0.1 2024.9.18 Sherlock init
+
+
+单点技术
+---------
+ 
+- CPU虚拟化
+
+  * VHE
+
+- 内存虚拟化
+
+- 中断虚拟化
+
+  * vLPI直通
+
+  * vSGI直通
+
+  * vtimer的逻辑
+
+- IOMMU虚拟化
+
+  * iommufd
+
+  * DMA内存标脏
+
+- 外设虚拟化
+
+  * VFIO设备直通
+
+  * virtio设备
+
+    > vhost
+
+系统技术
+---------
+
+- vCPU热插拔
+
+- 内存热插拔
+
+  * nvdimm
+
+  * pc-dimm
+
+- 虚拟机热迁移
+
+  * 基础热迁移
+
+   > 内存标脏
+
+  * 带VFIO设备
+
+    > DMA内存标脏/httu
+
+    > 设备状体迁移
+
+  *  异构热迁移
+
+    > qemu CPU module / writable CPU ID
+
+    > errata框架
+
+- vSVA技术
+
+  * iommufd
+
+
+性能相关
+---------
+
+- 虚拟化损耗
+
+- 超分性能
+
+- 半虚拟化性能优化
+
+  * pv preempt/spinlock/steal time
+
+- 热迁移性能
+
+虚拟机管理
+-----------
+
+- virsh/libvirt
+
+- qemu monitor
+
