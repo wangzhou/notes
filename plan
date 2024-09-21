@@ -46,7 +46,6 @@ openssl 异步机制分析
 /proc/vmstat
 migratepages分析
 kprobe分析
-irqbalance分析
 /proc/irq/说明, 结合pci的msi_irqs
 linux线程编程             xx
 taskset和线程的绑定？     xx
@@ -372,4 +371,5 @@ vm live migration/heterogenous: 基本逻辑/用法/trace	 todo
 GICv4与GICv3，host是GICV4，CPU利用率，绑核。
 ARM HCR.IMO 中断路由
 WFI trap/WFE delay trap
+irqbalance分析
 
