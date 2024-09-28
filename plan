@@ -375,3 +375,5 @@ irqbalance分析
 qemu命令行总结				                 doing
 vm live migration/heterogenous: 基本逻辑/用法/trace	 doing
 
+sve-stress/iperf/fio/memtester     todo
+
