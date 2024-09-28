@@ -346,12 +346,12 @@ arm qemu生成ACPI表格
 
 硬狗的逻辑
 
-kernel guard					 topost
-arm CPU ID regs and errata的基本逻辑		 topost
-gic硬件笔记				         doing
-ARM中断虚拟化					 doing
-arm spe硬件逻辑，可以具体干什么		         doing # 4
-基于iommufd的vSVA基本逻辑			 todo
+kernel guard					       topost
+arm CPU ID regs and errata的基本逻辑		       topost
+gic硬件笔记				               doing
+ARM中断虚拟化					       doing
+arm spe硬件逻辑，可以具体干什么		               doing # 4
+基于iommufd的vSVA基本逻辑			       todo
 
 ipi_benckmard分析
 ARM CNP特性
@@ -363,9 +363,9 @@ malloc.hugetlb
 ARM continue bit
 KCSAN
 KASAN
-x86 cpu model					 topost
+x86 cpu model					         topost
 qemu -name VM,debug_threads=on
-kvm unit test					 todo
+kvm unit test					         done
 
 GICv4与GICv3，host是GICV4，CPU利用率，绑核。
 ARM HCR.IMO 中断路由
