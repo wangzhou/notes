@@ -1,0 +1,15 @@
+-v0.1 2024.9.28 Sherlock init
+
+简介：本文是sve-stress测试套的一个速记。
+
+sve-stress是内核代码中自带的一个sve测试套，代码的路径在：linux/tools/testing/selftests/arm64/fp
+如上一级目录中README中提到，可以在linux代码的根目录中按如下命令编译fp目录中的各个
+测试套：
+```
+make -C  tools/testing/selftests TARGETS=arm64 ARM64_SUBTARGETS=fp
+```
+可能是编译器配置的问题，fp-ptrace/zt-ptrace编译出错，可以在fp的Makefile里把对应
+的配置先屏蔽掉。
+
+sve-stress是一个shell脚本，实际调用的是sve-test，sve-test测试的是上下文切换时，
+sve相关寄存器的正确性。
