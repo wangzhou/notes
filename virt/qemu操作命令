@@ -1,0 +1,116 @@
+-v0.1 2024.9.27 Sherlock init
+-v0.2 2024.9.30 Sherlock add cpu
+
+简介：收集qemu各种配置命令。
+
+
+CPU
+----
+
+ - 基本
+```
+  -smp cpus=8,maxcpus=16,sockets=2,clusters=4,cores=2,threads=2
+```
+  表示系统最大支持32个逻辑core，启动其中8个，系统中有2个socket，一个socket里有4
+  个cluster，一个cluster里有2个物理核，一个物理核有2个逻辑核。
+
+  可见，maxcpus = sockets * clusters * cores * threads。
+
+  如上启动的8个core，会依次分配到第一个socket里的前两个cluster。按照如下冷插的方
+  式可以指定启动core的具体位置。
+
+ - 冷插
+
+ - 热插拔
+
+  如上的配置中，maxcpus大于系统启动的core数，插值就是支持热插的core的个数，可以
+  通过qemu monitor的命令进行CPU热插拔。
+```
+(qemu) device_add cortex-a57-arm-cpu,id=core2,core-id=2
+...
+(qemu) device_del core2
+```
+  如上是tcg模式的CPU热插拔，KVM时把CPU类型改成: host-arm-cpu
+
+ - NUMA
+```
+  -numa node,memdev=mem0,nodeid=0,cpus=0-15 \
+  -numa node,memdev=mem1,nodeid=1,cpus=16-31 \
+```
+
+内存
+-----
+
+ - 基本
+```
+  -m 4096M
+```
+
+ - 热插拔
+```
+```
+
+ - 冷插
+```
+```
+
+ - NUMA
+```
+  -m 4096M \
+  -object memory-backend-ram,id=mem0,size=2048M \                        
+  -object memory-backend-ram,id=mem1,size=2048M \                        
+  -numa node,memdev=mem0,nodeid=0,cpus=0-15 \                             
+  -numa node,memdev=mem1,nodeid=1,cpus=16-31 \                            
+```
+  todo: 和host绑定
+
+ - nvdimm
+```
+```
+
+ - pc-dimm
+```
+```
+ 
+中断
+-----
+
+ - GICv3
+```
+```
+
+ - GICv4
+```
+```
+
+IOMMU
+------
+
+ - iommufd
+ - vsmmu
+
+PCIe
+-----
+
+ - VFIO直通
+ - PCIe root port
+ - PCIe switch
+ - 热插拔
+
+网络
+-----
+
+ - virtio-net
+
+存储
+-----
+
+ - virtio-blk
+ - virtio-scsi
+
+虚拟机热迁移
+-------------
+
+ - 基本热迁移
+ - 带VFIO设备热迁移
+ - 热迁移和热插拔联合
