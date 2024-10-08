@@ -3,7 +3,8 @@ qemu操作命令总结
 
 -v0.1 2024.9.27 Sherlock init
 -v0.2 2024.9.30 Sherlock add cpu
--v0.3 2024.10.6 Sherlock
+-v0.3 2024.10.6 Sherlock ...
+-v0.4 2024.10.8 Sherlock ...
 
 简介：收集qemu各种配置命令。这里一般不区分kvm和tcg，在需要区分的时候，再作说明。
       如果qemu命令和平台相关，则使用ARM64平台。
@@ -37,6 +38,12 @@ CPU
 ```
   如上是tcg模式的CPU热插拔，KVM时把CPU类型改成: host-arm-cpu
 
+  如果qemu启动的时候指定了socket/cluster/core/thread等参数，可以使用如下的方式热
+  插CPU，如果对应的位置已经有CPU存在，会报错提示。
+```
+(qemu) device_add cortex-a57-arm-cpu,id=core_x,socket-id=x,cluster-id=y,core-id=z,thread-id=n
+```
+
  - NUMA
 ```
   -numa node,memdev=mem0,nodeid=0,cpus=0-15 \
@@ -47,16 +54,44 @@ CPU
 -----
 
  - 基本
+
+  简单配置虚拟机的内存是4096MB。
 ```
   -m 4096M
 ```
+  
+  如下配置是各种内存插拔的基础，如下具体的配置是最大支持内存是4G，启动自带的内存
+  是1024MB，还有三个内存插槽可以插内存。
+```
+  -m 1024M,slots=3,maxmem=4G
+```
 
  - 冷插
-```
-```
 
- - 热插拔
+  qemu代码里对内存的各种插拔有文档描述，相关文档在qemu/docs/memory-hotplug.txt。
+  如下是一个实例的内存冷插的配置，这个配置具有一定的代表性，object表示一个内存后端
+  对象，device表示一个内存前端设备，前端设备通过memdev和后端对象关联在一起。
 ```
+qemu [...] -m 6GB,slots=4,maxmem=10G \
+  -object memory-backend-file,id=mem1,size=1G,mem-path=/mnt/hugepages-1G \
+  -device pc-dimm,id=dimm1,memdev=mem1 \
+  -object memory-backend-file,id=mem2,size=256M,mem-path=/mnt/hugepages-2MB \
+  -device pc-dimm,id=dimm2,memdev=mem2                                         
+```
+  如上大页的使用需要作提前的配置，具体方法在Linux内核代码文档里描述，具体路径在：
+  Linux/Documentation/admin-guide/mm/hugetlbpage.rst。
+  
+ - 热插拔
+
+  在qemu monitor里运行命令进行热插。
+```
+(qemu) object_add memory-backend-ram,id=mem1,size=1G
+(qemu) device_add pc-dimm,id=dimm1,memdev=mem1
+```
+  对应的热拔命令，device和object的参数是对应的id：
+```
+(qemu) device_del dimm1
+(qemu) object_del mem1
 ```
 
  - NUMA
