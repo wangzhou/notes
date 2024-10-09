@@ -19,7 +19,6 @@ linux poll  xx
 automake
 preempt   xx
 eBPF
-kprobe
 tracepoint  1
 uprobe
 各种火焰图：cpu，memory, offcpu
@@ -45,7 +44,6 @@ openssl 异步机制分析
 
 /proc/vmstat
 migratepages分析
-kprobe分析
 /proc/irq/说明, 结合pci的msi_irqs
 linux线程编程             xx
 taskset和线程的绑定？     xx
@@ -375,4 +373,6 @@ irqbalance分析
 qemu命令行总结				                 doing
 vm live migration/heterogenous: 基本逻辑/用法/trace	 doing
 sve-stress/iperf/fio/memtester				 done
-
+kprobe分析和使用
+pv virt逻辑/pv preempt/pv spinlock/pv steal time         todo
+vfio热迁移驱动					   	 todo
