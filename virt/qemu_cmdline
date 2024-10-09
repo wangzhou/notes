@@ -140,7 +140,7 @@ qemu [...] -m 6GB,slots=4,maxmem=10G \
 ```
 ```
 
- - vNMI
+ - 伪vNMI/硬件vNMI
 
 IOMMU
 ------
