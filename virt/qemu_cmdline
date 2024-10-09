@@ -5,10 +5,19 @@ qemu操作命令总结
 -v0.2 2024.9.30 Sherlock add cpu
 -v0.3 2024.10.6 Sherlock ...
 -v0.4 2024.10.8 Sherlock ...
+-v0.5 2024.10.9 Sherlock vNMI/调试/固件/cache/vSVA/SVE/PMU
 
 简介：收集qemu各种配置命令。这里一般不区分kvm和tcg，在需要区分的时候，再作说明。
       如果qemu命令和平台相关，则使用ARM64平台。
 
+固件相关
+---------
+
+ - DTS
+
+ - ACPI
+
+ - BIOS
 
 CPU
 ----
@@ -49,6 +58,14 @@ CPU
   -numa node,memdev=mem0,nodeid=0,cpus=0-15 \
   -numa node,memdev=mem1,nodeid=1,cpus=16-31 \
 ```
+
+ - cache
+
+ - 单点特性
+
+   - SVE/SVE2
+
+   - PMU
 
 内存
 -----
@@ -123,6 +140,8 @@ qemu [...] -m 6GB,slots=4,maxmem=10G \
 ```
 ```
 
+ - vNMI
+
 IOMMU
 ------
 
@@ -139,6 +158,8 @@ IOMMU
 ```
 qemu-system-aarch64 -machine virt,xxx,iommu=smmuv3
 ```
+
+ - vSVA
 
 PCIe
 -----
@@ -212,3 +233,17 @@ migrate -d tcp:0:6666
 
  - 网络
 
+qemu/kvm调试选项
+-----------------
+
+ - qemu启动/停止
+
+ - qemu monitor
+
+ - telnet/串口/ssh
+
+ - qemu trace
+
+ - kvm trace
+
+ - qemu tcg调试
