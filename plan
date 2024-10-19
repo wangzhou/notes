@@ -378,4 +378,10 @@ pv virt逻辑/pv preempt/pv spinlock/pv steal time         todo
 vfio热迁移驱动					   	 todo
 
 linux/gic 中断体系构架				         todo
+cppc cpu capability的逻辑
+vfio中断的逻辑
+qemu dts/acpi/qemu生成acpi表的逻辑
+
+vm cache/pptt/clidr pptt表定义/acpi生成代码/内核解析代码/qemu呈现总逻辑，和命令行
+kvm clidr结合的逻辑。
 
