@@ -15,9 +15,18 @@ qemu操作命令总结
 
  - DTS
 
+  ARM64 qemu默认使用的是DTS，在不加-bios启动命令的时候就是用DTS启动系统的，qemu
+  代码会根据qemu命令行参数生成DTS并放置到内存的特定位置。
+
  - ACPI
 
- - BIOS
+  ARM64 qemu使用-bios可以指定EDK2的UEFI固件，这时qemu使用ACPI的方式启动，和DTS一
+  样，qemu代码会自动生成ACPI表格。
+
+  qemu会把各种固件作为submodule加到qemu的仓库里，编译过程生成的各种固件保存在
+  qemu/pc-bios/。
+
+  todo: 直接下载EDK2代码仓编译EDK2固件。
 
 CPU
 ----
@@ -220,7 +229,6 @@ migrate -d tcp:0:6666
 
  - 热迁移和热插拔联合
 
-  
 ```
 ```
 
@@ -241,6 +249,8 @@ qemu/kvm调试选项
  - qemu启动/停止
 
  - qemu monitor
+
+  qemu monitor的使用方式收集在[这里](https://wangzhou.github.io/todo)。
 
  - telnet/串口/ssh
 
