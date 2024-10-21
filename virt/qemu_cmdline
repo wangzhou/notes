@@ -1,11 +1,12 @@
 qemu操作命令总结
 =================
 
--v0.1 2024.9.27 Sherlock init
--v0.2 2024.9.30 Sherlock add cpu
--v0.3 2024.10.6 Sherlock ...
--v0.4 2024.10.8 Sherlock ...
--v0.5 2024.10.9 Sherlock vNMI/调试/固件/cache/vSVA/SVE/PMU
+-v0.1 2024.9.27  Sherlock init
+-v0.2 2024.9.30  Sherlock add cpu
+-v0.3 2024.10.6  Sherlock ...
+-v0.4 2024.10.8  Sherlock ...
+-v0.5 2024.10.9  Sherlock vNMI/调试/固件/cache/vSVA/SVE/PMU
+-v0.6 2024.10.21 Sherlock ...
 
 简介：收集qemu各种配置命令。这里一般不区分kvm和tcg，在需要区分的时候，再作说明。
       如果qemu命令和平台相关，则使用ARM64平台。
@@ -26,7 +27,10 @@ qemu操作命令总结
   qemu会把各种固件作为submodule加到qemu的仓库里，编译过程生成的各种固件保存在
   qemu/pc-bios/。
 
-  todo: 直接下载EDK2代码仓编译EDK2固件。
+  可以用如下的方式直接下载EDK2代码仓编译EDK2固件:
+```
+  todo: 
+```
 
 CPU
 ----
@@ -44,10 +48,12 @@ CPU
   式可以指定启动core的具体位置。
 
  - 冷插
+```
+```
 
  - 热插拔
 
-  如上的配置中，maxcpus大于系统启动的core数，插值就是支持热插的core的个数，可以
+  如上的配置中，maxcpus大于系统启动的core数，差值就是支持热插的core的个数，可以
   通过qemu monitor的命令进行CPU热插拔。
 ```
 (qemu) device_add cortex-a57-arm-cpu,id=core2,core-id=2
@@ -69,6 +75,15 @@ CPU
 ```
 
  - cache
+
+  qemu可以根据命令行配置的cache拓扑，生成DTS或ACPI中的对应表格，guest内核根据对应
+  的表示就可以知道guest系统的cache拓扑结构。
+
+  目前，qemu中的该特性还处于社区开发阶段。对应的补丁为：
+```
+  [PATCH v3 0/7] Introduce SMP Cache Topology
+  [RFC,0/5] Specifying cache topology on ARM
+```
 
  - 单点特性
 
@@ -178,8 +193,11 @@ PCIe
  - PCIe switch
 
  - VFIO直通
+```
+```
 
  - 热插拔
+
 
 网络
 -----
