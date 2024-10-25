@@ -49,7 +49,9 @@ CPU
 
  - 冷插
 ```
+ -device host-arm-cpu,id=core_x,socket-id=x,cluster-id=y,core-id=z,thread-id=n
 ```
+  如上的方式可以指定具体位置的CPU核。
 
  - 热插拔
 
@@ -88,8 +90,14 @@ CPU
  - 单点特性
 
    - SVE/SVE2
+```
+	todo
+```
 
    - PMU
+```
+	todo
+```
 
 内存
 -----
@@ -143,7 +151,10 @@ qemu [...] -m 6GB,slots=4,maxmem=10G \
   -numa node,memdev=mem0,nodeid=0,cpus=0-15 \
   -numa node,memdev=mem1,nodeid=1,cpus=16-31 \
 ```
-  todo: 和host绑定
+  qemu的内存可以和host的特定NUMA绑定，具体配置方式如下：
+```
+	todo
+```
 
  - nvdimm
 ```
@@ -155,6 +166,9 @@ qemu [...] -m 6GB,slots=4,maxmem=10G \
  
 中断
 -----
+
+ ARM64 qemu上，host可以采用GICv3或GICv4的实现，guest上一般都是GICv3。host采用GICv3
+ 时，虚拟机中断需要kvm显示注入，host采用GICv4以及以上版本时，GIC支持虚拟中断直通。
 
  - GICv3
 ```

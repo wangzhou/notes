@@ -33,25 +33,41 @@ kvm_arm_init
       +-> info = arch_timer_get_kvm_info()
           timecounter = &info->timecounter
 
-
-      /* 创建/dev/kvm，后续的VM/vCPU等资源都从这里创建出来 */
+      /* 创建/dev/kvm文件，后续的VM/vCPU等资源都从这个文件的ioctl创建出来 */
   +-> kvm_init
+    +-> ioctl: KVM_CREATE_VM/KVM_CHECK_EXTENSION...
 ```
 
 实例的初始化接口是各个ioctl接口。
 
-
-
-
 ## 创建VM
 
+返回一个匿名fd表示被创建的vm。
 ```
 kvm_dev_ioctl_create_vm
   +-> kvm_create_vm
-        /* 具体构架相关，VM */
+        /* 具体构架相关 */
     +-> kvm_arch_init_vm
       +-> kvm_vgic_early_init
       +-> kvm_timer_init_vm
+    ... todo ...
+```
+对这个vm fd的各种ioctl用来创建VM的各个部件：
+```
+kvm_vm_ioctl
+  +-> KVM_CREATE_VCPU
+  +-> KVM_SET_USER_MEMORY_REGION
+  +-> KVM_GET_DIRTY_LOG
+  +-> KVM_CLEAR_DIRTY_LOG
+  ...
+  +-> KVM_IRQFD
+  +-> KVM_SET_GSI_ROUTING
+
+      /* 创建kvm上的各个设备, gic/its, gicr? gicd? */
+  +-> KVM_CREATE_DEVICE
+
+  +-> KVM_CREATE_GUEST_MEMFD
+  ...
 ```
 
 基本数据结构：

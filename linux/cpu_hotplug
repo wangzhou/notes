@@ -1,0 +1,97 @@
+Linux CPU online/offline
+=========================
+
+-v0.1 2022.11.17 Sherlock init
+-v0.2 2024.10.25 Sherlock ...
+
+简介：本文分析Linux中CPU online/offline的实现逻辑。
+
+online/offline使用
+-------------------
+
+ 比如，我们可以通过sysfs把一个核下线，写1又可以把这个核上线。
+```
+ echo 0 > /sys/devices/system/cpu/cpu3/online
+```
+ 一个核被下线，相当于把这个core关掉，从新上线的核从初始状态开始运行。
+
+实现逻辑
+---------
+
+ 可见内核把CPU核也当作一种设备管理，那么就有核对应的设备、总线和驱动。内核定义了
+ cpu bus: struct bus_type cpu_subsys，一个cpu用struct cpu表示，
+
+对固件的需求
+-------------
+
+kernel/sched/idle.c
+
+ do_idle
+   +-> arch_cpu_idle_dead
+     +-> cpu_ops[]->cpu_stop()
+
+ play_idle_precise
+   +-> do_idle
+
+ cpu_startup_entry
+   +-> do_idle
+
+
+ cpu device
+
+```
+driver_init
+      /* drivers/base/cpu.c */
+  +-> cpu_dev_init
+        /*
+         * 注册cpu的sysfs接口，online/offline的入口就在这里: struct bus_type cpu_subsys
+         * 的回调函数中: .online/.offline。
+         */
+    +-> subsys_system_register(&cpu_subsys, cpu_root_attr_groups)
+    +-> cpu_dev_register_generic
+      +-> register_cpu
+
+```
+
+```
+cpu_subsys_online
+  +-> cpu_device_up
+    ...
+      +-> _cpu_up
+        +-> cpuhp_up_callbacks
+	  ...
+	        /* 循环调用cpuhp_state的回调 */
+	    +-> __cpuhp_invoke_callback_range
+	          /* 每次调用这个，可以看到每次回调前后都有trace点 */
+	      +-> cpuhp_invoke_callback
+```
+
+所有的cpuhp_state定义在include/linux/cpuhotplug.h，每个具体的cpuhp_state的cpuhp_step
+定义在kernel/cpu.c: cpuhp_hp_states，其中的CPUHP_BRINGUP_CPU的回调为bringup_cpu。
+```
+ bringup_cpu
+       /* arch/arm64/kernel/smp.c */
+   +-> __cpu_up
+     +-> boot_secondary
+           /* 回调定义在arch/arm64/kernel/psci.c */
+       +-> ops->cpu_boot // cpu_psci_cpu_boot
+             /* 不同版本的psci_ops定义在: drivers/firmware/psci/psci.c */
+         +-> psci_ops.cpu_on
+	       /*
+	        * 以0.2版本为例。todo：psci的协议，以及host/guest上的实现?
+		* 
+		* 一个用SMC，一个用HVC，KVM里支持了HVC的实现。
+	        */
+	   +-> psci_0_2_cpu_on
+
+         /* 等待online的CPU运行secondary_start_kernel，其中会解开这里的等待 */
+     +-> wait_for_completion_timeout(&cpu_running, xxx)
+     +-> if (cpu_online(cpu)) return 0;
+         ...
+```
+
+
+
+
+
+
