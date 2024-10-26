@@ -1,0 +1,13 @@
+
+```
+free_irq
+
+  +-> irq_shutdown
+    +-> __irq_disable
+      +-> mask_irq
+        +-> desc->irq_data.chip->irq_mask(&desc->irq_data)
+  
+  +-> irq_domain_deactivate_irq
+
+
+```
