@@ -98,7 +98,7 @@ kvm_vm_ioctl
   +-> KVM_IRQFD
   +-> KVM_SET_GSI_ROUTING
 
-      /* 创建kvm上的各个设备, gic/its, gicr? gicd? */
+      /* 创建kvm上的各个设备, GICv3设备就是通过这个接口创建起来的 */
   +-> KVM_CREATE_DEVICE
 
   +-> KVM_CREATE_GUEST_MEMFD
@@ -222,16 +222,33 @@ VM的ITS向KVM注册。
 
 更高一层的注册逻辑。
 
+## 中断虚拟化
+
+host上中断的基本逻辑在独立的文档中展开。
+
+如上，GICv3设备创建是通过vm ioctl的KVM_CREATE_DEVICE接口：
+```
+/* virt/kvm/kvm_main */
+kvm_ioctl_create_device
+      /*
+       * 在kvm_device_ops_table中找见之前注册的设备，调用对应的create。注意，在
+       * kvm_arm_init里已经注册过KVM_DEV_TYPE_ARM_VGIC_V3和KVM_DEV_TYPE_ARM_VGIC_ITS。
+       *
+       * GICv3的create是vgic_create，ITS的create是vgic_its_create。
+       */
+  +-> op->create
+      /* 为设备创建匿名文件，后面set_attr/get_attr等操作都是通过这个文件的ioctl */
+  +-> anon_inode_getfd
+```
+
+虽然有create函数，但是GICv3的实例创建缺失set_attr中的KVM_DEV_ARM_VGIC_CTRL_INIT
+里做的。todo
+
+注意，ITS的create里有GICv4的create。
+
 ## 内存虚拟化
 
 todo: 如上stage2 fault的逻辑。
-
-
-## 中断虚拟化
-
-todo：host上中断的基本逻辑。
-
-todo: 中断虚拟化的基本逻辑。
 
 ### PPI虚拟化
 
