@@ -306,7 +306,7 @@ AIA其实都是一样的。可以看到VMAPP和VMAPI/VMAPTI的逻辑是独立的
 - VMOVP vPEID, RD_base, ITS_list, Sequence_number (v4.0)
         vPEID, RD_base, ITS_list, Sequence_number, doorbell (v4.1)
 
-把一个vCPU上的中断配置发往另一个物理CPU。
+把一个vCPU上的中断配置发往另一个vCPU。
 
 - VMOVI device_id, event_id, vPEID, doorbell
 
