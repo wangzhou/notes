@@ -3,11 +3,11 @@ qemu模拟ARM构架综合分析
 
 -v0.1 2023.1.19 Sherlock init
 -v0.2 2024.11.2 Sherlock ...
+-v0.3 2024.11.3 Sherlock ...
 
 简介：本文分析qemu模拟ARM平台的方式，我们并不会深入分析相关的技术细节，只是大概
       看下整体构架，点出各个模拟的关键点，保证我们在随后的深入分析中可以迅速找见
       相关代码。
-
 
 总体介绍
 ---------
@@ -39,10 +39,29 @@ struct ArchCPU {                    <--- ARMCPU，一般是cpu指针
 }
 ```
 
+todo: accel类，machine类
+
 启动流程：
 ```
 main 
   +-> qemu_init
+
+    +-> qemu_create_machine
+
+    +-> configure_accelerators
+      +-> do_configure_accelerator
+        +-> accel_init_machine
+	      /*
+	       * accel类的关系是：TYPE_ACCEL <- TYPE_KVM_ACCEL, 这里调用kvm accel
+	       * class里的kvm_init。(accel/kvm/kvm-all.c)
+	       *
+	       * kvm_init里打开/dev/kvm，并通过KVM_CREATE_VM ioctl的获得vmfd，
+	       * 调用kvm_arch_init，初始化脏页跟踪的数据结构。
+	       *
+	       * /dev/kvm的fd和vm的fd保存在KVMState中，分别是fd和vmfd。
+	       */
+	  +-> acc->init_machine
+
     +-> qmp_x_exit_preconfig
       +-> qemu_machine_creation_done
         +-> qdev_machine_creation_done
@@ -61,9 +80,16 @@ kvm_start_vcpu_thread。
 arm_cpu_realizefn
   +-> qemu_init_vcpu
     +-> cpus_accel->create_vcpu_thread
-    
        do {
+	     /* vCPU执行的核心函数 */
          +-> kvm_cpu_exec
+	   +-> kvm_arch_put_registers(cpu, KVM_PUT_RUNTIME_STATE)
+	   +-> kvm_vcpu_ioctl(cpu, KVM_RUN, 0)
+	       /* 处理vCPU退出 */
+	   +-> switch (run->exit_reason)
+	       case ...
+	       case ...
+
 	 +-> qemu_wait_io_event 
 	   +-> qemu_wait_io_event_common
 	         /*
