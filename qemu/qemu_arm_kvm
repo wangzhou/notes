@@ -47,21 +47,21 @@ main
   +-> qemu_init
 
     +-> qemu_create_machine
-
+    |
     +-> configure_accelerators
-      +-> do_configure_accelerator
-        +-> accel_init_machine
-	      /*
-	       * accel类的关系是：TYPE_ACCEL <- TYPE_KVM_ACCEL, 这里调用kvm accel
-	       * class里的kvm_init。(accel/kvm/kvm-all.c)
-	       *
-	       * kvm_init里打开/dev/kvm，并通过KVM_CREATE_VM ioctl的获得vmfd，
-	       * 调用kvm_arch_init，初始化脏页跟踪的数据结构。
-	       *
-	       * /dev/kvm的fd和vm的fd保存在KVMState中，分别是fd和vmfd。
-	       */
-	  +-> acc->init_machine
-
+    | +-> do_configure_accelerator
+    |   +-> accel_init_machine
+    |         /*
+    |          * accel类的关系是：TYPE_ACCEL <- TYPE_KVM_ACCEL, 这里调用kvm accel
+    |          * class里的kvm_init。(accel/kvm/kvm-all.c)
+    |          *
+    |          * kvm_init里打开/dev/kvm，并通过KVM_CREATE_VM ioctl的获得vmfd，
+    |          * 调用kvm_arch_init，初始化脏页跟踪的数据结构。
+    |          *
+    |          * /dev/kvm的fd和vm的fd保存在KVMState中，分别是fd和vmfd。
+    |          */
+    |     +-> acc->init_machine
+    |
     +-> qmp_x_exit_preconfig
       +-> qemu_machine_creation_done
         +-> qdev_machine_creation_done
@@ -71,6 +71,9 @@ main
 		 * 的回调把kvm_arch_put_registers放到vcpu的work_list里。
 		 */
 	    +-> cpu_synchronize_post_init
+          /* 如果是热迁移的迁入端，做相应的准备工作 */
+      +-> qmp_migrate_incoming
+        todo: ...
 ```
 
 vCPU线程在vCPU的realize函数中创建，线程函数是accel/kvm/kvm-accel-ops.c里的
@@ -134,8 +137,6 @@ aarch64_host_initfn
 可以看到aarch64_a57_initfn里直接定义了a57需要支持的CPU特性。
 
 
-
-
 系统寄存器访问
 ---------------
 
@@ -173,3 +174,43 @@ machine模拟
  (todo: GIC)
 
  SMMU的qemu模拟逻辑可以参考[这里](https://wangzhou.github.io/qemu-iommu模拟思路分析/)。
+
+热迁移的逻辑
+-------------
+
+所有热迁移涉及的部件都有一个VMStateDescription结构，qemu用这个结构描述热迁移的相
+关信息，ARM的定义在target/arm/machine.c里。
+```
+ VMStateDescription vmstate_arm_cpu
+       /*
+        * 源端会把kvm里的CPU寄存器得到，并保存在list寄存器，最后保存到热迁移专用
+        * 的cpreg_vmstate_indexes/values等寄存器。
+        */
+   +-> cpu_pre_save
+     +-> write_kvmstate_to_list
+     +-> memcpy(cpreg_vmstate_indexes, cpreg_indexes, ...)
+     +-> memcpy(cpreg_vmstate_values, cpreg_values, ...)
+   +-> cpu_post_save
+   +-> cpu_pre_load
+       /* 
+        * 目的端会把cpreg_vmstate_values保存到list寄存器，并把list寄存器的值保存
+        * 到kvm和qemu cpustate寄存器里。
+        */
+   +-> cpu_post_load
+     +-> cpu->cpreg_values[i] = cpu->cpreg_vmstate_values[v]
+     +-> write_list_to_kvmstate(cpu, KVM_PUT_FULL_STATE)
+     +-> write_list_to_cpustate(cpu)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
