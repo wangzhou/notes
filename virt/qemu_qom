@@ -79,7 +79,7 @@ static void pci_edu_register_types(void)
 }
 ```
   顺着qemu_init函数继续往下看，找下class以及具体的设备是在哪里创建的。还是以edu
-  这个设备为例。这个设备使用-device edu的qemu命令行参数启动，所有它创建的位置应该
+  这个设备为例。这个设备使用-device edu的qemu命令行参数启动，所以它创建的位置应该
   在：
 ```   
     qemu_opts_foreach(qemu_find_opts("device"),
