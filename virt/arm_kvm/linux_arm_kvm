@@ -241,7 +241,7 @@ kvm_ioctl_create_device
   +-> anon_inode_getfd
 ```
 
-虽然有create函数，但是GICv3的实例创建缺失set_attr中的KVM_DEV_ARM_VGIC_CTRL_INIT
+虽然有create函数，但是GICv3的实例创建确是set_attr中的KVM_DEV_ARM_VGIC_CTRL_INIT
 里做的。todo
 
 注意，ITS的create里有GICv4的create。

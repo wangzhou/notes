@@ -1,0 +1,149 @@
+qemu模拟ARM构架综合分析
+========================
+
+-v0.1 2023.1.19 Sherlock init
+-v0.2 2024.11.2 Sherlock ...
+
+简介：本文分析qemu模拟ARM平台的方式，我们并不会深入分析相关的技术细节，只是大概
+      看下整体构架，点出各个模拟的关键点，保证我们在随后的深入分析中可以迅速找见
+      相关代码。
+
+
+总体介绍
+---------
+
+ARM核的数据结果大概是如下：
+```
+typedef struct CPUArchState {       <--- 这个是env
+	...
+	xregs[32]		    <--- v8的32个64bit寄存器
+	pc;
+	pstate;
+	... 各种系统寄存器 ...      <--- 和下面的list寄存器的区别？
+} CPUArchState;
+
+struct ArchCPU {                    <--- ARMCPU，一般是cpu指针
+	CPUState parent_obj;
+	CPUArchState env;
+	GHashTable *cp_regs;        <--- list寄存器
+	uint64_t *cpreg_indexes;
+	uint64_t *cpreg_values;
+	...
+	struct ARMISARegisters {
+	} isar;                     <--- cpu->isar
+	midr;
+	revidr;
+	ctr;
+	clidr;
+	...
+}
+```
+
+启动流程：
+```
+main 
+  +-> qemu_init
+    +-> qmp_x_exit_preconfig
+      +-> qemu_machine_creation_done
+        +-> qdev_machine_creation_done
+	  +-> cpu_synchronize_all_post_init
+	        /*
+		 * 调用accel/kvm/kvm-accel-ops.c里的kvm_cpu_synchronize_post_init
+		 * 的回调把kvm_arch_put_registers放到vcpu的work_list里。
+		 */
+	    +-> cpu_synchronize_post_init
+```
+
+vCPU线程在vCPU的realize函数中创建，线程函数是accel/kvm/kvm-accel-ops.c里的
+kvm_start_vcpu_thread。
+```
+/* target/arm/cpu.c */
+arm_cpu_realizefn
+  +-> qemu_init_vcpu
+    +-> cpus_accel->create_vcpu_thread
+    
+       do {
+         +-> kvm_cpu_exec
+	 +-> qemu_wait_io_event 
+	   +-> qemu_wait_io_event_common
+	         /*
+		  * 执行之前放入vcpu work_list里的任务，执行kvm_arch_put_registers。
+		  * 语意是把CPUState中的寄存器保存到list寄存器，再把list寄存器的
+		  * 数据通过ioctl KVM_SET_ONE_REG配置到KVM里。
+		  */
+	     +-> process_queued_cpu_work
+       }
+```
+
+kvm_arch_put_registers
+  +-> write_cpustate_to_list     <--- 为啥要多这么一步？
+        /* 得到系统寄存器对应ARMCPRegInfo描述结构 */
+    +-> ri = get_arm_cp_reginfo
+        /* 从cpu->isar.xxx的域段得到值，具体从哪里得到定义在特定寄存器的回调里 */
+    +-> newval = read_raw_cp_reg 
+    +-> cpu->cpreg_values[i] = newval
+
+  +-> write_list_to_kvmstate
+
+qemu里CPU的数据结构是用面向对象的方式组织起来，类的关系是： 
+```
+TYPE_DEVICE <- TYPE_CPU <- TYPE_ARM_CPU <- TYPE_AARCH64_CPU <- 各种aarch64的具体CPU类型
+```
+最后面的各种类定义在target/arm/cpu64.c里的ARMCPUInfo aarch64_cpus[], 比如有：cortex-a57，
+host等。
+
+CPU实例的初始化函数会调用如上ARMCPUInfo结构里的initfn函数，拿host看下：
+```
+aarch64_host_initfn
+      /* 通过ioctl拿到KVM里系统寄存器的缓存值，保存到cpu->isar里。*/
+  +-> kvm_arm_set_cpu_features_from_host
+    +-> kvm_arm_get_host_cpu_features
+          /* ioctl KVM_GET_ONE_REG */
+      +-> read_sys_reg64
+```
+可以看到这里host语意就是虚拟机和host的CPU feature一致，通过KVM_GET_ONE_REG ioctl
+得到值是kvm->kvm_arch->id_reg里的值，这些值在vCPU初始化的时候，被更新为host上对应
+寄存器的值。
+
+可以看到aarch64_a57_initfn里直接定义了a57需要支持的CPU特性。
+
+
+
+
+系统寄存器访问
+---------------
+
+ 从get_arm_cp_reginfo可以看出，系统寄存器被保存在名为cp_regs的一个哈希表里，这个
+ 函数就是通过指令的各个域段作为key找到相关系统寄存器的描述结构体，寄存器的相关
+ 操作函数都定义在这个结构体里，在系统初始化的时候插入到cp_regs哈希表里:
+```
+ /* target/arm/cpu.c */
+ arm_cpu_realizefn
+   +-> register_cp_regs_for_features
+         /* 在V8这个分支定义相关和注册的寄存器 */
+     +-> if (arm_feature(env, ARM_FEATURE_V8))
+       [...]
+           /* 底层就是把定义的寄存器插入到cp_regs哈希表里 */
+       +-> define_arm_cp_regs
+```
+
+CPU内部中断异常模拟
+--------------------
+
+ (todo: )
+
+machine模拟
+------------
+
+ 我们只看virt平台的模拟逻辑，机器实例的初始化函数是machvirt_init。
+
+ (todo: 启动、多核、NUMA)
+
+关键外设模拟
+-------------
+
+ ARM64的关键外设有GIC中断控制器和SMMU。
+
+ (todo: GIC)
+
+ SMMU的qemu模拟逻辑可以参考[这里](https://wangzhou.github.io/qemu-iommu模拟思路分析/)。

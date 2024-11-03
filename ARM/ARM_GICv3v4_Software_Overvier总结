@@ -119,7 +119,8 @@ PPI/SGI的各种状态信息保存在GICR的寄存器上，PPI/SGI一共也没�
 发往本核的，SGI在触发的时候就指定了接收SGI的目标CPU核。
 
 LPI的各种状态保存在LPI相关的各种表格里，其中全局的LPI configuration table保存所有
-LPI的优先级和enable情况，LPI pendingtable保存每个中断的inactive/pending状态，
+LPI的优先级和enable情况，LPI pendingtable保存每个中断的inactive/pending状态。LPI
+的这两个表格是基础概念，对应物理CPU和vCPU都有这样的概念。
 (todo: 如何配置这些状态?)
 
 LPI的路由信息保存在如上的device table、ITT、collection table里。对于ITS表格里的
@@ -213,7 +214,8 @@ Table entry里保存着当前中断要被送往的PE ID。
 物理LPI，vPE ID继续作为vPE table的索引找见vPE entry，其中保存当前vPE对应的GICR和
 vPE的vLPI pending table的base，其中保存的GICR实际上表示vPE可能运行的物理核，vPE
 当前可能在位也可能不在位。这里会有硬件检测机制判断vPE是否在位，如果在位就直接报
-中断到当前vPE的上下文上(GIC4.0)，如果不在位，给物理核报一个物理LPI。
+中断到当前vPE的上下文上(GIC4.[01])，如果不在位，可以根据配置，给物理核报一个物理
+LPI。
 
 ITS协议并没有定义表里具体的格式，具体实现者需要在GITS_BASER<n>需要提供表格的entry
 size，这样软件就可以根据情况，决定分配多少内存。(todo: 软件如何处理内存一次没有分够?)
@@ -251,6 +253,10 @@ MOVI device_id, event_id, new_collection_id -> SYNC RD1。这样SYNC同样暗指
 的pendin信息同步到new_collection_id对应的RD2中。(todo: 对这里的理解有误?)
 
 - DISCARD
+
+- INV
+
+- CLEAR
 
 中断路由控制
 -------------
@@ -306,11 +312,16 @@ AIA其实都是一样的。可以看到VMAPP和VMAPI/VMAPTI的逻辑是独立的
 - VMOVP vPEID, RD_base, ITS_list, Sequence_number (v4.0)
         vPEID, RD_base, ITS_list, Sequence_number, doorbell (v4.1)
 
-把一个vCPU上的中断配置发往另一个vCPU。
+把一个vCPU上的中断重新配置发往另一个GICR(另外一个物理CPU)，如果doorbell是1023，
+就不会再报doorbell中断。
 
 - VMOVI device_id, event_id, vPEID, doorbell
 
 去掉一个虚拟中断的映射。
+
+- VINVALL
+
+todo: 
 
 GICv4.1中增加了vSGI直通，GICv3和GICv4.0中，一个vCPU给另外一个vCPU发送SGI，发送方
 会trap到KVM里，KVM再向接收方GICR发信息，接收方GICR会给接收方CPU发中断，接收方CPU

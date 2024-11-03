@@ -386,4 +386,6 @@ vm cache/pptt/clidr pptt表定义/acpi生成代码/内核解析代码/qemu呈现
 kvm clidr结合的逻辑。
 kvm pmu
 kvm vcpu cpu id初始化
+gic its命令补充
 
+linux online cpu / 发IPI
