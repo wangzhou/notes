@@ -137,6 +137,12 @@ aarch64_host_initfn
 可以看到aarch64_a57_initfn里直接定义了a57需要支持的CPU特性。
 
 
+/* hw/arm/virt.c */
+machvirt_init
+  +-> kvm_arm_create_host_vcpu
+    +-> todo!
+
+
 系统寄存器访问
 ---------------
 
