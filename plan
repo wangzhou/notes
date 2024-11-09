@@ -367,7 +367,6 @@ kvm unit test					         done
 
 GICv4与GICv3，host是GICV4，CPU利用率，绑核。
 ARM HCR.IMO 中断路由
-WFI trap/WFE delay trap
 
 irqbalance分析
 qemu命令行总结				                 doing
@@ -384,8 +383,9 @@ qemu dts/acpi/qemu生成acpi表的逻辑
 
 vm cache/pptt/clidr pptt表定义/acpi生成代码/内核解析代码/qemu呈现总逻辑，和命令行
 kvm clidr结合的逻辑。
-kvm pmu
 kvm vcpu cpu id初始化
 gic its命令补充
 
+WFI trap/WFE delay trap
 linux online cpu / 发IPI
+kvm pmu

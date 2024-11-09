@@ -129,6 +129,8 @@ qemu [...] -m 6GB,slots=4,maxmem=10G \
 ```
   如上大页的使用需要作提前的配置，具体方法在Linux内核代码文档里描述，具体路径在：
   Linux/Documentation/admin-guide/mm/hugetlbpage.rst。
+
+  todo: ...
   
  - 热插拔
 
