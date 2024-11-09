@@ -1,0 +1,70 @@
+Linux内核里IPI的基本逻辑
+
+-v0.1 2024.11.9 Sherlock init
+
+简介：分析Linux内核里ARM体系结构下IPI中断的基本逻辑。
+
+
+基本逻辑
+---------
+
+
+代码分析
+---------
+
+```
+wake_up_process
+  +-> try_to_wake_up(p, TASK_NORMAL, 0)
+    +-> ttwu_queue
+      +-> ttwu_queue_wakelist
+        +-> __ttwu_queue_wakelist
+	  +-> __smp_call_single_queue
+	    +-> send_call_function_single_ipi
+	      +-> arch_send_call_function_single_ipi // arch/arm64/kernel/smp.c
+	        +-> smp_cross_call(cpumask_of(cpu), IPI_CALL_FUNC)
+		  +-> __ipi_send_mask(ipi_desc[ipinr], target)
+		    +-> chip->ipi_send_mask(data, dest)
+```
+smp_cross_call给一个core发IPI还可以带ipinr。
+
+```
+/* drivers/irqchip/irq-gic-v3.c */
+gic_ipi_send_mask
+  +-> gic_send_sgi
+    +-> gic_write_sgi1r
+      +-> write_sysreg(val, ICC_SGI1R)
+```
+
+注册SGI中断的入口函数
+```
+/* drivers/irqchip/irq-gic-v3.c */
+gic_smp_init
+  +-> irq_domain_alloc_irqs
+  +-> set_smp_ipi_range
+        /* arch/arm64/kernel/smp.c, 注意看下kernel下其它注册的percpu irq  */
+    +-> request_percpu_irq(ipi_base + i, ipi_handler, "IPI", ...)
+```
+
+所以，收到IPI中断的core的处理逻辑是：
+```
+ipi_handler
+  +-> do_handle_IPI(irq - ipi_irq_base)
+        /* IPI的中断号区分IPI message */
+    +-> switch (ipinr)
+      +-> IIP
+          IPI_RESCHEDULE
+          IPI_CALL_FUNC
+          IPI_CPU_STOP
+          IPI_CPU_CRASH_STOP
+          IPI_TIMER
+          IPI_IRQ_WORK
+```
+
+
+
+
+
+IPI测试工具
+------------
+
+

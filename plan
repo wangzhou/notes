@@ -384,8 +384,9 @@ qemu dts/acpi/qemu生成acpi表的逻辑
 vm cache/pptt/clidr pptt表定义/acpi生成代码/内核解析代码/qemu呈现总逻辑，和命令行
 kvm clidr结合的逻辑。
 kvm vcpu cpu id初始化
-gic its命令补充
 
 WFI trap/WFE delay trap
-linux online cpu / 发IPI
-kvm pmu
+linux online/offline cpu逻辑
+IPI相关的基本逻辑
+kvm pmu模拟逻辑
+vgic/gic its命令补充
