@@ -1,0 +1,41 @@
+-v0.1 2024.11.9 Sherlock init
+
+简介：本文分析Linux内核KVM中ARM PMU模拟的基本逻辑。基于内核版本v6.11-rc7。
+
+
+基本逻辑
+---------
+
+KVM中对PMU的模拟思路和其他设备的模拟思路是一致的，通过device相关的ioctl创建设备
+和配置设备属性，CPU在EL1访问PMU相关寄存器的时候会trap的KVM进行模拟，因为host/guest
+是共享PMU物理硬件的，vCPU上下线时需要保存和恢复PMU寄存器的状态。
+
+整体的框架逻辑见: Linux内核ARM64 KVM虚拟化的基本逻辑
+
+注意一下几点，vPMU的初始化和配置通过KVM_ARM_VCPU_PMU_V3_*的ioctl进行，PMU相关的
+系统寄存器的模拟逻辑在kvm_handle_sys_reg，vCPU上下线时保存和恢复PMU寄存器的位置
+在kvm_vcpu_pmu_restore_guest/host。
+
+todo: counter的值在哪里保存和恢复？
+
+todo: PMU相关的业务细节？
+
+代码分析
+---------
+
+PMU相关的代码在arch/arm64/kvm/pmu.c、pmu-emul.c中。
+
+
+杂项问题
+---------
+
+KVM对guest呈现的PMU version的问题。KVM从host获得PMU的硬件版本，并把这个信息做一定
+的限制后保存在kvm->kvm_arch->id_reg.dfr0寄存器中，后续KVM都是从这里拿vPMU的版本
+信息。
+```
+/* vCPU初始化的时候，在reset里从host拿信息并保存到如上KVM结构里 */
+read_sanitised_id_aa64dfr0_el1
+  +-> val |= SYS_FIELD_PREP(ID_AA64DFR0_EL1, PMUVer, kvm_arm_pmu_get_pmuver_limit());
+```
+
+

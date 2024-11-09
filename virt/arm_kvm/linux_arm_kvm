@@ -3,6 +3,7 @@ Linux内核ARM64 KVM虚拟化的基本逻辑
 -v0.1 2024.7.29  Sherlock init
 -v0.2 2024.8.18  Sherlock ...
 -v0.3 2024.10.26 Sherlock ...
+-v0.4 2024.11.09 Sherlock ...
 
 简介：本文梳理Linux内核中ARM64虚拟化的基本逻辑，本文只梳理基于KVM的虚拟化。梳理
       基于的Linux内核版本是v6.10-rc4，基于的QEMU版本是v9.0.50。
@@ -62,13 +63,18 @@ kvm
 kvm_vcpu 
   +-> kvm_vcpu_arch arch               // arm64 vcpu结构，具体vCPU实例
     +-> arch_timer_cpu timer_cpu       // arm64 vcpu timer结构
-      +-> arch_timer_context timers[]  // 一个vcpu上多种类型timer
-        +-> arch_timer_offset offset
-          +-> vm_offset指针
-        +-> hrtimer
-      +-> vgic_cpu
-      +-> kvm_pmu
-      ...
+    | +-> arch_timer_context timers[]  // 一个vcpu上多种类型timer
+    |   +-> arch_timer_offset offset
+    |     +-> vm_offset指针
+    |   +-> hrtimer
+    +-> vgic_cpu
+    +-> kvm_pmu
+      kvm_pmu_events events
+      kvm_pmc pmc 
+        idx
+        perf_event *perf_event
+      irq_num
+    ...
 ```
 
 ## 创建VM
@@ -112,11 +118,18 @@ kvm_vm_ioctl的KVM_CREATE_VCPU
     +-> kvm_arch_vcpu_create
           /* */
       +-> kvm_timer_vcpu_init
-            /* 把如上vm_offset指针指向内容更新为当前CNTVCT的值 */
-        +-> timer_set_offset(vcpu_vtimer(vcpu), kvm_phys_timer_read())
-            /* todo: ... */
-        +-> hrtimer_init
-          /* todo: 注册当前vCPU的GICR */
+      |     /* 把如上vm_offset指针指向内容更新为当前CNTVCT的值 */
+      | +-> timer_set_offset(vcpu_vtimer(vcpu), kvm_phys_timer_read())
+      |     /* todo: ... */
+      | +-> hrtimer_init
+      |   /*
+      |    * 简单初始化，相当于放了一个桩，后面通过vcpu的KVM_ARM_VCPU_PMU_V3_CTRL
+      |    * 以及相关的PMU这一级的attr进行初始化和属性配置:
+      |    * kvm_arm_vcpu_arch_set_attr(KVM_ARM_VCPU_PMU_V3_CTRL/attr)
+      |    */
+      +-> kvm_pmu_vcpu_init
+      |
+      |   /* todo: 注册当前vCPU的GICR */
       +-> kvm_vgic_vcpu_init(vcpu)
 ```
 
@@ -145,7 +158,11 @@ kvm_vcpu_ioctl
       KVM_SET_ONE_REG
       KVM_GET_ONE_REG
       ...
-      KVM_SET_DEVICE_ATTR
+      KVM_SET_DEVICE_ATTR // 各种core相关设备的初始化和属性配置
+        +-> KVM_ARM_VCPU_PMU_V3_CTRL
+          +-> IRQ/INIT/FILTER/SET_PMU
+        +-> KVM_ARM_VCPU_TIMER_CTRL
+        +-> KVM_ARM_VCPU_PVTIME_CTRL
       KVM_GET_DEVICE_ATTR
       ...
 ```
