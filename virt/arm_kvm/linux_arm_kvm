@@ -77,6 +77,27 @@ kvm_vcpu
     ...
 ```
 
+kvm_io_device描述一个kvm(内核虚拟机)里的IO设备，kvm_io_bus是kvm_io_device的bus，
+kvm_io_bus被划分位多个range，每个range都有对应的kvm_io_range。
+
+ARM64里kvm的vgic的父类即为kvm_io_device，每层数据结构以面向对象的方式组织起来，
+类的继承关系如下：
+```
+   kvm_io_device 
+     - kvm_io_device_ops *op = kvm_io_gic_ops
+         ^
+         |
+   vgic_io_device
+     - vgic_io_device *regions = its_registers
+         ^          ^
+         |           \
+      vgic_its    vgic_disc
+```
+基于如上的数据结构，vgic_register_its/dist/redist_iodev分别把ITS/GICD/GICR注册到
+系统中。
+
+更高一层的注册逻辑。
+
 ## 创建VM
 
 open如上的/dev/kvm得到一个fd，对fd做ioctl KVM_CREATE_VM，返回一个匿名fd表示被创
@@ -129,8 +150,9 @@ kvm_vm_ioctl的KVM_CREATE_VCPU
       |    */
       +-> kvm_pmu_vcpu_init
       |
-      |   /* todo: 注册当前vCPU的GICR */
+      |   /* 注册当前vCPU的GICR */
       +-> kvm_vgic_vcpu_init(vcpu)
+        +-> vgic_register_redist_iodev
 ```
 
 使用vCPU的对应的fd, 通过ioctl操作vCPU, 操作有KVM_RUN/KVM_GET_REGS/KVM_SET_REGS...
@@ -140,6 +162,13 @@ kvm_vm_ioctl的KVM_CREATE_VCPU
 kvm_vcpu_ioctl
       /* 拉起vCPU的入口，下面拉出来独立分析 */
   +-> KVM_RUN
+    +-> kvm_arch_vcpu_run_pid_change
+      +-> kvm_vgic_map_resources
+        +-> vgic_v3_map_resources
+	    /* 这里才注册GICD? */
+	+-> vgic_register_dist_iodev
+	      /* 更新kvm->buses[bus_idx] */
+	  +-> kvm_io_bus_register_dev
   +-> default
     +-> kvm_arch_vcpu_ioctl
 
@@ -201,47 +230,7 @@ kvm_handle_sys_reg
  +-> ...
 ```
 
-Stage2的缺页trap在kvm_handle_guest_debug中处理。这个里面既处理内存的缺页，也处理
-MMIO的缺页，ARM64 VM里的ITS/GICD/GICR就是通过访问对应的MMIO寄存器时，触发trap到
-KVM里模拟实现的。
-```
-/* arch/arm64/kvm/mmu.c */
-kvm_handle_guest_abort
-     /* MMIO模拟的入口, arch/arm64/kvm/mmio.c */
- +-> io_mem_abort
-       /* virt/kvm/kvm_main.c */
-   +-> kvm_io_bus_write/read
-     +-> __kvm_io_bus_write
-       +-> kvm_iodevice_write
-```
-
-其中相关的KVM层面的数据结构有：kvm_io_device/kvm_io_bus/kvm_io_range等。kvm_io_device
-描述一个kvm(内核虚拟机)里的IO设备，kvm_io_bus是kvm_io_device的bus，kvm_io_bus被
-划分位多个range，每个range都有对应的kvm_io_range。
-
-具体到ARM64 ITS的虚拟化逻辑，每层数据结构以面向对象的方式组织起来。
-```
-   kvm_io_device 
-     - kvm_io_device_ops *op = kvm_io_gic_ops
-         ^
-         |
-
-   vgic_io_device
-     - vgic_io_device *regions = its_registers
-
-         ^
-         |
-
-      vgic_its
-```
-基于如上的数据结构，vgic_register_its_iodev(struct kvm, struct vgic_its, addr)把
-VM的ITS向KVM注册。
-
-更高一层的注册逻辑。
-
 ## 中断虚拟化
-
-host上中断的基本逻辑在独立的文档中展开。
 
 如上，GICv3设备创建是通过vm ioctl的KVM_CREATE_DEVICE接口：
 ```
@@ -263,20 +252,25 @@ kvm_ioctl_create_device
 
 注意，ITS的create里有GICv4的create。
 
-## 内存虚拟化
-
-todo: 如上stage2 fault的逻辑。
-
 ### PPI虚拟化
 
 ### SGI虚拟化
 
 ### LPI虚拟化
 
-## SMMU虚拟化
+## 内存虚拟化
 
-todo：vSVA的基本逻辑。
-
-
-
+Stage2的缺页trap在kvm_handle_guest_debug中处理。这个里面既处理内存的缺页，也处理
+MMIO的缺页，ARM64 VM里的ITS/GICD/GICR就是通过访问对应的MMIO寄存器时，触发trap到
+KVM里模拟实现的。
+```
+/* arch/arm64/kvm/mmu.c */
+kvm_handle_guest_abort
+     /* MMIO模拟的入口, arch/arm64/kvm/mmio.c */
+ +-> io_mem_abort
+       /* virt/kvm/kvm_main.c */
+   +-> kvm_io_bus_write/read
+     +-> __kvm_io_bus_write
+       +-> kvm_iodevice_write
+```
 

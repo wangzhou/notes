@@ -6,12 +6,26 @@
 使用方法
 ---------
 
-我们以海思加速器驱动为例做说明。
-```
-modpro
-```
-
+我们以海思加速器驱动为例做说明。vf在透给guest的时候需要绑定驱动hisi_acc_vfio_pci.ko。
+qemu启动命令行里vf的配置需要增加关于热迁移的提示: todo
 
 代码逻辑
 ---------
+
+内核代码主要分析drivers/vfio/pci/hisilicon/hisi_acc_vfio_pci.c。这个驱动是一个
+PCIe设备驱动，和vfio-pci驱动一样接管vf并提供一组接口到用户态，虚拟机可以使用这组
+接口控制vf设备。
+
+这里只看和vf热迁移相关的接口。对于热迁移驱动提供了两个匿名文件，一个是迁出端用来
+获得设备状态的文件，一个是迁入端用来恢复设备状态的文件。
+
+```
+ migf->filp = anon_inode_getfile("hisi_acc_vf_mig", &hisi_acc_vf_save_fops, migf, O_RDONLY);
+```
+
+```
+migf->filp = anon_inode_getfile("hisi_acc_vf_mig", &hisi_acc_vf_resume_fops, migf, O_WRONLY);
+```
+
+
 
