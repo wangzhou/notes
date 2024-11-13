@@ -370,11 +370,9 @@ ARM HCR.IMO 中断路由
 
 irqbalance分析
 qemu命令行总结				                 doing
-vm live migration/heterogenous: 基本逻辑/用法/trace	 doing
 sve-stress/iperf/fio/memtester				 done
 kprobe分析和使用
 pv virt逻辑/pv preempt/pv spinlock/pv steal time         todo
-vfio热迁移驱动					   	 todo
 
 linux/gic 中断体系构架				         todo
 cppc cpu capability的逻辑
@@ -390,3 +388,8 @@ linux online/offline cpu逻辑
 IPI相关的基本逻辑
 kvm pmu模拟逻辑
 vgic/gic its命令补充
+
+vm live migration/heterogenous: 基本逻辑/用法/trace	 doing
+
+vfio热迁移驱动					   	 #
+vfio怎么给guest呈现pci设备的config空间和BAR空间的        #

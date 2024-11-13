@@ -7,6 +7,7 @@ qemu操作命令总结
 -v0.4 2024.10.8  Sherlock ...
 -v0.5 2024.10.9  Sherlock vNMI/调试/固件/cache/vSVA/SVE/PMU
 -v0.6 2024.10.21 Sherlock ...
+-v0.7 2024.11.12 Sherlock 增加大页配置
 
 简介：收集qemu各种配置命令。这里一般不区分kvm和tcg，在需要区分的时候，再作说明。
       如果qemu命令和平台相关，则使用ARM64平台。
@@ -165,6 +166,17 @@ qemu [...] -m 6GB,slots=4,maxmem=10G \
  - pc-dimm
 ```
 ```
+
+ - 使用大页
+
+ qemu可以使用-mem-path指定guest内存使用host上的大页。host可以在内核cmdline或者
+ sysfs文件系统指定预留的大页，然后通过mount -f hugetlbfs [大页参数] nonte /mnt/xxx
+ 挂载对应大页文件系统，随后系统在对应挂载点下mmap分配内存就可以分配到对应的大页。
+
+ qemu -mem-path的参数就是对应大页文件系统的挂载目录。
+
+ mem-path也可以加到如上-object中，参考如上的命令。
+
  
 中断
 -----
@@ -254,6 +266,7 @@ PCIe
 ```
 migrate -d tcp:0:6666
 ```
+  迁入端在完成迁移后即进入stop状态，在monitor里运行cont命令可以继续运行迁入端虚机。
 
  - 带VFIO设备热迁移
 ```
@@ -285,6 +298,8 @@ qemu/kvm调试选项
  - qemu monitor
 
   qemu monitor的使用方式收集在[这里](https://wangzhou.github.io/todo)。
+
+  monitor支持通过tcp/udp使用，这个对于使用脚本控制monitor就很友好。 todo
 
  - telnet/串口/ssh
 
