@@ -9,8 +9,10 @@ qemu模拟ARM构架综合分析
       看下整体构架，点出各个模拟的关键点，保证我们在随后的深入分析中可以迅速找见
       相关代码。
 
-总体介绍
+数据结构
 ---------
+
+todo: accel类，machine类
 
 ARM核的数据结果大概是如下：
 ```
@@ -39,9 +41,34 @@ struct ArchCPU {                    <--- ARMCPU，一般是cpu指针
 }
 ```
 
-todo: accel类，machine类
+qemu里CPU的数据结构是用面向对象的方式组织起来，类的关系是： 
+```
+TYPE_DEVICE <- TYPE_CPU <- TYPE_ARM_CPU <- TYPE_AARCH64_CPU <- 各种aarch64的具体CPU类型
+```
+最后面的各种类定义在target/arm/cpu64.c里的ARMCPUInfo aarch64_cpus[], 比如有：cortex-a57，
+host等。
 
-启动流程：
+CPU实例的初始化函数会调用如上ARMCPUInfo结构里的initfn函数，拿host看下：
+```
+aarch64_host_initfn
+      /* 通过ioctl拿到KVM里系统寄存器的缓存值，保存到cpu->isar里。*/
+  +-> kvm_arm_set_cpu_features_from_host
+    +-> kvm_arm_get_host_cpu_features
+          /* ioctl KVM_GET_ONE_REG */
+      +-> read_sys_reg64
+```
+可以看到这里host语意就是虚拟机和host的CPU feature一致，通过KVM_GET_ONE_REG ioctl
+得到值是kvm->kvm_arch->id_reg里的值，这些值在vCPU初始化的时候，被更新为host上对应
+寄存器的值。
+
+可以看到aarch64_a57_initfn里直接定义了a57需要支持的CPU特性。
+
+
+启动流程
+---------
+
+todo: 分清实例创建和realize的点。
+
 ```
 main 
   +-> qemu_init
@@ -76,8 +103,23 @@ main
         todo: ...
 ```
 
+```
+/* hw/arm/virt.c */
+machvirt_init
+  +-> kvm_arm_create_host_vcpu
+    |
+    +-> kvm_create_vcpu
+    | +-> kvm_vm_ioctl(s, KVM_CREATE_VCPU, vcpu_id)
+    |
+    +-> kvm_arch_init_vcpu
+    |     /* 拿到kvm里的寄存器信息，并更新到cpreg里 */
+    | +-> kvm_arm_init_cpreg_list
+    |
+    +-> kvm_park_vcpu
+```
+
 vCPU线程在vCPU的realize函数中创建，线程函数是accel/kvm/kvm-accel-ops.c里的
-kvm_start_vcpu_thread。
+kvm_start_vcpu_thread。这个是vCPU实际开始运行的位置。
 ```
 /* target/arm/cpu.c */
 arm_cpu_realizefn
@@ -104,6 +146,7 @@ arm_cpu_realizefn
        }
 ```
 
+```
 kvm_arch_put_registers
   +-> write_cpustate_to_list     <--- 为啥要多这么一步？
         /* 得到系统寄存器对应ARMCPRegInfo描述结构 */
@@ -113,35 +156,7 @@ kvm_arch_put_registers
     +-> cpu->cpreg_values[i] = newval
 
   +-> write_list_to_kvmstate
-
-qemu里CPU的数据结构是用面向对象的方式组织起来，类的关系是： 
 ```
-TYPE_DEVICE <- TYPE_CPU <- TYPE_ARM_CPU <- TYPE_AARCH64_CPU <- 各种aarch64的具体CPU类型
-```
-最后面的各种类定义在target/arm/cpu64.c里的ARMCPUInfo aarch64_cpus[], 比如有：cortex-a57，
-host等。
-
-CPU实例的初始化函数会调用如上ARMCPUInfo结构里的initfn函数，拿host看下：
-```
-aarch64_host_initfn
-      /* 通过ioctl拿到KVM里系统寄存器的缓存值，保存到cpu->isar里。*/
-  +-> kvm_arm_set_cpu_features_from_host
-    +-> kvm_arm_get_host_cpu_features
-          /* ioctl KVM_GET_ONE_REG */
-      +-> read_sys_reg64
-```
-可以看到这里host语意就是虚拟机和host的CPU feature一致，通过KVM_GET_ONE_REG ioctl
-得到值是kvm->kvm_arch->id_reg里的值，这些值在vCPU初始化的时候，被更新为host上对应
-寄存器的值。
-
-可以看到aarch64_a57_initfn里直接定义了a57需要支持的CPU特性。
-
-
-/* hw/arm/virt.c */
-machvirt_init
-  +-> kvm_arm_create_host_vcpu
-    +-> todo!
-
 
 系统寄存器访问
 ---------------
@@ -160,26 +175,23 @@ machvirt_init
        +-> define_arm_cp_regs
 ```
 
-CPU内部中断异常模拟
---------------------
+GIC模拟
+--------
 
- (todo: )
+ todo: ...
 
-machine模拟
-------------
+SMMU模拟
+---------
 
- 我们只看virt平台的模拟逻辑，机器实例的初始化函数是machvirt_init。
-
- (todo: 启动、多核、NUMA)
-
-关键外设模拟
--------------
-
- ARM64的关键外设有GIC中断控制器和SMMU。
-
- (todo: GIC)
+ todo: ...
 
  SMMU的qemu模拟逻辑可以参考[这里](https://wangzhou.github.io/qemu-iommu模拟思路分析/)。
+
+ACPI表构建
+-----------
+
+ todo: ...
+
 
 热迁移的逻辑
 -------------
@@ -207,16 +219,4 @@ machine模拟
      +-> write_list_to_kvmstate(cpu, KVM_PUT_FULL_STATE)
      +-> write_list_to_cpustate(cpu)
 ```
-
-
-
-
-
-
-
-
-
-
-
-
 
