@@ -1,0 +1,3 @@
+top输入Pf选择top要输出的内容。
+
+选择last used CPU，top输出对应线程所运行的CPU。

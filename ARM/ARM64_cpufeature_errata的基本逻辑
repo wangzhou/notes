@@ -44,7 +44,7 @@ start_kernel
     +-> cpuinfo_store_boot_cpu
           /* todo: 不清楚这里的逻辑 */
       +-> init_cpu_features
-    +-> setup_boot_cpu_features
+        +-> setup_boot_cpu_features
 ```
 
 ```
