@@ -394,3 +394,4 @@ vm live migration/heterogenous: 基本逻辑/用法/trace	 doing
 vfio热迁移驱动					   	 #
 vfio怎么给guest呈现pci设备的config空间和BAR空间的        #
 virsh
+timer/nohz_full/isolcpu/irq_handle_entry(exit), do_softirq/top/
