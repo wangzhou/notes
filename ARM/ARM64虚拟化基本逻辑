@@ -1,9 +1,0 @@
--v0.1 2024.4.30 Sherlock init
-
-简介：本文总结ARM64虚拟化的基本逻辑，聚焦在CPU核的虚拟化上。
-
-
-
-todo: EL2收到一个host的timer中断，打算虚拟机执行的逻辑是什么？
-      多个VM切换的时间点在哪里？除了hypervisor调度，host上的线程调度会导致VM切换么？
-      如果host上的线程调度导致VM切换，VM里的XXX_EL1不会覆盖么？

@@ -351,7 +351,6 @@ ARM中断虚拟化					       doing
 arm spe硬件逻辑，可以具体干什么		               doing # 4
 基于iommufd的vSVA基本逻辑			       todo
 
-ipi_benckmard分析
 ARM CNP特性
 ARM 内核启动流程分析
 大页会缺页么？
@@ -394,4 +393,7 @@ vm live migration/heterogenous: 基本逻辑/用法/trace	 doing
 vfio热迁移驱动					   	 #
 vfio怎么给guest呈现pci设备的config空间和BAR空间的        #
 virsh
-timer/nohz_full/isolcpu/irq_handle_entry(exit), do_softirq/top/
+timer/nohz_full/isolcpu/irq_handle_entry(exit), do_softirq/top/, taskset隔离cpu, perf record -c 1 -g/perf report
+vtimer(11)/arch_timer(12)/硬中断号，软中断号
+CPU ID寄存器补充
+ipi_benckmard分析
