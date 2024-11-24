@@ -23,16 +23,16 @@ kvm_arm_init
     +-> kvm_vgic_hyp_init
       +-> vgic_v3_probe
         +-> kvm_register_vgic_device
-	      /* 按device type把对应的device回调注册入系统 */
-	  +-> kvm_register_device_ops(&kvm_arm_vgic_v3_ops, KVM_DEV_TYPE_ARM_VGIC_V3)
-	  +-> kvm_vgic_register_its_device
+              /* 按device type把对应的device回调注册入系统 */
+          +-> kvm_register_device_ops(&kvm_arm_vgic_v3_ops, KVM_DEV_TYPE_ARM_VGIC_V3)
+          +-> kvm_vgic_register_its_device
 
         /* 注册各个timer的中断处理函数 */
     +-> kvm_timer_hyp_init
           /*
-	   * 拿到drivers/clocksource/arm_arch_timer.c里定义的arch_timer_kvm_info，
-	   * 读取count的方法在timecounter，也在KVM里得到，注意这里读的是CNTVCT。
-	   */
+           * 拿到drivers/clocksource/arm_arch_timer.c里定义的arch_timer_kvm_info，
+           * 读取count的方法在timecounter，也在KVM里得到，注意这里读的是CNTVCT。
+           */
       +-> info = arch_timer_get_kvm_info()
           timecounter = &info->timecounter
 
@@ -165,10 +165,10 @@ kvm_vcpu_ioctl
     +-> kvm_arch_vcpu_run_pid_change
       +-> kvm_vgic_map_resources
         +-> vgic_v3_map_resources
-	    /* 这里才注册GICD? */
-	+-> vgic_register_dist_iodev
-	      /* 更新kvm->buses[bus_idx] */
-	  +-> kvm_io_bus_register_dev
+            /* 这里才注册GICD? */
+        +-> vgic_register_dist_iodev
+              /* 更新kvm->buses[bus_idx] */
+          +-> kvm_io_bus_register_dev
   +-> default
     +-> kvm_arch_vcpu_ioctl
 
@@ -177,11 +177,11 @@ kvm_vcpu_ioctl
           +-> kvm_vcpu_set_target
                 /* 在这里面初始化各种系统寄存器 */
             +-> kvm_reset_vcpu
-	          /*
-		   * 其中调用每个系统寄存器的reset回调，把返回值保存到
-		   * kvm->arch->id_regs[]。
-		   */
-	      +-> kvm_reset_sys_regs
+                  /*
+                   * 其中调用每个系统寄存器的reset回调，把返回值保存到
+                   * kvm->arch->id_regs[]。
+                   */
+              +-> kvm_reset_sys_regs
                   /* todo: ... */
               +-> kvm_timer_vcpu_reset
       KVM_SET_ONE_REG
