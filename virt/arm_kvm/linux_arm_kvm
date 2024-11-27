@@ -19,24 +19,36 @@ ARM64 KVM的初始化入口。
 kvm_arm_init
       /* 注意，这里初始化的是各个子系统的类，而不是实例。从下面的实例会看的更清楚 */
   +-> init_subsystems
-        /* arch/arm64/kvm/vgic/vgic-init.c */
-    +-> kvm_vgic_hyp_init
-      +-> vgic_v3_probe
-        +-> kvm_register_vgic_device
-              /* 按device type把对应的device回调注册入系统 */
-          +-> kvm_register_device_ops(&kvm_arm_vgic_v3_ops, KVM_DEV_TYPE_ARM_VGIC_V3)
-          +-> kvm_vgic_register_its_device
-
-        /* 注册各个timer的中断处理函数 */
-    +-> kvm_timer_hyp_init
-          /*
-           * 拿到drivers/clocksource/arm_arch_timer.c里定义的arch_timer_kvm_info，
-           * 读取count的方法在timecounter，也在KVM里得到，注意这里读的是CNTVCT。
-           */
-      +-> info = arch_timer_get_kvm_info()
-          timecounter = &info->timecounter
-
-      /* 创建/dev/kvm文件，后续的VM/vCPU等资源都从这个文件的ioctl创建出来 */
+  |     /* arch/arm64/kvm/vgic/vgic-init.c */
+  | +-> kvm_vgic_hyp_init
+  | | +-> vgic_v3_probe
+  | |   +-> kvm_register_vgic_device
+  | |         /* 按device type把对应的device回调注册入系统 */
+  | |     +-> kvm_register_device_ops(&kvm_arm_vgic_v3_ops, KVM_DEV_TYPE_ARM_VGIC_V3)
+  | |     +-> kvm_vgic_register_its_device
+  | |
+  | |   /* 注册各个timer的中断处理函数 */
+  | +-> kvm_timer_hyp_init
+  | |     /*
+  | |      * 拿到drivers/clocksource/arm_arch_timer.c里定义的arch_timer_kvm_info，
+  | |      * 读取count的方法在timecounter，也在KVM里得到，注意这里读的是CNTVCT。
+  | |      */
+  | | +-> info = arch_timer_get_kvm_info()
+  | |     timecounter = &info->timecounter
+  | |
+  | |     /* 把info->virtual_irq给到host_vtimer_irq，应该是27号中断 */      
+  | | +-> kvm_irq_init
+  | |
+  | |     /*
+  | |      * 注册host vtimer irq。vcnt溢出时触发这个中断，这个中断会报道kvm里。
+  | |      * 中断处理函数向vCPU注入对应的vtimer中断。在kvm_timer_should_fire里
+  | |      * 判断是否需要注入，在kvm_timer_update_irq里注入vtimer中断。
+  | |      *
+  | |      * todo: 怎么配置这个中断在kvm处理? 如何判断注入哪个vCPU？
+  | |      */
+  | | +-> request_percpu_irq(host_vtimer_irq, kvm_arch_timer_handler, "kvm guest vtimer", ...) 
+  | |
+  |   /* 创建/dev/kvm文件，后续的VM/vCPU等资源都从这个文件的ioctl创建出来 */
   +-> kvm_init
     +-> ioctl: KVM_CREATE_VM/KVM_CHECK_EXTENSION...
 ```
@@ -108,8 +120,11 @@ kvm_dev_ioctl_create_vm
   +-> kvm_create_vm
         /* 具体构架相关 */
     +-> kvm_arch_init_vm
+      +-> kvm_init_stage2_mmu
       +-> kvm_vgic_early_init
+          /* todo: ... */
       +-> kvm_timer_init_vm
+      +-> kvm_arm_init_hypercalls 
     ... todo ...
 ```
 
@@ -137,12 +152,17 @@ kvm_vm_ioctl
 kvm_vm_ioctl的KVM_CREATE_VCPU
   +-> kvm_vm_ioctl_create_vcpu
     +-> kvm_arch_vcpu_create
-          /* */
+          /* vtimer */
       +-> kvm_timer_vcpu_init
-      |     /* 把如上vm_offset指针指向内容更新为当前CNTVCT的值 */
+      |     /*
+      |      * 把如上vm_offset指针指向内容更新为当前CNTVCT的值，这还没有更新到
+      |      * 寄存器里。
+      |      */
       | +-> timer_set_offset(vcpu_vtimer(vcpu), kvm_phys_timer_read())
       |     /* todo: ... */
       | +-> hrtimer_init
+      |     /* todo: ... */
+      | +-> timer->bg_timer.function = kvm_bg_timer_expire
       |   /*
       |    * 简单初始化，相当于放了一个桩，后面通过vcpu的KVM_ARM_VCPU_PMU_V3_CTRL
       |    * 以及相关的PMU这一级的attr进行初始化和属性配置:
@@ -175,7 +195,7 @@ kvm_vcpu_ioctl
       KVM_ARM_VCPU_INIT:
         +-> kvm_arch_vcpu_ioctl_vcpu_init
           +-> kvm_vcpu_set_target
-                /* 在这里面初始化各种系统寄存器 */
+                /* 在这里面初始化各种系统寄存器、pmu、timer、sve */
             +-> kvm_reset_vcpu
                   /*
                    * 其中调用每个系统寄存器的reset回调，把返回值保存到

@@ -160,7 +160,12 @@ qemu [...] -m 6GB,slots=4,maxmem=10G \
 ```
 
  - nvdimm
+
+  使用nvdimm需要先在-machine里加上nvdimm使能，比如-machine virt,nvdimm=on。qemu
+  代码里有nvdimm的使用说明：qemu/docs/nvdimm.txt，简单使用如下：
 ```
+(qemu) object_add memory-backend-ram,id=mem1,size=1G
+(qemu) device_add nvdimm,id=nvdimm1,memdev=mem1
 ```
 
  - pc-dimm

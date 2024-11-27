@@ -379,7 +379,6 @@ vfio中断的逻辑
 qemu dts/acpi/qemu生成acpi表的逻辑
 
 vm cache/pptt/clidr pptt表定义/acpi生成代码/内核解析代码/qemu呈现总逻辑，和命令行
-kvm clidr结合的逻辑。
 kvm vcpu cpu id初始化
 
 WFI trap/WFE delay trap
@@ -397,3 +396,5 @@ timer/nohz_full/isolcpu/irq_handle_entry(exit), do_softirq/top/, taskset隔离cp
 vtimer(11)/arch_timer(12)/硬中断号，软中断号
 CPU ID寄存器补充
 ipi_benckmard分析
+GICD_TYPE2.nASSGIcap
+kvm clidr结合的逻辑。ctr
