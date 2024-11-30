@@ -396,5 +396,4 @@ timer/nohz_full/isolcpu/irq_handle_entry(exit), do_softirq/top/, taskset隔离cp
 vtimer(11)/arch_timer(12)/硬中断号，软中断号
 CPU ID寄存器补充
 ipi_benckmard分析
-GICD_TYPE2.nASSGIcap
 kvm clidr结合的逻辑。ctr

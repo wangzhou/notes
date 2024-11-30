@@ -1,0 +1,11 @@
+
+GICv4.1的SGI直通是个半虚拟化的特性。
+
+基本逻辑是：
+
+GICD_TYPE2.nASSGIcap表示是否支持SGI直通，guest内核驱动配置GICD_CTL.nASSGIrep可以
+使能这个特性。
+
+GICD_TYPE2.nASSGIcap在host读的时候是0。kvm在模拟gicv3的时候把GICD_TYPE2.nASSGIcap
+暴露给了guest系统。这样guest内核gic驱动就可以检测并配置GICD_TYPE2.nASSGIrep。
+
