@@ -394,6 +394,6 @@ vfio怎么给guest呈现pci设备的config空间和BAR空间的        #
 virsh
 timer/nohz_full/isolcpu/irq_handle_entry(exit), do_softirq/top/, taskset隔离cpu, perf record -c 1 -g/perf report
 vtimer(11)/arch_timer(12)/硬中断号，软中断号
-CPU ID寄存器补充
+CPU ID寄存器补充                                         topost
 ipi_benckmard分析
 kvm clidr结合的逻辑。ctr

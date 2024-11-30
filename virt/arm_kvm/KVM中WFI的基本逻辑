@@ -20,7 +20,9 @@ guest的vLPI中断支持附带host doorbell中断的功能，当被注入vLPI的
 
 WFE的虚拟化处理逻辑和WFI的逻辑基本一致，不过WFE是直接换一个vCPU的线程来跑。
 
-WFxT的
+todo: WFxT的逻辑。
+
+todo: host CPU 100%的逻辑。
 
 代码分析
 ---------

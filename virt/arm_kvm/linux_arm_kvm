@@ -274,7 +274,11 @@ kvm_ioctl_create_device
 
 ### PPI虚拟化
 
+todo: 
+
 ### SGI虚拟化
+
+todo: 
 
 ### LPI虚拟化
 
