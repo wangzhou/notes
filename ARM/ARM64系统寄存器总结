@@ -32,6 +32,10 @@ MPIDR_EL1，多核处理器affinity的定义。
 CTR_EL0中相关域段的含义。DIC表示icache是否要刷到PoU，IDC dcache是否要刷到PoU，L1Ip
 表示PIPT/VIPT等cache实现的类型。
 
+CLIDR_EL1中相关域段的含义。LoC表示PoC的cache等级，LoUU表示PoU的cache等级，LoUIS
+表示inner share域PoU的cache等级，Ctype[n]表示对应级别的cache是分I/D cache的还是
+unified cache。
+
 GPR/中断异常/VMMA寄存器
 ------------------------
 
