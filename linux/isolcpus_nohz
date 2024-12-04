@@ -1,0 +1,29 @@
+
+isolcpus=xxx nohz_full=xxx nohz_idle=xxx 可以配置在内核的启动cmdline上，它们的起
+的作用大致如下：
+
+isolcpus把对应的core隔离出来，叫它们不参加内核的调度。除非把特性线程绑定到对应的
+core上，不然这些core上就没有线程执行。
+
+绑核可以在内核态用thread_bind，也可以在用户态用taskset等绑定，taskset实际是使用
+sched_setaffinity系统调用搞定邦核的。
+
+所以isolcpus的核上可以看到一些一对一绑核的内核线程。当然也会有中断报到隔离核上，
+核隔离的特性和中断affinity是正交特性。
+
+需要注意的是，taskset把一个进程绑定到一组隔离核上，实际上是把这个进程的所有线程
+都绑定到这组隔离核其中一个核上。
+
+
+nohz_idle/nohz_full的作用基本一样，都是在一定的情况下关闭timer。nohz_idle是在当前
+core上只有一个idle线程的时候关闭timer，nohz_full上在除了idle线程还有一个线程的
+情况下，关闭timer，逻辑是反正只有一个实际运行线程了，timer上报的意义，然后进行
+调度的意义也没有了。(todo: timer还要触发做系统信息的跟新，这些没有怎么办？)
+
+nohz_full的core上的定时器会被移动到非nohz_full的core上，定时器到期时触发nohz_full
+的core上的定时任务。这个过程中有IPI中断。
+
+trace_irq_handle_entry/trace_irq_handle_exit/trace_softirq_entry/trace_softirq_exit
+可以记录irq/softirq的entry/exit情况。
+
+timer的tick的处理函数是hrtimer_?
