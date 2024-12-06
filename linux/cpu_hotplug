@@ -59,11 +59,11 @@ cpu_subsys_online
     ...
       +-> _cpu_up
         +-> cpuhp_up_callbacks
-	  ...
-	        /* 循环调用cpuhp_state的回调 */
-	    +-> __cpuhp_invoke_callback_range
-	          /* 每次调用这个，可以看到每次回调前后都有trace点 */
-	      +-> cpuhp_invoke_callback
+          ...
+                /* 循环调用cpuhp_state的回调 */
+            +-> __cpuhp_invoke_callback_range
+                  /* 每次调用这个，可以看到每次回调前后都有trace点 */
+              +-> cpuhp_invoke_callback
 ```
 
 所有的cpuhp_state定义在include/linux/cpuhotplug.h，每个具体的cpuhp_state的cpuhp_step
@@ -77,21 +77,15 @@ cpu_subsys_online
        +-> ops->cpu_boot // cpu_psci_cpu_boot
              /* 不同版本的psci_ops定义在: drivers/firmware/psci/psci.c */
          +-> psci_ops.cpu_on
-	       /*
-	        * 以0.2版本为例。todo：psci的协议，以及host/guest上的实现?
-		* 
-		* 一个用SMC，一个用HVC，KVM里支持了HVC的实现。
-	        */
-	   +-> psci_0_2_cpu_on
+               /*
+                * 以0.2版本为例。todo：psci的协议，以及host/guest上的实现?
+                * 
+                * 一个用SMC，一个用HVC，KVM里支持了HVC的实现。
+                */
+           +-> psci_0_2_cpu_on
 
          /* 等待online的CPU运行secondary_start_kernel，其中会解开这里的等待 */
      +-> wait_for_completion_timeout(&cpu_running, xxx)
      +-> if (cpu_online(cpu)) return 0;
          ...
 ```
-
-
-
-
-
-

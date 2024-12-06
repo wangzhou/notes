@@ -318,8 +318,6 @@ block设备驱动
 mpam基本逻辑
 快速跟踪函数调用栈(gdb/ftrace/strace/用户态backtrace)
 
-arm spe硬件逻辑，可以具体干什么		 doing # 4
-
 存储性能测试工具：iostat/blktrace(blkparse/btt)/sar/fio/vmstat/proc_meminfo/proc_vmstat
 coresight/ETM基本逻辑
 
@@ -344,11 +342,7 @@ arm qemu生成ACPI表格
 
 硬狗的逻辑
 
-kernel guard					       topost
 arm CPU ID regs and errata的基本逻辑		       topost
-gic硬件笔记				               doing
-ARM中断虚拟化					       doing
-arm spe硬件逻辑，可以具体干什么		               doing # 4
 基于iommufd的vSVA基本逻辑			       todo
 
 ARM CNP特性
@@ -360,7 +354,7 @@ malloc.hugetlb
 ARM continue bit
 KCSAN
 KASAN
-x86 cpu model					         topost
+x86 cpu model					         done
 qemu -name VM,debug_threads=on
 kvm unit test					         done
 
@@ -368,7 +362,6 @@ GICv4与GICv3，host是GICV4，CPU利用率，绑核。
 ARM HCR.IMO 中断路由
 
 irqbalance分析
-qemu命令行总结				                 doing
 sve-stress/iperf/fio/memtester				 done
 kprobe分析和使用
 pv virt逻辑/pv preempt/pv spinlock/pv steal time         todo
@@ -381,20 +374,24 @@ qemu dts/acpi/qemu生成acpi表的逻辑
 vm cache/pptt/clidr pptt表定义/acpi生成代码/内核解析代码/qemu呈现总逻辑，和命令行
 kvm vcpu cpu id初始化
 
-WFI trap/WFE delay trap
-linux online/offline cpu逻辑
 IPI相关的基本逻辑
-kvm pmu模拟逻辑
 vgic/gic its命令补充
-
-vm live migration/heterogenous: 基本逻辑/用法/trace	 doing
 
 vfio热迁移驱动					   	 #
 vfio怎么给guest呈现pci设备的config空间和BAR空间的        #
 virsh
-vtimer(11)/arch_timer(12)/硬中断号，软中断号
-CPU ID寄存器补充                                         topost
 ipi_benckmard分析
 kvm clidr结合的逻辑。ctr
 
 vgic模拟，vSGI实现，vLPI实现 #####
+
+vm live migration/heterogenous: 基本逻辑/用法/trace    doing
+linux online/offline cpu逻辑			       doing
+qemu命令行总结				               doing
+vtimer(11)/arch_timer(12)/硬中断号，软中断号           doing
+WFI trap/WFE delay trap                                doing
+kvm pmu模拟逻辑					       doing
+arm spe硬件逻辑，可以具体干什么		               doing
+gic硬件笔记				               doing
+ARM中断虚拟化					       doing
+kernel guard					       topost
