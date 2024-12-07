@@ -8,7 +8,7 @@ qemu操作命令总结
 -v0.5 2024.10.9  Sherlock vNMI/调试/固件/cache/vSVA/SVE/PMU
 -v0.6 2024.10.21 Sherlock ...
 -v0.7 2024.11.12 Sherlock 增加大页配置
--v0.8 2024.12.07 Sherlock 增加QEMU_EFI.fd编译方法
+-v0.8 2024.12.07 Sherlock 增加QEMU_EFI.fd编译方法，补全内存/中断/网络/存储等
 
 简介：收集qemu各种配置命令。这里一般不区分kvm和tcg，在需要区分的时候，再作说明。
       如果qemu命令和平台相关，则使用ARM64平台。
@@ -351,9 +351,24 @@ qemu/kvm调试选项
 
   qemu monitor的使用方式收集在[这里](https://wangzhou.github.io/qemu-monitor介绍/)。
 
-  monitor支持通过tcp/udp使用，这个对于使用脚本控制monitor就很友好。 todo
+  monitor支持通过telnet/tcp/udp使用，所以可以用程序和monitor做交互。在qemu命令行
+  里加上如下配置：
+```
+  -monitor tcp:127.0.0.1:3333,server,nowait
+```
+  monitor会监听对应ip:port上的消息，然后就可以向对应的ip:port发monitor命令来控制
+  虚机，比如如下的脚本把虚机直接关掉：
+```
+#!/bin/bash
 
- - telnet/串口/ssh
+nc 127.0.0.1 3333 << EOF
+q
+EOF
+```
+
+ - telnet/串口
+
+  qemu支持串口从telnet导出。
 
  - qemu trace
 
@@ -365,4 +380,4 @@ qemu/kvm调试选项
 
  - qemu tcg调试
 
-  qemu tcg基本调试的方法可以参考[](https://wangzhou.github.io/qemu调试方法/)。
+  qemu tcg基本调试的方法可以参考[这里](https://wangzhou.github.io/qemu调试方法/)。
