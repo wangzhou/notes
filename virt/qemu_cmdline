@@ -47,8 +47,17 @@ CPU
 ----
 
  - 基本
+
+ CPU的类型可以按如下配置。在tcg模式下，qemu支持很多不同的CPU类型，具体定义在
+ qemu/target/arm/tcg/cpu64.c的ARMCPUInfo aarch64_cpus里，指定具体的CPU name即可
+ 模拟对应种类的核；kvm模式下，一般使用-cpu host，即虚机CPU和host CPU是一致的；
+ 也可以用-cpu max指定使用尽可能多的CPU feature。
 ```
-  -smp cpus=8,maxcpus=32,sockets=2,clusters=4,cores=2,threads=2
+  -cpu name
+```
+
+ 多核系统上，qemu支持用如下的方式配置虚机的CPU拓扑结构：
+``` -smp cpus=8,maxcpus=32,sockets=2,clusters=4,cores=2,threads=2
 ```
   表示系统最大支持32个逻辑core，启动其中8个，系统中有2个socket，一个socket里有4
   个cluster，一个cluster里有2个物理核，一个物理核有2个逻辑核。
@@ -108,16 +117,12 @@ CPU
 
  - 单点特性
 
-  qemu支持单点开关一些特性，把它们总结在这里。
+  qemu支持单点开关一些特性，把它们总结在这里。qemu文档里有相关介绍，位置在
+  qemu/docs/system/arm/cpu-features.rst。如下的配置改成off，即把对应特性关闭了。
 
-   - SVE/SVE2
+   - SVE/SVE2/PMU
 ```
-   -smp
-```
-
-   - PMU
-```
-	todo
+   -cpu host,pmu=on,sve=on,sve128=on,sve256=on
 ```
 
 内存
@@ -151,11 +156,14 @@ qemu [...] -m 6GB,slots=4,maxmem=10G \
   如上大页的使用需要作提前的配置，具体方法在Linux内核代码文档里描述，具体路径在：
   Linux/Documentation/admin-guide/mm/hugetlbpage.rst。
 
-  todo: ...
+  基本逻辑是，qemu可以使用-mem-path指定guest内存使用host上的大页，host可以在内核
+  cmdline或者sysfs文件系统指定预留的大页，然后通过mount -f hugetlbfs [大页参数] nonte /mnt/xxx
+  挂载对应大页文件系统，随后系统在对应挂载点下mmap分配内存就可以分配到对应的大页。
+  qemu -mem-path的参数就是对应大页文件系统的挂载目录。
   
  - 热插拔
 
-  在qemu monitor里运行命令进行热插。
+  在qemu monitor里运行命令进行热插，针对pc-dimm和nvdimm，有如下类似的热插拔命令：
 ```
 (qemu) object_add memory-backend-ram,id=mem1,size=1G
 (qemu) device_add pc-dimm,id=dimm1,memdev=mem1
@@ -165,56 +173,49 @@ qemu [...] -m 6GB,slots=4,maxmem=10G \
 (qemu) device_del dimm1
 (qemu) object_del mem1
 ```
-
- - NUMA
-```
-  -m 4096M \
-  -object memory-backend-ram,id=mem0,size=2048M \
-  -object memory-backend-ram,id=mem1,size=2048M \
-  -numa node,memdev=mem0,nodeid=0,cpus=0-15 \
-  -numa node,memdev=mem1,nodeid=1,cpus=16-31 \
-```
-  qemu的内存可以和host的特定NUMA绑定，具体配置方式如下：
-```
-	todo
-```
-
- - nvdimm
-
-  使用nvdimm需要先在-machine里加上nvdimm使能，比如-machine virt,nvdimm=on。qemu
-  代码里有nvdimm的使用说明：qemu/docs/nvdimm.txt，简单使用如下：
+ 
+  对于nvdimm，需要先在-machine里加上nvdimm使能，比如-machine virt,nvdimm=on。
+  qemu代码里有nvdimm的使用说明：qemu/docs/nvdimm.txt，简单使用如下：
 ```
 (qemu) object_add memory-backend-ram,id=mem1,size=1G
 (qemu) device_add nvdimm,id=nvdimm1,memdev=mem1
 ```
 
- - pc-dimm
+ - NUMA
+
+  qemu的内存可以和host的特定NUMA绑定，如下配置了虚机上的两个NUMA节点，并且把这两个
+  NUMA节点的内存分别和host上NUMA node0以及node1节点上的内存绑定。注意，这里只是
+  绑定内存，CPU并没有绑定。可以在host使用taskset把vCPU线程做范围绑核或者一对一的
+  固定绑核。
 ```
+  -m 4096M \
+  -object memory-backend-ram,id=mem0,size=2048M,host-nodes=0,policy=bind \
+  -object memory-backend-ram,id=mem1,size=2048M,host-nodes=1,policy=bind \
+  -numa node,memdev=mem0,nodeid=0,cpus=0-15 \
+  -numa node,memdev=mem1,nodeid=1,cpus=16-31 \
 ```
 
- - 使用大页
-
- qemu可以使用-mem-path指定guest内存使用host上的大页。host可以在内核cmdline或者
- sysfs文件系统指定预留的大页，然后通过mount -f hugetlbfs [大页参数] nonte /mnt/xxx
- 挂载对应大页文件系统，随后系统在对应挂载点下mmap分配内存就可以分配到对应的大页。
-
- qemu -mem-path的参数就是对应大页文件系统的挂载目录。
-
- mem-path也可以加到如上-object中，参考如上的命令。
-
- 
 中断
 -----
 
- ARM64 qemu上，host可以采用GICv3或GICv4的实现，guest上一般都是GICv3。host采用GICv3
- 时，虚拟机中断需要kvm显示注入，host采用GICv4以及以上版本时，GIC支持虚拟中断直通。
+ ARM64 qemu为kvm模式时，host可以采用GICv3或GICv4的实现，guest上一般都是GICv3。
+ host采用GICv3时，虚拟机中断需要kvm显示注入，host采用GICv4以及以上版本时，GIC支持
+ 虚拟中断直通，其中GICv4.0/v4.1支持vLPI直通，GICv4.1支持vSGI直通。
 
- - GICv3
+ guest GIC和host对guest GIC的模拟实现是两个独立的逻辑，host采用不同的模拟实现方式
+ 只对guest的vLPI以及vSGI的性能有影响。
+
+ 因为qemu使用的都是GICv3，所以qemu的配置都是一样的。如下的kernel_irqchip=on表示，
+ 这个GICv3的中断控制器是在host内核模拟出来的。
 ```
+-machine virt,kernel_irqchip=on,gic-version=3
 ```
 
- - GICv4
+ 在host内核的cmdline里使用参数控制host模拟guest GIC的方式，如下打开GICv4中vLPI
+ 直通的支持。这里只是enable GICv4.0/v4.1，KVM会根据实际硬件的支持情况，进一步决定
+ 是否支持vSGI中断直通。
 ```
+ kvm-arm.vgic_v4_enable=1
 ```
 
  - 伪vNMI/硬件vNMI
@@ -222,18 +223,20 @@ qemu [...] -m 6GB,slots=4,maxmem=10G \
 IOMMU
 ------
 
- - iommufd
-
-```
--object iommufd,id=iommufd0
--device vfio-pci,host=0000:02:00.0,iommufd=iommufd0
-```
-
  - vsmmu
 
   qemu支持完全用软件模拟的SMMU，可以使用如下命令行使能。
 ```
-qemu-system-aarch64 -machine virt,xxx,iommu=smmuv3
+qemu-system-aarch64 -machine virt,iommu=smmuv3
+```
+
+ - iommufd
+
+  当前社区正在引入iommufd支持，iommufd将逐步取代vfio的一部分功能，如下是基于iommufd
+  的vfio设备直通的配置。
+```
+-object iommufd,id=iommufd0
+-device vfio-pci,host=0000:02:00.0,iommufd=iommufd0
 ```
 
  - vSVA
@@ -241,16 +244,8 @@ qemu-system-aarch64 -machine virt,xxx,iommu=smmuv3
 PCIe
 -----
 
- - PCIe root port
-
- - PCIe switch
-
- - VFIO直通
-```
-```
-
- - 热插拔
-
+  qemu代码里有关于PCIe相关的配置，具体位置在：qemu/docs/pcie.txt。关于PCIe switch
+  的配置可以参考[这里](https://wangzhou.github.io/How-to-assign-more-than-31-VFs-to-one-VM/)，关于PCIe热插拔的配置可以参考[这里](https://wangzhou.github.io/qemu里pci设备的热插拔/)。
 
 网络
 -----
@@ -307,11 +302,9 @@ migrate -d tcp:0:6666
 虚拟机和物理机通信
 -------------------
 
- - 9P文件系统
-```
--device virtio-9p-pci,fsdev=p9fs,mount_tag=p9,bus=pcie.0 \
--fsdev local,id=p9fs,path=/home/sherlock/p9root,security_model=mapped
-```
+ - 9p文件系统
+
+   通过9p文件系统的虚机和物理机之间通信可以参考[这里](https://wangzhou.github.io/Guest-and-host-communication-for-QEMU/)。
 
  - 网络
 
@@ -322,7 +315,7 @@ qemu/kvm调试选项
 
  - qemu monitor
 
-  qemu monitor的使用方式收集在[这里](https://wangzhou.github.io/todo)。
+  qemu monitor的使用方式收集在[这里](https://wangzhou.github.io/qemu-monitor介绍/)。
 
   monitor支持通过tcp/udp使用，这个对于使用脚本控制monitor就很友好。 todo
 
