@@ -251,24 +251,57 @@ PCIe
 -----
 
  - virtio-net
+
 ```
+-netdev tap,id=net,script=./qemu-ifup-nat,downscript=./qemu-ifdown-nat \
+-device virtio-net-pci,netdev=net,id=net1 \
+```
+  如上的配置会在host创建tap0，在guest创建一个virtio-net-pci设备，配置对应的IP后，
+  guest和host可以通过网络进行通信。
+
+  其中qemu-ifup-nat的内容为：
+```
+#!/bin/bash
+ifconfig $1 192.168.10.1 up
+```
+
+  其中qemu-ifdown-nat的内容为：
+```
+#!/bin/bash
+ifconfig $1 192.168.10.2 up
 ```
 
 存储
 -----
 
+ - 基本
+
+  可以通过如下的方式创建一个文件，格式化成某种文件系统，然后使用-hda指定给qemu
+  使用。虚机启动后guest Linux系统下会看到诸如/dev/vda的存储设备，直接mount上就
+  可以使用。
+```
+qemu-img create -f raw block.img 10MB
+mkfs.ext4 block.img
+qemu-system-arm64 -hda block.img
+```
+
  - virtio-blk
+
+  先用dd命令创建如下boot.img文件，如下配置创建一个virtio-blk-pci的virtio设备，它
+  接在对应的PCIe总线下，后端的存储设备用的是boot.img。
 ```
 -device pcie-root-port,port=0x8,chassis=0,id=pci.0,bus=pcie.0,multifunction=on,addr=0x3 \
 -device pcie-root-port,port=0x9,chassis=1,id=pci.1,bus=pcie.0,addr=0x3.0x1 \
 -device virtio-blk-pci,drive=drive0,id=virtblk0,num-queues=8,packed=on,bus=pci.1 \
 -drive file=./boot.img,if=none,id=drive0,format=raw
 ```
-  需要先用dd命令创建如上boot.img文件。
 
  - virtio-scsi
 
- - 安装
+ - 安装Linux发行版
+
+  一般调试我们都是用minifs的内存文件系统，实际使用虚机的时候，需要在虚机上安装
+  Linux发行版，实际使用都用virsh命令操作，直接使用qemu命令行的方式可以参考[这里](https://wangzhou.github.io/在qemu虚拟机上安装Linux发行版/)。
 
 虚拟机热迁移
 -------------
@@ -298,7 +331,6 @@ migrate -d tcp:0:6666
 
   热迁移要保证迁移的两端虚机配置一致，其中包含热插拔的设备。
 
-
 虚拟机和物理机通信
 -------------------
 
@@ -307,6 +339,8 @@ migrate -d tcp:0:6666
    通过9p文件系统的虚机和物理机之间通信可以参考[这里](https://wangzhou.github.io/Guest-and-host-communication-for-QEMU/)。
 
  - 网络
+
+   按如上网络章节中的方式通过网络通信。
 
 qemu/kvm调试选项
 -----------------
@@ -323,6 +357,12 @@ qemu/kvm调试选项
 
  - qemu trace
 
+  qemu里打开或者增加trace的方法可以参考[这里](https://wangzhou.github.io/qemu里增加trace的方法/)。
+
  - kvm trace
 
+  Linux内核在KVM里加了很多tracepoint点，调试的时候可以在ftrace里打开对应tracepoint。
+
  - qemu tcg调试
+
+  qemu tcg基本调试的方法可以参考[](https://wangzhou.github.io/qemu调试方法/)。
