@@ -356,14 +356,12 @@ KCSAN
 KASAN
 x86 cpu model					         done
 qemu -name VM,debug_threads=on
-kvm unit test					         done
 
 GICv4与GICv3，host是GICV4，CPU利用率，绑核。
 ARM HCR.IMO 中断路由
 
 irqbalance分析
 sve-stress/iperf/fio/memtester				 done
-kprobe分析和使用
 pv virt逻辑/pv preempt/pv spinlock/pv steal time         todo
 
 linux/gic 中断体系构架				         todo
@@ -380,11 +378,12 @@ vgic/gic its命令补充
 vfio热迁移驱动					   	 #
 vfio怎么给guest呈现pci设备的config空间和BAR空间的        #
 virsh
-ipi_benckmard分析
 kvm clidr结合的逻辑。ctr
-
 vgic模拟，vSGI实现，vLPI实现 #####
 
+kprobe分析和使用
+ipi_benckmard分析
+kvm unit test					       done
 vm live migration/heterogenous: 基本逻辑/用法/trace    doing
 linux online/offline cpu逻辑			       doing
 qemu命令行总结				               doing
@@ -394,4 +393,3 @@ kvm pmu模拟逻辑					       doing
 arm spe硬件逻辑，可以具体干什么		               doing
 gic硬件笔记				               doing
 ARM中断虚拟化					       doing
-kernel guard					       topost

@@ -8,6 +8,7 @@ qemu操作命令总结
 -v0.5 2024.10.9  Sherlock vNMI/调试/固件/cache/vSVA/SVE/PMU
 -v0.6 2024.10.21 Sherlock ...
 -v0.7 2024.11.12 Sherlock 增加大页配置
+-v0.8 2024.12.07 Sherlock 增加QEMU_EFI.fd编译方法
 
 简介：收集qemu各种配置命令。这里一般不区分kvm和tcg，在需要区分的时候，再作说明。
       如果qemu命令和平台相关，则使用ARM64平台。
@@ -28,10 +29,19 @@ qemu操作命令总结
   qemu会把各种固件作为submodule加到qemu的仓库里，编译过程生成的各种固件保存在
   qemu/pc-bios/。
 
-  可以用如下的方式直接下载EDK2代码仓编译EDK2固件:
+  也可以用如下的方式直接下载EDK2代码仓编译QEMU_EFI.fd固件:
 ```
-  todo: 
+  git clone https://github.com/tianocore/edk2.git
+  git submodule update --init
+  source edksetup.sh
+  make -C BaseTools
+  build -a AARCH64 -t GCC5 -p ArmVirtPkg/ArmVirtQemu.dsc
+  cd Build/ArmVirtQemu-AARCH64/DEBUGFS_GCC5/FV/
 ```
+  编译好的QEMU_EFI.fd放在如上FV目录下，这样自行编译的固件是带调试打印的，guest
+  启动，QEMU_EFI.fd运行时会有很多调试信息打印出来。注意，编译过程中可能提示启动
+  中缺少必要的工具，直接安装对应的工具就好。比如如果缺acpi的相关工具，就ubuntu
+  下就：sudo apt install acpica-tools。QEMU_EFI.fd的编译是参考[这里](https://www.kraxel.org/blog/2022/05/edk2-virt-quickstart)。
 
 CPU
 ----
@@ -57,7 +67,7 @@ CPU
  - 热插拔
 
   如上的配置中，maxcpus大于系统启动的core数，差值就是支持热插的core的个数，可以
-  通过qemu monitor的命令进行CPU热插拔。
+  通过qemu monitor的命令进行CPU热插拔。（注意：ARM64的热插拔社区还是支持中）
 ```
 (qemu) device_add cortex-a57-arm-cpu,id=core2,core-id=2
 ...
@@ -72,6 +82,13 @@ CPU
 ```
 
  - NUMA
+
+ 虚拟机的NUMA拓扑也是可以配置的，虚拟机的NUMA一般要和host NUMA配置的一致，这样
+ 性能最高。注意，这里有两层逻辑，第一层是虚拟机自己NUMA的配置，第二层是和host
+ NUMA的映射关系。
+
+ 如下的配置是把虚拟机里对应的vCPU分配给对应的虚拟机NUMA节点。完整的带内存的NUMA
+ 配置，以及和host的绑定关系，在后面总结。
 ```
   -numa node,memdev=mem0,nodeid=0,cpus=0-15 \
   -numa node,memdev=mem1,nodeid=1,cpus=16-31 \
@@ -82,7 +99,8 @@ CPU
   qemu可以根据命令行配置的cache拓扑，生成DTS或ACPI中的对应表格，guest内核根据对应
   的表示就可以知道guest系统的cache拓扑结构。
 
-  目前，qemu中的该特性还处于社区开发阶段。对应的补丁为：
+  目前，qemu中的该特性还处于社区开发阶段。对应的补丁如下，前者是框架相关的支持，
+  后者是ARM体系结构上的支持。
 ```
   [PATCH v3 0/7] Introduce SMP Cache Topology
   [RFC,0/5] Specifying cache topology on ARM
@@ -90,9 +108,11 @@ CPU
 
  - 单点特性
 
+  qemu支持单点开关一些特性，把它们总结在这里。
+
    - SVE/SVE2
 ```
-	todo
+   -smp
 ```
 
    - PMU
@@ -126,7 +146,7 @@ qemu [...] -m 6GB,slots=4,maxmem=10G \
   -object memory-backend-file,id=mem1,size=1G,mem-path=/mnt/hugepages-1G \
   -device pc-dimm,id=dimm1,memdev=mem1 \
   -object memory-backend-file,id=mem2,size=256M,mem-path=/mnt/hugepages-2MB \
-  -device pc-dimm,id=dimm2,memdev=mem2                                         
+  -device pc-dimm,id=dimm2,memdev=mem2
 ```
   如上大页的使用需要作提前的配置，具体方法在Linux内核代码文档里描述，具体路径在：
   Linux/Documentation/admin-guide/mm/hugetlbpage.rst。
