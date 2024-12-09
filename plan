@@ -383,13 +383,13 @@ vgic模拟，vSGI实现，vLPI实现 #####
 
 kprobe分析和使用
 ipi_benckmard分析
-kvm unit test					       done
-vm live migration/heterogenous: 基本逻辑/用法/trace    doing
+kvm unit test					       topost
+qemu命令行总结				               topost
+WFI trap/WFE delay trap                                topost
+vm live migration/heterogenous: 基本逻辑/用法/trace    doing #
 linux online/offline cpu逻辑			       doing
-qemu命令行总结				               doing
-vtimer(11)/arch_timer(12)/硬中断号，软中断号           doing
-WFI trap/WFE delay trap                                doing
-kvm pmu模拟逻辑					       doing
+vtimer(11)/arch_timer(12)/硬中断号，软中断号           doing #
 arm spe硬件逻辑，可以具体干什么		               doing
-gic硬件笔记				               doing
-ARM中断虚拟化					       doing
+gic硬件笔记				               doing #
+ARM中断虚拟化					       doing #
+kvm pmu模拟逻辑					       doing

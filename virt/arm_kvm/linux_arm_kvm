@@ -4,6 +4,7 @@ Linux内核ARM64 KVM虚拟化的基本逻辑
 -v0.2 2024.8.18  Sherlock ...
 -v0.3 2024.10.26 Sherlock ...
 -v0.4 2024.11.09 Sherlock ...
+-v0.5 2024.12.07 Sherlock 
 
 简介：本文梳理Linux内核中ARM64虚拟化的基本逻辑，本文只梳理基于KVM的虚拟化。梳理
       基于的Linux内核版本是v6.10-rc4，基于的QEMU版本是v9.0.50。
@@ -61,12 +62,16 @@ kvm_arm_init
 ```
 kvm
   +-> kvm_arch arch                    // arm64 kvm结构
-    +-> arch_timer_vm_data timer_data  //
+    +-> arch_timer_vm_data timer_data  // timer公共
       +-> voffset
       +-> ppi[]
 
-    +-> vgic_dist vgic
-    +-> id_regs[]
+    +-> vgic_dist vgic                 // GIC
+      +-> vgic_dist_base
+      +-> its_vm its_vm                   表示这个vm上的ITS
+        +-> its_vpe **vpes                表示这个vm上的各个vPE 
+	  +-> vpe_id
+    +-> id_regs[]                      // 系统寄存器
     +-> ctr_el0
 ```
 
@@ -79,8 +84,12 @@ kvm_vcpu
     |   +-> arch_timer_offset offset
     |     +-> vm_offset指针
     |   +-> hrtimer
-    +-> vgic_cpu
-    +-> kvm_pmu
+    +-> vgic_cpu vgic_cpu              // gic?
+      +-> vgic_v3_cpu_if vgic_v3
+        +-> its_vpe its_vpe               its_vpe的指针会保存到如上vpes数组
+      +-> vgic_io_device rd_iodev
+      +-> vgic_redist_region *rdreg
+    +-> kvm_pmu                        // PMU
       kvm_pmu_events events
       kvm_pmc pmc 
         idx
@@ -89,11 +98,12 @@ kvm_vcpu
     ...
 ```
 
-kvm_io_device描述一个kvm(内核虚拟机)里的IO设备，kvm_io_bus是kvm_io_device的bus，
-kvm_io_bus被划分位多个range，每个range都有对应的kvm_io_range。
+KVM中被模拟device的需要有个总线模型把它们的逻辑组织起来，相关的数据结构是kvm_io_device、
+kvm_io_bus以及kvm_io_range。kvm_io_device描述一个KVM里的IO设备，kvm_io_bus是
+kvm_io_device的bus，kvm_io_bus被划分位多个range，每个range都有对应的kvm_io_range。
 
-ARM64里kvm的vgic的父类即为kvm_io_device，每层数据结构以面向对象的方式组织起来，
-类的继承关系如下：
+KVM里的device用面向对象的方式组织起来，比如，ARM64里KVM的vgic的父类即为kvm_io_device，
+每层数据结构中类的继承关系如下：
 ```
    kvm_io_device 
      - kvm_io_device_ops *op = kvm_io_gic_ops
@@ -106,9 +116,11 @@ ARM64里kvm的vgic的父类即为kvm_io_device，每层数据结构以面向对�
       vgic_its    vgic_disc
 ```
 基于如上的数据结构，vgic_register_its/dist/redist_iodev分别把ITS/GICD/GICR注册到
-系统中。
+系统中。具体的调用点在后面创建ITS的流程里。
 
-更高一层的注册逻辑。
+这些KVM中的device的模拟在KVM里进行，当guest内核访问这些device触发guest退出到KVM时，
+在KVM就可以直接模拟对应device的逻辑。如上的这些数据结构支持KVM可以找到对应device
+的处理逻辑。
 
 ## 创建VM
 
@@ -227,7 +239,7 @@ kvm_arch_vcpu_ioctl_run
    * 上再次进入vCPU执行。
    */
   while (ret > 0) {
-        /* 拉起vCPU的核心逻辑 */
+        /* 拉起vCPU的核心逻辑，单独分析 */
     +-> kvm_arm_vcpu_enter_exit
     ...
         /* VM退出到KVM的入口，arch/arm64/kvm/handle_exit.c */
@@ -237,18 +249,31 @@ kvm_arch_vcpu_ioctl_run
             /*
              * 根据trap时报的EC类型选择不同的处理函数，整个处理函数的列表定义在:
              * arm_exit_handlers数组。
+             *
+             * 其中，对于系统寄存器触发的trap在kvm_handle_sys_reg中处理。
              */
         +-> kvm_get_exit_handler
         +-> exit_handler
   }
 ```
 
-对于系统寄存器触发的trap在kvm_handle_sys_reg中处理。
+vCPU从kvm_arm_vcpu_enter_exit进入，遇到host的异常或中断跳到对应的处理程序中处理，
+然后又从kvm_arm_vcpu_enter_exit里回到KVM里。
+
 ```
-/* arch/arm64/kvm/sys_regs.c */
-kvm_handle_sys_reg
- +-> ...
+kvm_arm_vcpu_enter_exit
+  +-> __kvm_vcpu_run         // 只看vhe的场景
+    +-> local_daif_mask
+      +-> __kvm_vcpu_run_vhe
+            /* 准备好guest的上下文后，eret切到EL1 guest执行 */
+        +-> __guest_enter    // arch/arm64/kvm/hyp/entry.S
+    +->local_daif_restore
 ```
+
+EL2的异常向量入口是__bp_harden_hyp_vecs，位置在arch/arm64/kvm/hyp/hyp-entry.S，
+具体调用流程为__bp_harden_hyp_vecs -> __kvm_hyp_vector -> el1_sync? -> __guest_exit，
+在__guest_exit里恢复host的上下文，然后ret返回到__guest_enter的下一条指令。
+
 
 ## 中断虚拟化
 
@@ -272,29 +297,4 @@ kvm_ioctl_create_device
 
 注意，ITS的create里有GICv4的create。
 
-### PPI虚拟化
-
-todo: 
-
-### SGI虚拟化
-
-todo: 
-
-### LPI虚拟化
-
-## 内存虚拟化
-
-Stage2的缺页trap在kvm_handle_guest_debug中处理。这个里面既处理内存的缺页，也处理
-MMIO的缺页，ARM64 VM里的ITS/GICD/GICR就是通过访问对应的MMIO寄存器时，触发trap到
-KVM里模拟实现的。
-```
-/* arch/arm64/kvm/mmu.c */
-kvm_handle_guest_abort
-     /* MMIO模拟的入口, arch/arm64/kvm/mmio.c */
- +-> io_mem_abort
-       /* virt/kvm/kvm_main.c */
-   +-> kvm_io_bus_write/read
-     +-> __kvm_io_bus_write
-       +-> kvm_iodevice_write
-```
-
+todo: 各个中断设备的地址是从ioctl传下来的。

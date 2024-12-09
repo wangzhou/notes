@@ -1,4 +1,5 @@
 -v0.1 2024.11.9 Sherlock init
+-v0.2 2024.12.7 Sherlock 补齐相关逻辑
 
 简介：本文分析Linux内核KVM中ARM WFX指令模拟的基本逻辑。基于内核版本v6.11-rc7。
 
@@ -20,14 +21,12 @@ guest的vLPI中断支持附带host doorbell中断的功能，当被注入vLPI的
 
 WFE的虚拟化处理逻辑和WFI的逻辑基本一致，不过WFE是直接换一个vCPU的线程来跑。
 
-todo: WFxT的逻辑。
+当物理核上只有一个vCPU线程在跑的时候，wfi/wfe没有必要再做trap，KVM在上线CPU的时候
+把wfe/wfi都配置为不再trap，所以它们是实际执行的。从host上就是vCPU线程一直有指令
+在运行，不管是正常跑还是做wfi。所以，host上看到host的CPU占用率是100%。
 
-host gicv4.1下，虚拟机vCPU对应的物理CPU的占用率一直是100%，这不是一个问题，本来
-就是这样。
-
-这种场景下，在物理核上只有一个vCPU线程在跑的时候，wfi/wfe?没有必要再做trap，所以
-它们是实际执行的。从host上就是vCPU线程一直有指令在运行，不管是正常跑还是做wfi。
-所以，host上看到vCPU的占用率是100%
+对于WFxT，KVM只是加了查询超时的一个动作，如果trap到KVM里处理的时候已经超时，就不
+处理直接返回了，如果没有超时就和如上wfe/wfi的处理逻辑一样。
 
 代码分析
 ---------
@@ -66,7 +65,7 @@ kvm_handle_wfx
     +-> kvm_vgic_load
 ```
 
-doorbell中断在arch/arm64/kvm/vgic/vgic-v4.c里注册。
+doorbell中断处理函数在arch/arm64/kvm/vgic/vgic-v4.c里注册。
 ```
 vgic_v4_init
       /* 每个vCPU注册一个 */
@@ -74,6 +73,7 @@ vgic_v4_init
     +-> request_irq(irq, vgic_v4_doorbell_handler, 0, "vcpu", vcpu)
 ```
 
+doorbell中断处理里出发vCPU上线，vCPU上线后机会马上响应pending的中断。
 ```
 vgic_v4_doorbell_handler
   +-> kvm_vcpu_kick
@@ -81,11 +81,20 @@ vgic_v4_doorbell_handler
       ...
 ```
 
+上面提到的，只有一个vCPU线程在运行，wfe/wfi关trap的逻辑子在：
+```
+kvm_arch_vcpu_load
+  +-> kvm_vcpu_should_clear_twe
+    +-> vcpu->arch.hcr_el2 &= ~HCR_TWE;
+  +-> kvm_vcpu_should_clear_twi
+    +-> vcpu->arch.hcr_el2 &= ~HCR_TWI;
+```
+
 相关问题
 ---------
 
 host调度vCPU线程上下线的时候，会调用到kvm注册给调度器的回调函数kvm_sched_out/in。
 
-todo: host上中断处理中，是否会调用kvm_sched_out/in? 对于非抢占内核，中断打断当前
-      的内核执行流程，在中断执行完成后，应该继续返回被打断的点执行，而不执行内核
-      抢占，所以会调用kvm_sched_out/in么？
+host上中断处理中，是否会调用kvm_sched_out/in? 对于非抢占内核，中断打断当前的内核
+执行流程，在中断执行完成后，应该继续返回被打断的点执行，而不执行内核抢占，所以会
+调用kvm_sched_out/in么？

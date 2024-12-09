@@ -149,7 +149,9 @@ hypervisor可以写ICH_LRn_EL2向vCPU注入中断。
 GIC编程接口
 ------------
 
-GIC中保存的各种状态和路由信息可以通过GIC的编程接口进行操作。
+GIC中保存的各种状态和路由信息可以通过GIC的编程接口进行操作。这里如下ICC/ICV/ICH
+开头的都是系统寄存器，其它的都是MMIO寄存器，这个在后面虚拟化模拟中在KVM走的是不同
+的处理路径。
 
 GICC寄存器：
 
@@ -214,8 +216,8 @@ Table entry里保存着当前中断要被送往的PE ID。
 物理LPI，vPE ID继续作为vPE table的索引找见vPE entry，其中保存当前vPE对应的GICR和
 vPE的vLPI pending table的base，其中保存的GICR实际上表示vPE可能运行的物理核，vPE
 当前可能在位也可能不在位。这里会有硬件检测机制判断vPE是否在位，如果在位就直接报
-中断到当前vPE的上下文上(GIC4.[01])，如果不在位，可以根据配置，给物理核报一个物理
-LPI。
+中断到当前vPE的上下文上(GIC4.[01])，如果不在位，中断信息会记录在vLPI pending table
+里，也可以根据配置，给物理核报一个物理LPI。
 
 ITS协议并没有定义表里具体的格式，具体实现者需要在GITS_BASER<n>需要提供表格的entry
 size，这样软件就可以根据情况，决定分配多少内存。(todo: 软件如何处理内存一次没有分够?)
@@ -254,9 +256,15 @@ MOVI device_id, event_id, new_collection_id -> SYNC RD1。这样SYNC同样暗指
 
 - DISCARD
 
+todo: 丢掉中断、以及中断对应的map信息。
+
 - INV
 
+todo: 清缓存。
+
 - CLEAR
+
+todo: ...?
 
 中断路由控制
 -------------
@@ -335,7 +343,12 @@ GICv4.1中增加了vSGI直通，GICv3和GICv4.0中，一个vCPU给另外一个vC
 
 - VSGI vPEID, vINTID, enable, group, priority, clear
 
+vSGI的逻辑
+-----------
+
+todo: ...
+
 vPPI的逻辑
 -----------
 
-todo: vPPI的逻辑是怎么样，也是hypervisor里起hrtimer，然后定时注入？
+vPPI的基本逻辑可以参考[这里](https://)。

@@ -1,0 +1,16 @@
+内存虚拟化
+
+Stage2的缺页trap在kvm_handle_guest_debug中处理。这个里面既处理内存的缺页，也处理
+MMIO的缺页，ARM64 VM里的ITS/GICD/GICR就是通过访问对应的MMIO寄存器时，触发trap到
+KVM里模拟实现的。
+```
+/* arch/arm64/kvm/mmu.c */
+kvm_handle_guest_abort
+     /* MMIO模拟的入口, arch/arm64/kvm/mmio.c */
+ +-> io_mem_abort
+       /* virt/kvm/kvm_main.c */
+   +-> kvm_io_bus_write/read
+     +-> __kvm_io_bus_write
+       +-> kvm_iodevice_write
+```
+
