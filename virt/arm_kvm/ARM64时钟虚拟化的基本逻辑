@@ -60,7 +60,7 @@ CNTVCT_EL0的值就是虚拟机看到的实际经过的counter数。
 
 这样，即使虚拟机不在线时，虚拟机对应的counter也在增加。比如，如果虚拟机里的Linux
 系统的HZ=250，也就是语意为4ms会产生一个时钟中断，对应的物理行为可能是，vCPU在下线
-时，其对应的CNTVCT_EL0和其对应的CNTV_CVAL_EL0已经满足中断出发的条件，在vCPU上线后，
+时，其对应的CNTVCT_EL0和其对应的CNTV_CVAL_EL0已经满足中断触发的条件，在vCPU上线后，
 马上会触发vCPU的timer中断。所以，从宏观上看，在虚拟化下，基于timer的资源管理行为
 和host上的次数是一样的，只是vCPU执行"有用功"的实际时间少了。
 

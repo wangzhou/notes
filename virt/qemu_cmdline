@@ -9,6 +9,7 @@ qemu操作命令总结
 -v0.6 2024.10.21 Sherlock ...
 -v0.7 2024.11.12 Sherlock 增加大页配置
 -v0.8 2024.12.07 Sherlock 增加QEMU_EFI.fd编译方法，补全内存/中断/网络/存储等
+-v0.9 2024.12.27 Sherlock 增加qemu chardev日志文件
 
 简介：收集qemu各种配置命令。这里一般不区分kvm和tcg，在需要区分的时候，再作说明。
       如果qemu命令和平台相关，则使用ARM64平台。
@@ -381,3 +382,17 @@ EOF
  - qemu tcg调试
 
   qemu tcg基本调试的方法可以参考[这里](https://wangzhou.github.io/qemu调试方法/)。
+
+ - qemu中的各种输出保存到文件
+
+  写脚本做测试时，一般我们把qemu相关的各种输出保存到文件里，对文件做过滤检测其中
+  相关信息。如下配置一个多路chardev，为其指定输出日志保存文件，并把它作为串口。
+  qemu运行中的guest内核以及shell中的输出都会保存到指定的日志文件里。注意，这里要
+  用display none而不是nographic。
+```
+  -display none \
+  -chardev stdio,mux=on,logfile=./qemu_log,id=char0 \
+  -serial chardev:char0
+```
+
+

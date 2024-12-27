@@ -393,3 +393,5 @@ arm spe硬件逻辑，可以具体干什么		               doing
 gic硬件笔记				               doing #
 ARM中断虚拟化					       doing #
 kvm pmu模拟逻辑					       doing
+
+arm/kvm异常跳转
