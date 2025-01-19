@@ -58,7 +58,8 @@ CPU
 ```
 
  多核系统上，qemu支持用如下的方式配置虚机的CPU拓扑结构：
-``` -smp cpus=8,maxcpus=32,sockets=2,clusters=4,cores=2,threads=2
+``` 
+  -smp cpus=8,maxcpus=32,sockets=2,clusters=4,cores=2,threads=2
 ```
   表示系统最大支持32个逻辑core，启动其中8个，系统中有2个socket，一个socket里有4
   个cluster，一个cluster里有2个物理核，一个物理核有2个逻辑核。
@@ -69,6 +70,7 @@ CPU
   式可以指定启动core的具体位置。
 
  - 冷插
+
 ```
  -device host-arm-cpu,id=core_x,socket-id=x,cluster-id=y,core-id=z,thread-id=n
 ```
@@ -122,6 +124,7 @@ CPU
   qemu/docs/system/arm/cpu-features.rst。如下的配置改成off，即把对应特性关闭了。
 
    - SVE/SVE2/PMU
+
 ```
    -cpu host,pmu=on,sve=on,sve128=on,sve256=on
 ```
@@ -323,6 +326,7 @@ migrate -d tcp:0:6666
   迁入端在完成迁移后即进入stop状态，在monitor里运行cont命令可以继续运行迁入端虚机。
 
  - 带VFIO设备热迁移
+
 ```
 -object iommufd,id=iommufd0
 -device vfio-pci,host=0000:02:00.0,iommufd=iommufd0,enable-migration=on
@@ -337,11 +341,11 @@ migrate -d tcp:0:6666
 
  - 9p文件系统
 
-   通过9p文件系统的虚机和物理机之间通信可以参考[这里](https://wangzhou.github.io/Guest-and-host-communication-for-QEMU/)。
+  通过9p文件系统的虚机和物理机之间通信可以参考[这里](https://wangzhou.github.io/Guest-and-host-communication-for-QEMU/)。
 
  - 网络
 
-   按如上网络章节中的方式通过网络通信。
+  按如上网络章节中的方式通过网络通信。
 
 qemu/kvm调试选项
 -----------------

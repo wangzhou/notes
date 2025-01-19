@@ -395,3 +395,4 @@ ARM中断虚拟化					       doing #
 kvm pmu模拟逻辑					       doing
 
 arm/kvm异常跳转
+kvm debug
