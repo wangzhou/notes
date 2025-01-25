@@ -5,6 +5,7 @@ Linux内核ARM64 KVM虚拟化的基本逻辑
 -v0.3 2024.10.26 Sherlock ...
 -v0.4 2024.11.09 Sherlock ...
 -v0.5 2024.12.07 Sherlock 
+-v0.6 2025.01.25 Sherlock 补充__guest_enter的逻辑
 
 简介：本文梳理Linux内核中ARM64虚拟化的基本逻辑，本文只梳理基于KVM的虚拟化。梳理
       基于的Linux内核版本是v6.10-rc4，基于的QEMU版本是v9.0.50。
@@ -18,6 +19,8 @@ Linux内核KVM的分析可以参考[这里](https://wangzhou.github.io/riscv-KVM
 ARM64 KVM的初始化入口。
 ```
 kvm_arm_init
+      /* 初始化各个异常向量表 */
+  +-> kvm_init_vector_slots
       /* 注意，这里初始化的是各个子系统的类，而不是实例。从下面的实例会看的更清楚 */
   +-> init_subsystems
   |     /* arch/arm64/kvm/vgic/vgic-init.c */
@@ -68,9 +71,9 @@ kvm
 
     +-> vgic_dist vgic                 // GIC
       +-> vgic_dist_base
-      +-> its_vm its_vm                   表示这个vm上的ITS
-        +-> its_vpe **vpes                表示这个vm上的各个vPE 
-	  +-> vpe_id
+      +-> its_vm its_vm                // 表示这个vm上的ITS
+        +-> its_vpe **vpes             // 表示这个vm上的各个vPE 
+          +-> vpe_id
     +-> id_regs[]                      // 系统寄存器
     +-> ctr_el0
 ```
@@ -86,7 +89,7 @@ kvm_vcpu
     |   +-> hrtimer
     +-> vgic_cpu vgic_cpu              // gic?
       +-> vgic_v3_cpu_if vgic_v3
-        +-> its_vpe its_vpe               its_vpe的指针会保存到如上vpes数组
+        +-> its_vpe its_vpe            // its_vpe的指针会保存到如上vpes数组
       +-> vgic_io_device rd_iodev
       +-> vgic_redist_region *rdreg
     +-> kvm_pmu                        // PMU
@@ -99,8 +102,8 @@ kvm_vcpu
 ```
 
 KVM中被模拟device的需要有个总线模型把它们的逻辑组织起来，相关的数据结构是kvm_io_device、
-kvm_io_bus以及kvm_io_range。kvm_io_device描述一个KVM里的IO设备，kvm_io_bus是
-kvm_io_device的bus，kvm_io_bus被划分位多个range，每个range都有对应的kvm_io_range。
+kvm_io_bus以及kvm_io_range。kvm_io_device描述一个KVM里的设备，kvm_io_bus是kvm_io_device的
+bus，kvm_io_bus被划分位多个range，每个range都有对应的kvm_io_range。
 
 KVM里的device用面向对象的方式组织起来，比如，ARM64里KVM的vgic的父类即为kvm_io_device，
 每层数据结构中类的继承关系如下：
@@ -259,25 +262,81 @@ kvm_arch_vcpu_ioctl_run
 
 vCPU从kvm_arm_vcpu_enter_exit进入，遇到host的异常或中断跳到对应的处理程序中处理，
 然后又从kvm_arm_vcpu_enter_exit里回到KVM里。
-
 ```
 kvm_arm_vcpu_enter_exit
   +-> __kvm_vcpu_run         // 只看vhe的场景
     +-> local_daif_mask
       +-> __kvm_vcpu_run_vhe
-            /* 准备好guest的上下文后，eret切到EL1 guest执行 */
+        +-> __activate_traps
+        | +-> ___activate_traps(vcpu, __compute_hcr(vcpu))
+        |     /* 进vCPU之前把异常向量换成kvm_hyp_vector */
+        | +-> write_sysreg(__this_cpu_read(kvm_hyp_vector), vbar_el1)
+        |
+        |   /* 准备好guest的上下文后，eret切到EL1 guest执行 */
         +-> __guest_enter    // arch/arm64/kvm/hyp/entry.S
+        |
+        |   /*
+        |    * 换上host的异常向量表: entry.S里的vectors。vectors里的各个异常向量
+        |    * 的宏展开里有字符串拼接的跳转函数名字，这些函数定义在entry-common.c：
+        |    * 
+        |    * el1t_64_sync_handler/el1t_64_irq_handler - 触发异常和taken都在EL1
+        |    * el1h_64_sync_handler/el1h_64_irq_handler / 
+        |    * el0t_64_sync_handler/el0t_64_irq_handler - 从EL0切到EL1出异常中断
+        |    * 
+        |    * 注意，如果host在EL2，如上EL1实际上是EL2。
+        |    */
+        +-> __deactivate_traps
+
     +->local_daif_restore
 ```
 
-EL2的异常向量入口是__bp_harden_hyp_vecs，位置在arch/arm64/kvm/hyp/hyp-entry.S，
-具体调用流程为__bp_harden_hyp_vecs -> __kvm_hyp_vector -> el1_sync? -> __guest_exit，
-在__guest_exit里恢复host的上下文，然后ret返回到__guest_enter的下一条指令。
+cpu_set_hyp_vector里从一些异常向量里选择一个更新kvm_hyp_vector。
+```
+init_subsystems
+  -> cpu_hyp_init
+    -> cpu_hyp_reinit
+      -> cpu_hyp_init_features
+        -> cpu_set_hyp_vector
+```
+先看一个向量__kvm_hyp_vector。
+/* arch/arm64/kvm/kvm/hyp/hyp-entry.S */
+```
+SYM_CODE_START(__kvm_hyp_vector)                                                
+        invalid_vect    el2t_sync_invalid   // Synchronous EL2t             
+        invalid_vect    el2t_irq_invalid    // IRQ EL2t                     
+        invalid_vect    el2t_fiq_invalid    // FIQ EL2t                     
+        invalid_vect    el2t_error_invalid  // Error EL2t                   
+                                                                            
+        valid_vect      el2_sync            // Synchronous EL2h        <--- A
+        invalid_vect    el2h_irq_invalid    // IRQ EL2h                     
+        invalid_vect    el2h_fiq_invalid    // FIQ EL2h                     
+        valid_vect      el2_error           // Error EL2h                   
+                                                                            
+        valid_vect      el1_sync            // Synchronous 64-bit EL1  <--- B
+        valid_vect      el1_irq             // IRQ 64-bit EL1               
+        valid_vect      el1_fiq             // FIQ 64-bit EL1               
+        valid_vect      el1_error           // Error 64-bit EL1             
+                                                                            
+        valid_vect      el1_sync            // Synchronous 32-bit EL1       
+        valid_vect      el1_irq             // IRQ 32-bit EL1               
+        valid_vect      el1_fiq             // FIQ 32-bit EL1               
+        valid_vect      el1_error           // Error 32-bit EL1             
+SYM_CODE_END(__kvm_hyp_vector)                                                  
+```
+如上异常向量表在进入虚拟机之前被配置上，所以只有在虚机里有异常需要host处理，或者
+host本身有异常或中断需要处理时，才会进入到这个异常向量表。这时相当于低级别特权级
+进入高级别特权级处理异常和中断，就是B这组异常向量。而A组异常向量只有el2_sync和
+el2_error两个有效，似乎是EL2遇到非法指令才会走到这里。
 
+具体看下B这组异常向量里的各个向量。EL1异常需要EL2处理时，跳到el2_sync，随后
+el2_sync->el1_trap->__guest_exit，在__guest_exit里恢复host的上下文，然后ret返回到
+__guest_enter的下一条指令。整体逻辑上看，虚机从__guest_enter进入，同样从__guest_enter
+退出来。el1_irq/el1_fiq/el1_error，把异常原因保存到x0，同样跳到__guest_exit。
 
 ## 中断虚拟化
 
-如上，GICv3设备创建是通过vm ioctl的KVM_CREATE_DEVICE接口：
+这里先看中断控制器的初始化逻辑。如上，GICv3设备创建是通过vm ioctl的KVM_CREATE_DEVICE
+接口：
 ```
 /* virt/kvm/kvm_main */
 kvm_ioctl_create_device

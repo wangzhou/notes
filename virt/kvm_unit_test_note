@@ -9,7 +9,7 @@ kvm_unit_test是一个kvm的测试套，代码仓库路径在[这里](https://gi
 qemu的参数使用。
 
 还可以使用./configure; make standalone编译，这样会在tests生成对应的脚本，这些脚本
-是可以直接直接使用的。这些脚本里调用qemu去执行对应的测试程序。
+是可以直接使用的。这些脚本里调用qemu去执行对应的测试程序。
 
 看一个make standalone编译运行micro-bench测试的例子，把编程生成的micro-bench中的
 最后一行中的kvm改成tcg，这样随便找个tcg的qemu也可以做测试。
