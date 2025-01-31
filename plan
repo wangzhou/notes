@@ -365,7 +365,7 @@ sve-stress/iperf/fio/memtester				 done
 pv virt逻辑/pv preempt/pv spinlock/pv steal time         todo
 
 linux/gic 中断体系构架				         todo
-cppc cpu capability的逻辑
+cppc cpu capability的逻辑				 todo
 vfio中断的逻辑
 qemu dts/acpi/qemu生成acpi表的逻辑
 
@@ -377,12 +377,12 @@ vgic/gic its命令补充
 
 vfio热迁移驱动					   	 #
 vfio怎么给guest呈现pci设备的config空间和BAR空间的        #
-virsh
-kvm clidr结合的逻辑。ctr
-vgic模拟，vSGI实现，vLPI实现 #####
+virsh						       todo
+kvm clidr结合的逻辑。ctr			       todo
+vgic模拟，vSGI实现，vLPI实现			       todo
 
 kprobe分析和使用
-ipi_benckmard分析
+ipi_benckmard分析				       todo
 kvm unit test					       c
 qemu命令行总结				               c
 WFI trap/WFE delay trap                                topost
@@ -396,3 +396,6 @@ kvm pmu模拟逻辑					       doing
 
 arm/kvm异常跳转
 kvm debug
+arm vtimer
+vSVA修改
+vSGI

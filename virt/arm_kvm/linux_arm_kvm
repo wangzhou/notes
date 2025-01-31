@@ -6,6 +6,7 @@ Linux内核ARM64 KVM虚拟化的基本逻辑
 -v0.4 2024.11.09 Sherlock ...
 -v0.5 2024.12.07 Sherlock 
 -v0.6 2025.01.25 Sherlock 补充__guest_enter的逻辑
+-v0.7 2025.01.31 Sherlock 继续整理中断的逻辑
 
 简介：本文梳理Linux内核中ARM64虚拟化的基本逻辑，本文只梳理基于KVM的虚拟化。梳理
       基于的Linux内核版本是v6.10-rc4，基于的QEMU版本是v9.0.50。
@@ -69,13 +70,15 @@ kvm
       +-> voffset
       +-> ppi[]
 
-    +-> vgic_dist vgic                 // GIC
-      +-> vgic_dist_base
+    +-> vgic_dist vgic                 // GIC，父类是vgic_io_device
+      +-> vgic_dist_base               // 表示这个vm上的GICD的base
       +-> its_vm its_vm                // 表示这个vm上的ITS
         +-> its_vpe **vpes             // 表示这个vm上的各个vPE 
           +-> vpe_id
     +-> id_regs[]                      // 系统寄存器
     +-> ctr_el0
+
+    +-> kvm_s2_mmu mmu                 // 内存
 ```
 
 虚拟机上vCPU的数据结构：
@@ -87,7 +90,7 @@ kvm_vcpu
     |   +-> arch_timer_offset offset
     |     +-> vm_offset指针
     |   +-> hrtimer
-    +-> vgic_cpu vgic_cpu              // gic?
+    +-> vgic_cpu vgic_cpu              // GIC和core相关的部件
       +-> vgic_v3_cpu_if vgic_v3
         +-> its_vpe its_vpe            // its_vpe的指针会保存到如上vpes数组
       +-> vgic_io_device rd_iodev
@@ -333,10 +336,26 @@ el2_sync->el1_trap->__guest_exit，在__guest_exit里恢复host的上下文，�
 __guest_enter的下一条指令。整体逻辑上看，虚机从__guest_enter进入，同样从__guest_enter
 退出来。el1_irq/el1_fiq/el1_error，把异常原因保存到x0，同样跳到__guest_exit。
 
+## 内存虚拟化
+
+todo: ...
+
 ## 中断虚拟化
 
-这里先看中断控制器的初始化逻辑。如上，GICv3设备创建是通过vm ioctl的KVM_CREATE_DEVICE
-接口：
+ARM KVM里模拟了GIC中的各个部件，当guest访问GIC相关的系统寄存器和MMIO寄存器时，会
+trap到KVM完成模拟。这里要整理的逻辑有：1. KVM里中断控制器的数据结构和初始化逻辑，
+2. GIC相关的系统寄存器和MMIO寄存器的访问逻辑，3. 每种中断运行时的基本逻辑。本文
+只整理前两点，第三点需要另外文档中展开描述。
+
+GICD/GICR的数据结构的位置在上文已经提到过。ARM KVM下ITS的数据结构是vgic_its，它
+的保存位置在，kvm->devices(kvm_device的list)->kvm_device->private，可见kvm里用一
+个devices链表保存所有kvm_device，而vgic_its就是一种kvm_device。如下ITS对应的create
+函数创建vgic_its并把其保存到private里。
+
+如上已经提到过GICv3和ITS的注册点: kvm_arm_init->init_subsystems->kvm_vgic_hyp_init...
+
+触发中断控制器实例创建的是后续的ioctl。GICv3/ITS设备创建是通过vm ioctl的
+KVM_CREATE_DEVICE接口：
 ```
 /* virt/kvm/kvm_main */
 kvm_ioctl_create_device
@@ -344,7 +363,9 @@ kvm_ioctl_create_device
        * 在kvm_device_ops_table中找见之前注册的设备，调用对应的create。注意，在
        * kvm_arm_init里已经注册过KVM_DEV_TYPE_ARM_VGIC_V3和KVM_DEV_TYPE_ARM_VGIC_ITS。
        *
-       * GICv3的create是vgic_create，ITS的create是vgic_its_create。
+       * GICv3的create是vgic_create， arch/arm64/kvm/vgic/vgic-init.c。
+       * ITS的create是vgic_its_create，arch/arm64/kvm/vgic/vgic-its.c，注意，ITS
+       * 的create里有GICv4的create。
        */
   +-> op->create
       /* 为设备创建匿名文件，后面set_attr/get_attr等操作都是通过这个文件的ioctl */
@@ -352,8 +373,37 @@ kvm_ioctl_create_device
 ```
 
 虽然有create函数，但是GICv3的实例创建确是set_attr中的KVM_DEV_ARM_VGIC_CTRL_INIT
-里做的。todo
+里做的。
+```
+vgic_v3_set_attr
+  +-> vgic_set_common_attr
+    +-> vgic_init
+      +-> kvm_vgic_dist_init
+      +-> vgic_v4_init
+      +-> kvm_vgic_vcpu_init                       // 循环操作每个vcpu
+      +-> kvm_vgic_setup_default_irq_routing
+      ...
+```
 
-注意，ITS的create里有GICv4的create。
+如上的逻辑还没有把vgic_its/vgic_disc/vgic_cpu(GICR)加入kvm_io_device/bus/range描
+述的数据结构中。vgic_its的注册由set_attr中的接口完成，基地址从用户态配置下来，这
+里根据基地址就可以确认KVM bus/range中的位置。
+```
+vgic_its_set_attr                 // KVM_DEV_ARM_VGIC_GRP_ADDR
+  +-> vgic_register_its_iodev
+    +-> kvm_io_bus_register_dev
+```
+如上vgic_dist的注册在KVM_RUN的流程里，vgic_cpu的注册在KVM_CREATE_VCPU的流程里。
+这里的逻辑有点乱:(
 
-todo: 各个中断设备的地址是从ioctl传下来的。
+可以看到模拟GIC既可以在KVM中直接访问，也可以从用户态通过ioctl接口访问。从KVM中访
+问的逻辑是：
+
+从ioctl访问的逻辑是：
+
+基于如上的数据结构，我们可以分析特定中断类型的业务逻辑，可以大概分类为：1. vSPI的
+基本逻辑，2. vLPI以及vLPI直通的基本逻辑，3. vSGI以及vSGI直通的基本逻辑，4. vtimer
+的基本逻辑。
+
+
+
