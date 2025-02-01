@@ -203,10 +203,11 @@ kvm_vcpu_ioctl
     +-> kvm_arch_vcpu_run_pid_change
       +-> kvm_vgic_map_resources
         +-> vgic_v3_map_resources
-            /* 这里才注册GICD? */
+            /* 这里才注册GICD */
         +-> vgic_register_dist_iodev
               /* 更新kvm->buses[bus_idx] */
           +-> kvm_io_bus_register_dev
+    +-> kvm_arch_vcpu_ioctl_run       <--- 拉起vCPU 
   +-> default
     +-> kvm_arch_vcpu_ioctl
 
@@ -225,7 +226,7 @@ kvm_vcpu_ioctl
       KVM_SET_ONE_REG
       KVM_GET_ONE_REG
       ...
-      KVM_SET_DEVICE_ATTR // 各种core相关设备的初始化和属性配置
+      KVM_SET_DEVICE_ATTR             // 各种core相关设备的初始化和属性配置
         +-> KVM_ARM_VCPU_PMU_V3_CTRL
           +-> IRQ/INIT/FILTER/SET_PMU
         +-> KVM_ARM_VCPU_TIMER_CTRL
@@ -256,7 +257,9 @@ kvm_arch_vcpu_ioctl_run
              * 根据trap时报的EC类型选择不同的处理函数，整个处理函数的列表定义在:
              * arm_exit_handlers数组。
              *
-             * 其中，对于系统寄存器触发的trap在kvm_handle_sys_reg中处理。
+             * 其中，对于系统寄存器触发的trap在kvm_handle_sys_reg中处理。对mmio
+             * 的处理流程是：
+             * kvm_handle_guest_abort->io_mem_abort->kvm_io_bus_read/write。
              */
         +-> kvm_get_exit_handler
         +-> exit_handler
@@ -397,13 +400,12 @@ vgic_its_set_attr                 // KVM_DEV_ARM_VGIC_GRP_ADDR
 这里的逻辑有点乱:(
 
 可以看到模拟GIC既可以在KVM中直接访问，也可以从用户态通过ioctl接口访问。从KVM中访
-问的逻辑是：
+问的逻辑在如上CPU虚拟化章节有提到。
 
-从ioctl访问的逻辑是：
+从ioctl访问使用的接口是：kvm_vcpu_ioctl + KVM_SET_DEVICE_ATTR + 
+KVM_DEV_ARM_VGIC_GRP_ITS/DIST/REDIST_REGS，KVM_DEV_ARM_VGIC_GRP_CPU_SYSREGS
 
 基于如上的数据结构，我们可以分析特定中断类型的业务逻辑，可以大概分类为：1. vSPI的
 基本逻辑，2. vLPI以及vLPI直通的基本逻辑，3. vSGI以及vSGI直通的基本逻辑，4. vtimer
 的基本逻辑。
-
-
 
