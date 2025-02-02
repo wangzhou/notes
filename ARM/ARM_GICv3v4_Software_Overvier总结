@@ -195,7 +195,8 @@ GICD寄存器:
 ITS寄存器:
 
 ITS的寄存器以64KB为划分，GICv3/v4.0有两个64KB，GICv4.1以及以后有3个64KB。第一个
-64KB放控寄存器，第二个64K放MSI的doorbell寄存器，第三个64K放vSGI有关的寄存器。
+64KB放控寄存器，第二个64K放MSI的doorbell寄存器，第三个64K放vSGI有关的寄存器，目前
+看就是一个GITS_SGIR。
 
 ITS的控制寄存器是很少的：GITS_CTRL是ITS的全局控制寄存器，GITS的配置是靠command
 queue下发的，所以需要有寄存器定义这个command queue，其中GITS_CBASER是队列的base，
@@ -346,9 +347,9 @@ GICv4.1中增加了vSGI直通，GICv3和GICv4.0中，一个vCPU给另外一个vC
 vSGI的逻辑
 -----------
 
-todo: ...
+todo: vSGI的基本逻辑可以参考[这里](https://)。
 
 vPPI的逻辑
 -----------
 
-vPPI的基本逻辑可以参考[这里](https://)。
+todo: vPPI的基本逻辑可以参考[这里](https://)。
