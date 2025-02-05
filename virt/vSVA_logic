@@ -4,6 +4,7 @@ vSVA逻辑分析
 -v0.1 2020.2.29 Sherlock init.
 -v0.2 2020.4.16 Sherlock add missing pasid logic in guest.
 -v0.3 2020.4.27 Sherlock update vSMMU/SMMU CD base update.
+-v0.4 2025.2.05 Sherlock 更正一些基本错误，需要重新梳理逻辑，加入vSMMU的概念。
 
 简介：本文分析Linux vSVA现在的构架逻辑，用于相关开发人员对齐认识。目前为止Linux
       vSVA的代码还在构架讨论和代码review阶段。
@@ -41,12 +42,12 @@ vSVA
  暂时我们不需要S2的缺页。这里说的host上SMMU支持S1缺页，并不是在host系统上做S1缺页，
  我们这里讨论的是nested SMMU, 所以在host SMMU硬件检测到S1缺页的时候，应该把这个
  信息上报给guest里的SMMU，guest里使用和host一样的SMMU驱动处理缺页，当guest处理完
- 这个缺页后，应该把对应的页表信息同步到SMMU的物理硬件上(SMMU.CD.TT0里)。因为，
- guest里的进程页表和SMMU CD上的页表物理上不是一个，很明显这里有一个设备和vcpu页
- 表的同步问题，在host SVA上这个问题不存在，因为host SVA上cpu和SMMU是物理上共用
- 相同页表。因此，在需要在vcpu无效化页表的时候，需要把信息同步到host的SMMU上，
- 这个信息包括页表项和TLB。host SVA上也有这个问题，但是如果用SMMU stall mode, 可
- 以配置DVM，把CPU侧TLB invalidate广播到SMMU，这样就不需要软件同步。
+ 这个缺页后，应该把对应的页表信息同步到SMMU的物理硬件上(SMMU.CD.TT0里)。物理SMMU
+ 需要感知guest里vSMMU上页表以及TLB的变化，很明显这里有一个设备和vcpu页表的同步问题，
+ 在host SVA上这个问题不存在，因为host SVA上cpu和SMMU是物理上共用相同页表。因此，
+ 在需要在vcpu无效化页表的时候，需要把信息同步到host的SMMU上，这个信息包括页表项和
+ TLB。host SVA上也有这个问题，但是如果用SMMU stall mode, 可以配置DVM，把CPU侧TLB
+ invalidate广播到SMMU，这样就不需要软件同步。
 
  在guest里多进程使用一个设备的资源，就需要支持PASID。这里的逻辑和上面的是一样的，
  只不过扩展到多进程。

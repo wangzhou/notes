@@ -75,6 +75,7 @@ kvm
       +-> its_vm its_vm                // 表示这个vm上的ITS
         +-> its_vpe **vpes             // 表示这个vm上的各个vPE 
           +-> vpe_id
+        +-> irq_domain *domain
     +-> id_regs[]                      // 系统寄存器
     +-> ctr_el0
 
@@ -93,8 +94,11 @@ kvm_vcpu
     +-> vgic_cpu vgic_cpu              // GIC和core相关的部件
       +-> vgic_v3_cpu_if vgic_v3
         +-> its_vpe its_vpe            // its_vpe的指针会保存到如上vpes数组
+	  +-> irq_domain *sgi_domain
       +-> vgic_io_device rd_iodev
       +-> vgic_redist_region *rdreg
+          /* vCPU SGI和PPI的vgic_irq，vLPI的vgic_irq保存在vgic_dist->lpi_xa */
+      +-> private_irqs[]
     +-> kvm_pmu                        // PMU
       kvm_pmu_events events
       kvm_pmc pmc 
@@ -202,7 +206,11 @@ kvm_vcpu_ioctl
   +-> KVM_RUN
     +-> kvm_arch_vcpu_run_pid_change
       +-> kvm_vgic_map_resources
+
         +-> vgic_v3_map_resources
+	  +-> vgic_v4_configure_vsgis   <--- 
+	    +-> vgic_v4_enable_vsgis
+
             /* 这里才注册GICD */
         +-> vgic_register_dist_iodev
               /* 更新kvm->buses[bus_idx] */

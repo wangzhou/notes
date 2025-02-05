@@ -298,7 +298,6 @@ ARM64:
  - ARM NMI中断/ARM SP的逻辑 	          c
  - NMI Watchdog hard lockup		  c
  - softlockup/hardlockup机制/migration    c
- - IPI详细分析			          to do #
 
 Linux内核:
 writeback的逻辑			          c
@@ -372,7 +371,6 @@ qemu dts/acpi/qemu生成acpi表的逻辑
 vm cache/pptt/clidr pptt表定义/acpi生成代码/内核解析代码/qemu呈现总逻辑，和命令行
 kvm vcpu cpu id初始化
 
-IPI相关的基本逻辑
 vgic/gic its命令补充
 
 vfio热迁移驱动					   	 #
@@ -394,8 +392,8 @@ gic硬件笔记				               doing #
 ARM中断虚拟化					       doing ##
 kvm pmu模拟逻辑					       doing
 
-arm/kvm异常跳转
 kvm debug
 arm vtimer
 vSVA修改
-vSGI
+vSGI		         doing
+IPI相关的基本逻辑        doing

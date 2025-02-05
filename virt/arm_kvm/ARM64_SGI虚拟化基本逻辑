@@ -1,5 +1,6 @@
 -v0.1 2025.2.1 Sherlock init
 -v0.2 2025.2.2 Sherlock ...
+-v0.3 2025.2.3 Sherlock ...
 
 简介：本文整理ARM KVM中vSGI实现的基本逻辑。
 
@@ -52,6 +53,11 @@ todo: 直接使用GITS_SGIR还需要哪些前置的配置？KVM配置ITS的寄�
 
 todo: 通过list register注入中断?
 
+另外，GICv4.1的SGI直通是个半虚拟化的特性。GICD_TYPE2.nASSGIcap表示是否支持SGI直通，
+guest内核驱动配置GICD_CTL.nASSGIrep可以使能这个特性。GICD_TYPE2.nASSGIcap在host读
+的时候是0。kvm在模拟gicv3的时候把GICD_TYPE2.nASSGIcap暴露给了guest系统。这样guest
+内核gic驱动就可以检测并配置GICD_TYPE2.nASSGIrep。
+
 KVM代码分析
 ------------
 
@@ -65,48 +71,59 @@ kvm_handle_sys_reg
          *
          */
     +-> vgic_v3_dispatch_sgi
-      +-> vgic_v3_queue_sgi
+      +-> vgic_v3_queue_sgi         // 得到vSGI对应的vgic_irq irq
 
-        +-> vgic_queue_irq_unlock               <--- GICv3/v4.0的注入逻辑
+        +-> vgic_queue_irq_unlock                      <--- GICv3/v4.0的注入逻辑
 
-        +-> irq_set_irqchip_state               <--- GICv4.1的vSGI直通逻辑 
+        +-> irq_set_irqchip_state(irq->host_irq, ...)  <--- GICv4.1的vSGI直通逻辑 
           +-> chip->irq_set_irqchip_state
                 /* GITS_SGIR触发vSGI的逻辑 */
             +-> its_sgi_set_irqchip_state
+                ...
 ```
 
-todo: irq-gic-v3-its.c里有多个irqchip：GICv4-vpe，GICv4.1-vpe，GICv4.1-sgi，ITS。
-它们的语意如何理解？
+GIC里有很多irq_chip和irq_domain，irq-gic-v3-its.c里有：GICv4-vpe，GICv4.1-vpe，
+GICv4.1-sgi，ITS 对应的chip和domain，irq-gic-v3.c里有：GICv3对应的chip和domain。
+GICv3/ITS是非虚拟化相关的，其它类型的chip/domain都和虚拟化有关系。
 
-GITS_SGIR触发vSGI的逻辑。
+这里只看和虚拟化相关的逻辑。
 ```
+its_init
+      /*
+       * 初始化vpe_domain_ops以及sgi_domain_ops, 这两者都是在its_alloc_vcpu_irq
+       * 里使用。而its_alloc_vcpu_irq是kvm初始化模拟gic时，vgic_v4_init里调用的。
+       */
+  +-> its_init_v4
 ```
 
-vSGI的基本逻辑。
+KVM里模拟GIC，初始化GIC的逻辑。
 ```
+vgic_v4_init
+  +-> its_alloc_vcpu_irq
+    +-> irq_domain_create_hierarchy(gic_domain, 0, vm->nr_vpes, vm->fwnode,
+                                    vpe_domain_ops, vm)
+        /* 对VM里的每个vCPU调用该函数 */
+    +-> its_alloc_vcpu_sgis
+      +-> vpe->sgi_domain = irq_domain_create_linear(vpe->fwnode, 16,
+                                                     sgi_domain_ops, vpe)
+      +-> sgi_base = irq_domain_alloc_irqs(vpe->sgi_domain, 16, NUMA_NO_NODE, vpe)
 ```
 
-todo: 如下这些数据结构的语意，以及是怎么组合到一起的。
-
-irq_chip/irq_domain
-
-irq/irq_data/irq_desc
-
-vgic_irq
-  +-> host_irq
+vgic_irq里的host_irq获取逻辑如下，这个irq不是一个真实的irq?
+```
+vgic_v3_map_resources
+  +-> vgic_v4_configure_vsgis
+    +-> vgic_v4_enable_vsgis
+          /* vgic_irq irq */
+      +-> irq->host_irq = irq_find_mapping(vpe->sgi_domain, i)
+      +-> vgic_v4_sync_sgi_config(vpe, irq)
+      +-> irq_domain_activate_irq
+      +-> irq_set_irqchip_state
+```
 
 SGI内核代码分析
 ----------------
 
-todo
+Linux内核SGI相关逻辑可以参考[这里]()。
 
-
-
-
-
-
-
-
-
-
-
+irq_chip/irq_domain irq/irq_data/irq_desc
