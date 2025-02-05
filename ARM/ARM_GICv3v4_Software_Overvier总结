@@ -347,7 +347,7 @@ GICv4.1中增加了vSGI直通，GICv3和GICv4.0中，一个vCPU给另外一个vC
 vSGI的逻辑
 -----------
 
-todo: vSGI的基本逻辑可以参考[这里](https://)。
+vSGI的基本逻辑可以参考[这里](https://)。
 
 vPPI的逻辑
 -----------

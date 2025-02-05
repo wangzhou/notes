@@ -18,8 +18,8 @@ smp_call_function(func, info, wait)
 smp_call_function_many(mask, func, info, wait)
 ...
 ```
-在所有online CPU或者特定CPU上执行对应的函数，wait为true表示调用者同步等待相关函
-数执行完。
+如上函数的语意是，在所有online CPU或者特定CPU上执行对应的函数，wait为true表示调
+用者同步等待相关函数执行完。
 
 代码分析
 ---------
@@ -31,15 +31,16 @@ wake_up_process
     +-> ttwu_queue
       +-> ttwu_queue_wakelist
         +-> __ttwu_queue_wakelist
-          +-> __smp_call_single_queue          <--- #
+          +-> __smp_call_single_queue          <--- IPI的封装接口
             +-> send_call_function_single_ipi
               +-> arch_send_call_function_single_ipi // arch/arm64/kernel/smp.c
+                    /* smp_cross_call给一个core发IPI可以带ipinr，硬件层面是中断号。*/
                 +-> smp_cross_call(cpumask_of(cpu), IPI_CALL_FUNC)
                   +-> __ipi_send_mask(ipi_desc[ipinr], target)
                     +-> chip->ipi_send_mask(data, dest) // gic_ipi_send_mask
 ```
-smp_cross_call给一个core发IPI还可以带ipinr。
 
+GICv3的IPI回调函数：
 ```
 /* drivers/irqchip/irq-gic-v3.c */
 gic_ipi_send_mask
@@ -48,7 +49,7 @@ gic_ipi_send_mask
       +-> write_sysreg(val, ICC_SGI1R)
 ```
 
-注册SGI中断的入口函数
+注册SGI中断的入口函数：
 ```
 /* drivers/irqchip/irq-gic-v3.c */
 gic_smp_init
@@ -64,8 +65,7 @@ ipi_handler
   +-> do_handle_IPI(irq - ipi_irq_base)
         /* IPI的中断号区分不同种类的IPI */
     +-> switch (ipinr)
-      +-> IIP
-          IPI_RESCHEDULE
+      +-> IPI_RESCHEDULE
           IPI_CALL_FUNC
           IPI_CPU_STOP
           IPI_CPU_CRASH_STOP

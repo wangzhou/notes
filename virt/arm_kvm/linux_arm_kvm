@@ -416,4 +416,3 @@ KVM_DEV_ARM_VGIC_GRP_ITS/DIST/REDIST_REGS，KVM_DEV_ARM_VGIC_GRP_CPU_SYSREGS
 基于如上的数据结构，我们可以分析特定中断类型的业务逻辑，可以大概分类为：1. vSPI的
 基本逻辑，2. vLPI以及vLPI直通的基本逻辑，3. vSGI以及vSGI直通的基本逻辑，4. vtimer
 的基本逻辑。
-
