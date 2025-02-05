@@ -144,7 +144,7 @@ kvm_dev_ioctl_create_vm
     +-> kvm_arch_init_vm
       +-> kvm_init_stage2_mmu
       +-> kvm_vgic_early_init
-          /* todo: ... */
+          /* 更新kvm->arch.timer_data.ppi[] */
       +-> kvm_timer_init_vm
       +-> kvm_arm_init_hypercalls 
     ... todo ...
@@ -204,18 +204,21 @@ kvm_vm_ioctl的KVM_CREATE_VCPU
 kvm_vcpu_ioctl
       /* 拉起vCPU的入口，下面拉出来独立分析 */
   +-> KVM_RUN
-    +-> kvm_arch_vcpu_run_pid_change
-      +-> kvm_vgic_map_resources
-
-        +-> vgic_v3_map_resources
-	  +-> vgic_v4_configure_vsgis   <--- 
-	    +-> vgic_v4_enable_vsgis
-
-            /* 这里才注册GICD */
-        +-> vgic_register_dist_iodev
-              /* 更新kvm->buses[bus_idx] */
-          +-> kvm_io_bus_register_dev
-    +-> kvm_arch_vcpu_ioctl_run       <--- 拉起vCPU 
+    +-> kvm_arch_vcpu_run_pid_change    <--- 语意是？第一次运行？
+    | +-> kvm_vgic_map_resources
+    | |
+    | | +-> vgic_v3_map_resources
+    | |   +-> vgic_v4_configure_vsgis   <--- 
+    | |     +-> vgic_v4_enable_vsgis
+    | |
+    | |     /* 这里才注册GICD */
+    | | +-> vgic_register_dist_iodev
+    | |       /* 更新kvm->buses[bus_idx] */
+    | |   +-> kvm_io_bus_register_dev
+    | +-> kvm_timer_enable
+    |       /* todo: ... */
+    |   +-> kvm_vgic_map_phys_irq
+    +-> kvm_arch_vcpu_ioctl_run       <--- 拉起vCPU !!
   +-> default
     +-> kvm_arch_vcpu_ioctl
 
