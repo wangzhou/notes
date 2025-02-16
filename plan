@@ -372,8 +372,8 @@ kvm vcpu cpu id初始化
 
 vgic/gic its命令补充
 
-vfio热迁移驱动					   	 #
-vfio怎么给guest呈现pci设备的config空间和BAR空间的        #
+vfio热迁移驱动					   	 ##
+vfio怎么给guest呈现pci设备的config空间和BAR空间的        ##
 kvm clidr结合的逻辑。ctr			       todo
 vgic模拟，vSGI实现，vLPI实现			       todo
 
@@ -390,12 +390,11 @@ gic硬件笔记				               doing #
 ARM中断虚拟化					       doing ##
 kvm pmu模拟逻辑					       doing
 
-kvm debug
-arm vtimer		 doing
-vSVA修改		 doing
-vSGI		         doing
-IPI相关的基本逻辑        doing
-kvmtop			 doing
+kvm debug/kvmtop	                               todo
+arm vtimer		                               doing
+vSVA修改		                               topost
+vSGI		                                       doing
+IPI相关的基本逻辑                                      doing
 virsh						       todo
 基于iommufd的vSVA基本逻辑			       todo
 vNMI
