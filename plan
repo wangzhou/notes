@@ -378,10 +378,14 @@ kvm clidr结合的逻辑。ctr			       todo
 vgic模拟，vSGI实现，vLPI实现			       todo
 
 kprobe分析和使用
+
 ipi_benckmard分析				       todo
 kvm unit test					       c
 qemu命令行总结				               c
+
 WFI trap/WFE delay trap                                topost
+vSVA修改		                               topost
+
 vm live migration/heterogenous: 基本逻辑/用法/trace    doing #
 linux online/offline cpu逻辑			       doing
 vtimer(11)/arch_timer(12)/硬中断号，软中断号           doing #
@@ -389,13 +393,15 @@ arm spe硬件逻辑，可以具体干什么		               doing
 gic硬件笔记				               doing #
 ARM中断虚拟化					       doing ##
 kvm pmu模拟逻辑					       doing
-
-kvm debug/kvmtop	                               todo
 arm vtimer		                               doing
-vSVA修改		                               topost
 vSGI		                                       doing
 IPI相关的基本逻辑                                      doing
+
+vLPI虚拟化/vfio				               todo
+kvm debug/kvmtop	                               todo
 virsh						       todo
 基于iommufd的vSVA基本逻辑			       todo
 vNMI
 acpi
+
+qemu gic的配置

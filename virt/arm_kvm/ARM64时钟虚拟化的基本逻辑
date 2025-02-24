@@ -152,15 +152,11 @@ kvm_timer_enable
 ```
 kvm_arch_vcpu_put
   kvm_timer_vcpu_put
+    /* 保存下线vCPU vtimer的状态 */
     timer_save_state
 
-timer_restore_state
+kvm_arch_vcpu_load
+  kvm_timer_vcpu_load
+    /* 恢复上线vCPU vtimer的状态 */
+    timer_restore_state
 ```
-
-
-
-
-
-
-
-
