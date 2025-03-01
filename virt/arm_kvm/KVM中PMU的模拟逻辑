@@ -14,12 +14,45 @@ KVM中对PMU的模拟思路和其他设备的模拟思路是一致的，通过de
 整体的ARM KVM框架逻辑可以参考[这里](https://)
 
 注意一下几点，vPMU的初始化和配置通过KVM_ARM_VCPU_PMU_V3_*的ioctl进行，PMU相关的
-系统寄存器的模拟逻辑在kvm_handle_sys_reg，vCPU上下线时保存和恢复PMU寄存器的位置
-在kvm_vcpu_pmu_restore_guest/host。
+系统寄存器的模拟逻辑在kvm_handle_sys_reg。
 
-todo: counter的值在哪里保存和恢复？
+PMU vCPU上下线时保存和恢复寄存器的逻辑不是很直白，它应该在vCPU线程和perf相关的
+sched_ini/sched_out的回调函数里。这个行为和KVM里PMU的模拟方式有直接的联系。
 
-todo: PMU相关的业务细节？
+todo: PMU模拟方式。
+
+PMU相关的寄存器总结如下：
+
+  PMINTENSET_EL1
+  PMINTENCLR_EL1
+  
+  PMCR_EL0              PMU控制寄存器
+  
+  PMCNTENSET_EL0
+  PMCNTENCLR_EL0
+  
+  PMOVSCLR_EL0
+  PMOVSSET_EL0
+  
+  PMSWINC_EL0
+  PMSELR_EL0
+  
+  PMCEID0_EL0           event有无寄存器
+  PMCEID1_EL0           event有无寄存器
+  
+  PMCCNTR_EL0
+  
+  PMXEVTYPER_EL0
+  PMXEVCNTR_EL0
+
+  PMEVTYPER<n>_EL0      配置对应counter的event
+  PMEVCNTR<n>_EL0
+  
+  PMUSERENR_EL0
+  PMCCNTR_EL0
+  PMCCFILTR_EL0
+  
+  PMMIR_EL1
 
 代码分析
 ---------
@@ -49,6 +82,8 @@ KVM_GET_DEVICE_ATTR/KVM_ARM_VCPU_PMU_V3_CTRL -> kvm_arm_pmu_v3_get_attr:
 
 KVM_ARM_VCPU_PMU_V3_IRQ
 ```
+
+PMU的模拟逻辑。
 
 杂项问题
 ---------
