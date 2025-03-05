@@ -254,17 +254,18 @@ R中的中断状态还要被移动到新的GICR上，所以《GICv3 and GICv4 So
 MOVI device_id, event_id, new_collection_id -> SYNC RD1。这样SYNC同样暗指把RD1中
 的pendin信息同步到new_collection_id对应的RD2中。(todo: 对这里的理解有误?)
 
-- DISCARD
+- DISCARD device_id, event_id
 
-todo: 丢掉中断、以及中断对应的map信息。
+丢掉ITT表里中断对应的map信息，去掉(pending表?)里的pending信息，清GICR的cache，以及
+丢掉对应的中断请求。也就是把对应中断的记录以及map信息全部清理掉。
 
-- INV
+- INV device_id, event_id
 
-todo: 清缓存。
+清对应中断在GICR中的LPI config table缓存。
 
-- CLEAR
+- CLEAR device_id, event_id
 
-todo: ...?
+清对应中断在GICR中的pending table缓存。
 
 中断路由控制
 -------------
@@ -357,7 +358,7 @@ AIA其实都是一样的。可以看到VMAPP和VMAPI/VMAPTI的逻辑是独立的
 
 去掉一个虚拟中断的映射。
 
-- VINVALL
+- VINVALL ICID?
 
 todo: 清cache。
 

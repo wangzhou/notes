@@ -1,3 +1,89 @@
 -v0.1 2025.2.5 Sherlock init
 
-简介：本文整理ARM KVM中vLPI实现的基本逻辑。
+简介：本文整理ARM KVM中vLPI实现的基本逻辑。代码基于6.14-rc5内核。
+
+
+基本逻辑
+---------
+
+
+
+
+ITS模拟
+--------
+
+
+
+
+GICv3中断注入
+--------------
+
+
+
+
+GICV4.x中断直通
+----------------
+
+```
+vfio_pci_core_ioctl
+  +-> vfio_pci_ioctl_set_irqs     <--- VFIO_DEVICE_SET_IRQS
+    +-> vfio_pci_set_irqs_ioctl
+      +-> vfio_pci_set_msi_trigger   <--- VFIO_PCI_MSI_IRQ_INDEX
+        +-> vfio_msi_set_block
+	  +-> vfio_msi_set_vector_signal  // 循环配置多个MSI？
+
+	    +-> vfio_msi_alloc_irq
+	    +-> request_irq(irq, vfio_msihandler, 0, ctx->name, trigger)
+	        /* token: trigger, irq: irq, */
+	    +-> irq_bypass_register_producer
+	          /* consumer和producer的token一样才执行__connect。这里是调用如下
+		   * 的add_producer。
+		   */
+	      +-> __connect()
+```
+
+```
+kvm_arch_irq_bypass_add_producer(kvm, virq, struct kvm_kernel_irq_routing_entry)
+  +-> kvm_vgic_v4_set_forwarding
+    +-> vgic_its_resolve_lpi
+        /* drivers/irqchip/irq-gic-v4.c */
+    +-> its_map_vlpi(virq, map)
+      +-> irq_set_vcpu_affinity(irq, xxx)
+        ...
+        +-> its_irq_set_vcpu_affinity    <--- struct irq_chip its_irq_chip
+          +-> its_vlpi_map  <--- MAP_VLPI
+            |
+            +-> its_map_vm
+            | +-> its_send_vmapp
+            |
+            +-> lpi_write_config
+            | +-> ?
+            |
+            +-> its_send_discard
+            |
+            +-> its_send_vmapti
+```
+
+todo: vLPI pending配置enable的分析。todo：应该在active domain
+```
+```
+
+```
+/* virt/kvm/kvm_main.c */
+kvm_vm_ioctl
+      /* KVM_IRQFD */
+  +-> kvm_irqfd
+    +-> kvm_irqfd_assign
+          /*
+           * 注册irq_bypass_consumer，其中的回调是：
+           * add_producer: kvm_arch_irq_bypass_add_producer 
+           * del_producer: kvm_arch_irq_bypass_del_producer
+           * stop:         kvm_arch_irq_bypass_stop
+           * start:        kvm_arch_irq_bypass_start
+           *
+           * 系统里有producers和consumers对应的链表，注册其实就是加到对应的链表里。
+           * 使用__connect函数可以把consumer和producer连接在一起，基本逻辑是consumer
+           * 调用add_producer，或者producer调用add_consumer。
+           */
+      +-> irq_bypass_register_consumer
+```
