@@ -120,9 +120,8 @@ PPI/SGI的各种状态信息保存在GICR的寄存器上，PPI/SGI一共也没�
 发往本核的，SGI在触发的时候就指定了接收SGI的目标CPU核。
 
 LPI的各种状态保存在LPI相关的各种表格里，其中全局的LPI configuration table保存所有
-LPI的优先级和enable情况，LPI pendingtable保存每个中断的inactive/pending状态。LPI
-的这两个表格是基础概念，对应物理CPU和vCPU都有这样的概念。
-(todo: 如何配置这些状态?)
+LPI的优先级和enable情况，LPI pending table保存每个中断的inactive/pending状态。LPI
+的这两个表格是基础概念，对应物理CPU和vCPU都有这样的概念。(todo: 如何配置这些状态?)
 
 LPI的路由信息保存在如上的device table、ITT、collection table里。对于ITS表格里的
 信息，软件需要通过向command queue下发comand的方式更新，表格的具体格式是硬件实现
@@ -144,8 +143,7 @@ SGI做IPI，CPU写ICC_SGI0R_EL1/ICC_SGI1R_EL1/ICC_ASGI1R_EL1触发SGI。
 到这个信息后会根据提前配置好的信息查找对应的INTID以及路由信息，并根据提前配置的
 路由信息，把中断信号送到对应的CPU。
 
-hypervisor可以写ICH_LRn_EL2向vCPU注入中断。
-(todo: 展开细节)
+hypervisor可以写ICH_LRn_EL2向vCPU注入中断。(todo: 展开细节)
 
 GIC编程接口
 ------------
@@ -231,7 +229,7 @@ ITS中的这些中断配置，需要软件提前通过ITS命令配置到ITS的�
 
 - MAPD device_id, ITT_base, ITT_size 
 
-告诉ITS去哪里找device_id对应的ITT表。(todo: device table怎么告诉GIC?)
+把device_id到ITT表的映射写入device table。(todo: device table怎么告诉GIC?)
 
 - MAPI device_id, event_id, collection_id
 - MAPTI device_id, event_id, INTID, collection_id
@@ -284,7 +282,23 @@ todo: ...
 中断虚拟化
 -----------
 
-GIC虚拟化下的各种配置表如下：
+我们这里先只看GIC硬件对于中断虚拟化的支持。GIC的KVM模拟方案中，GICD/GICR/ITS都是
+用软件模拟的，访问对应模块的寄存器会trap的KVM里，KVM调用host上的GIC驱动把guest的
+中断(虚拟中断)的硬件通路配置好，这样vCPU的中断实际报上来时就可以沿着之前配置好的
+硬件通路报到hypervisor(KVM)或者vCPU。KVM对GIC的模拟是独立的逻辑，在独立的文档里
+再描述吧。
+
+虚拟中断可以被送到vCPU要解决两个问题: 一个是GIC里需要维护虚拟中断的路由和状态信息，
+这就需要有配置和维护如上信息的接口和硬件支持；一个是要解决怎么把中断发给vCPU，host
+上的中断没有这个问题，中断来了，硬件直接切到对应的EL状态去处理，vCPU可能在运行，
+也可能不在运行，对于在运行的vCPU，虚拟中断可以直接发给它(打断其运行，使其执行流
+跳到中断处理向量)，对于下线的vCPU，虚拟中断可以由hypervisor(KVM)接管，hypervisor
+再向对应的vCPU中注入虚拟中断。
+
+GICv3不支持中断直通，虚拟中断必须先trap到KVM里，KVM通过ICH_LRn_EL2注入vCPU。各种
+类型的中断都通过该接口注入虚机。(todo: 怎么配置这里)
+
+GICv4虚拟化下的各种配置表如下，我们这里先只考虑GICv4.1的情况，GIC4.0不是这样。
 ```   
                                            Memory:
 
@@ -306,26 +320,13 @@ GIC虚拟化下的各种配置表如下：
                                             +-----------------+
  (every GICR has own vLPI pending table,  but share vLPI configuration table)    
 ```
-
-
-
-
-
-我们这里先只看GIC硬件对于中断虚拟化的支持。GIC的KVM模拟方案中，GICD/GICR/ITS都是
-用软件模拟的，访问对应模块的寄存器会trap的KVM里，KVM调用host上的GIC驱动把guest的
-中断(虚拟中断)的硬件通路配置好，这样vCPU的中断实际报上来时就可以沿着之前配置好的
-硬件通路报到hypervisor(KVM)或者vCPU。KVM对GIC的模拟是独立的逻辑，在独立的文档里
-再描述吧。
-
-虚拟中断可以被送到vCPU要解决两个问题: 一个是GIC里需要维护虚拟中断的路由和状态信息，
-这就需要有配置和维护如上信息的接口和硬件支持；一个是要解决怎么把中断发给vCPU，host
-上的中断没有这个问题，中断来了，硬件直接切到对应的EL状态去处理，vCPU可能在运行，
-也可能不在运行，对于在运行的vCPU，虚拟中断可以直接发给它(打断其运行，使其执行流
-跳到中断处理向量)，对于下线的vCPU，虚拟中断可以由hypervisor(KVM)接管，hypervisor
-再向对应的vCPU中注入虚拟中断。
-
-GICv3不支持中断直通，虚拟中断必须先trap到KVM里，KVM通过ICH_LRn_EL2注入vCPU。
-(todo: 怎么配置这里?)(只能注入vLPI?)
+虚拟化下的vLPI pending table和vLPI configuration table还是原来的语意，增加了vPE
+table和vPE configure table，其中vPE table是一个逻辑概念，物理上根据配置，vPE table
+可以是一个私有的表，也可以直接就是vPE configure table，vPE table保存vPE和GICR的
+对应关系，表示vPE当前"所在"的物理CPU，注意当说vPE在一个物理CPU上时，表示vPE线程
+在这个物理CPU上参与调度，所以vPE可能在线物理CPU，也可能是下线的状态。当直接用
+vPE config table做vPE table时，使用GITS_BASER2寄存器标记vPE config table的地址。
+vPE是否在线使用GICR_VPENDBASER.vPEID域段表示。
 
 GICv4.0/4.1中维护中断路由和状态信息的设计是基本一致的，GIC4.0在GICv3的基础上增加
 了中断直通，GIC4.1改进了中断直通并且增加了vSGI的直通。但是，GIC4.0和GIC4.1在协议
