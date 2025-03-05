@@ -7,6 +7,7 @@
 -v0.7 2024.7.25 Sherlock ...
 -v0.8 2024.8.14 Sherlock ...
 -v0.9 2024.8.17 Sherlock ...
+-v1.0 2025.3.05 Sherlock 重新整理虚拟化部分
 
 简介：本文是ARM的文档《GICv3 and GICv4 Software Overview》的一个学习笔记，GICv3/
       GICv4的基本逻辑会持续的总结到这个文档里。这个文档貌似是基于2016的GIC协议，
@@ -84,7 +85,7 @@ LPI只有inactive和pending，为什么只有两种？和ICC_IARn_EL1/ICC_CTRL_E
 GIC的各个模块
 --------------
 
-这一节我们先梳理各个模块的基本。GIC上包括的各个部件主要有GICC/GICR/GICD/ITS等，
+这一节我们先梳理各个模块的基本逻辑。GIC上包括的各个部件主要有GICC/GICR/GICD/ITS等，
 它们之间的逻辑关系如下图：
 ```   
                                            Memory:
@@ -283,6 +284,33 @@ todo: ...
 中断虚拟化
 -----------
 
+GIC虚拟化下的各种配置表如下：
+```   
+                                           Memory:
+
+        +----------+   +-------+           +------------+ +---+ +---------+
+        |   GICD   |   |  ITS  | --------> |device table| |ITT| |vPE table|
+        +----------+   +-------+ <-------- +------------+ +---+ ----------+
+                                            +-----------------+
+                                            |vPE config table |
++-------+  +-------+  +-------+  +-------+  +-----------------+    +------------------+
+| GICR  |  | GICR  |  | GICR  |  | GICR  |->|vPEx             |--->|vLPI pending table|
++-------+  +-------+  +-------+  +-------+  |                 |    +------------------+
+                                            |                 |----->+------------------------+
++-------+  +-------+  +-------+  +-------+  +-----------------+ +--->|vLPI configuration table|
+| GICC  |  | GICC  |  | GICC  |  | GICC  |  |...              | |    +------------------------+
+|       |  |       |  |       |  |       |  +-----------------+ |  +------------------+
+| core0 |  | core1 |  | core2 |  | core3 |  |vPEy             |-+->|vLPI pending table|
++-------+  +-------+  +-------+  +-------+  |                 | |  +------------------+
+                                            |                 |-+
+                                            +-----------------+
+ (every GICR has own vLPI pending table,  but share vLPI configuration table)    
+```
+
+
+
+
+
 我们这里先只看GIC硬件对于中断虚拟化的支持。GIC的KVM模拟方案中，GICD/GICR/ITS都是
 用软件模拟的，访问对应模块的寄存器会trap的KVM里，KVM调用host上的GIC驱动把guest的
 中断(虚拟中断)的硬件通路配置好，这样vCPU的中断实际报上来时就可以沿着之前配置好的
@@ -330,7 +358,7 @@ AIA其实都是一样的。可以看到VMAPP和VMAPI/VMAPTI的逻辑是独立的
 
 - VINVALL
 
-todo: 
+todo: 清cache。
 
 GICv4.1中增加了vSGI直通，GICv3和GICv4.0中，一个vCPU给另外一个vCPU发送SGI，发送方
 会trap到KVM里，KVM再向接收方GICR发信息，接收方GICR会给接收方CPU发中断，接收方CPU
@@ -352,4 +380,4 @@ vSGI的基本逻辑可以参考[这里](https://)。
 vPPI的逻辑
 -----------
 
-todo: vPPI的基本逻辑可以参考[这里](https://)。
+vPPI的基本逻辑可以参考[这里](https://)。
