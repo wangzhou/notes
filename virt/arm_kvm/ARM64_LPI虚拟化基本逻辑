@@ -6,8 +6,18 @@
 基本逻辑
 ---------
 
+虚拟机中的ITS设备是一个模拟出来的设备，对ITS相关资源的访问需要在KVM模拟，这些资源
+包括：ITS的mmio寄存器、ITS的command以及LPI config table/pending table。
 
+(todo: table怎么访问到的？)
+这里这个table可能就是放到IPA上的，只要把对应的地址配置给硬件就可以，然后下发一个
+清GICR cache的操作。
 
+(todo: vPE在位哪个物理CPU怎么传到KVM，并配置下的？)
+这个和guest没关系，是KVM调度的逻辑。
+
+(todo: 为啥要在访问vf msi/msi-x bar的时候，截获完成host的配置。似乎也确实需要一个
+guest/host信息都知晓的部件去完成这个操作)
 
 ITS模拟
 --------
