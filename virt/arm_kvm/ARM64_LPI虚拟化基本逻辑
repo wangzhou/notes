@@ -1,4 +1,6 @@
--v0.1 2025.2.5 Sherlock init
+-v0.1 2025.2.5   Sherlock init
+-v0.2 2025.3.12  Sherlock ...
+-v0.3 2025.3.13  Sherlock ...
 
 简介：本文整理ARM KVM中vLPI实现的基本逻辑。代码基于6.14-rc5内核。
 
@@ -6,12 +8,19 @@
 基本逻辑
 ---------
 
+host上不同的GIC版本对vGIC LPI的支持方式是不一样的，GICv3时，需要先trap到KVM，在
+KVM里向虚机注入中断，GICv4.0及后续的GIC版本支持vLPI直接注入虚机。
+
 虚拟机中的ITS设备是一个模拟出来的设备，对ITS相关资源的访问需要在KVM模拟，这些资源
 包括：ITS的mmio寄存器、ITS的command以及LPI config table/pending table。
 
-(todo: table怎么访问到的？)
+(todo: table怎么访问到的？guest的table有什么作用？)
 这里这个table可能就是放到IPA上的，只要把对应的地址配置给硬件就可以，然后下发一个
 清GICR cache的操作。
+
+完整的vLPI中断上报，需要提前把这个vLPI中断的相关信息配置到物理硬件里，这些信息包
+扩: 这个vLPI发出设备的device id、eventid(一般就是PCIe设备的BDF和MSI/MSI-X cap里
+的data域段)
 
 (todo: vPE在位哪个物理CPU怎么传到KVM，并配置下的？)
 这个和guest没关系，是KVM调度的逻辑。
@@ -22,62 +31,21 @@ guest/host信息都知晓的部件去完成这个操作)
 ITS模拟
 --------
 
-
+ARM KVM虚拟化的整体逻辑可以参考[这里](https://)，其中有涉及ITS在KVM里的模拟逻辑。
 
 
 GICv3中断注入
 --------------
 
-
+todo: ...
 
 
 GICV4.x中断直通
 ----------------
 
-```
-vfio_pci_core_ioctl
-  +-> vfio_pci_ioctl_set_irqs     <--- VFIO_DEVICE_SET_IRQS
-    +-> vfio_pci_set_irqs_ioctl
-      +-> vfio_pci_set_msi_trigger   <--- VFIO_PCI_MSI_IRQ_INDEX
-        +-> vfio_msi_set_block
-	  +-> vfio_msi_set_vector_signal  // 循环配置多个MSI？
-
-	    +-> vfio_msi_alloc_irq
-	    +-> request_irq(irq, vfio_msihandler, 0, ctx->name, trigger)
-	        /* token: trigger, irq: irq, */
-	    +-> irq_bypass_register_producer
-	          /* consumer和producer的token一样才执行__connect。这里是调用如下
-		   * 的add_producer。
-		   */
-	      +-> __connect()
-```
-
-```
-kvm_arch_irq_bypass_add_producer(kvm, virq, struct kvm_kernel_irq_routing_entry)
-  +-> kvm_vgic_v4_set_forwarding
-    +-> vgic_its_resolve_lpi
-        /* drivers/irqchip/irq-gic-v4.c */
-    +-> its_map_vlpi(virq, map)
-      +-> irq_set_vcpu_affinity(irq, xxx)
-        ...
-        +-> its_irq_set_vcpu_affinity    <--- struct irq_chip its_irq_chip
-          +-> its_vlpi_map  <--- MAP_VLPI
-            |
-            +-> its_map_vm
-            | +-> its_send_vmapp
-            |
-            +-> lpi_write_config
-            | +-> ?
-            |
-            +-> its_send_discard
-            |
-            +-> its_send_vmapti
-```
-
-todo: vLPI pending配置enable的分析。todo：应该在active domain
-```
-```
-
+针对vm fd的操作，本意是通过eventfd，在kvm中把虚机中断注入给虚机。对于支持中断直通
+的场景，这里会执行如下irq_bypass_register_consumer，注册架构相关的consumer。这里
+的consumer和如下vfio_pci_core_ioctl一起完成直通中断在host物理GIC上的配置。
 ```
 /* virt/kvm/kvm_main.c */
 kvm_vm_ioctl
@@ -97,3 +65,74 @@ kvm_vm_ioctl
            */
       +-> irq_bypass_register_consumer
 ```
+
+虚机中访问MSI-X BAR的时候，会导致虚机退出到KVM，KVM进一步推出到qemu的vfio设备的
+模拟逻辑里，其中会针对vfio设备的fd调用如下ioctl在host上配置对应中断的支持通路。
+(todo: MSI cap的逻辑是怎么样的？)
+```
+vfio_pci_core_ioctl
+  +-> vfio_pci_ioctl_set_irqs     <--- VFIO_DEVICE_SET_IRQS
+    +-> vfio_pci_set_irqs_ioctl
+      +-> vfio_pci_set_msi_trigger   <--- VFIO_PCI_MSI_IRQ_INDEX
+        +-> vfio_msi_set_block
+          +-> vfio_msi_set_vector_signal  // 循环配置多个MSI？
+
+            +-> vfio_msi_alloc_irq
+            +-> request_irq(irq, vfio_msihandler, 0, ctx->name, trigger)
+                /* token: trigger, irq: irq, */
+            +-> irq_bypass_register_producer
+                  /*
+                   * consumer和producer的token一样才执行__connect。这里是调用上面
+                   * 注册的consumer中的add_producer回调函数。
+                   */
+              +-> __connect()
+```
+
+这里展开分析add_producer函数。
+(todo: 虚机里的GICv3的table和host上的vtable的对应关系？)
+```
+kvm_arch_irq_bypass_add_producer(kvm, virq, struct kvm_kernel_irq_routing_entry)
+  +-> kvm_vgic_v4_set_forwarding
+    +-> vgic_its_resolve_lpi
+        /* drivers/irqchip/irq-gic-v4.c */
+    +-> its_map_vlpi(virq, map)
+      +-> irq_set_vcpu_affinity(irq, xxx)
+        ...
+        +-> its_irq_set_vcpu_affinity        <--- struct irq_chip its_irq_chip
+          +-> its_vlpi_map                   <--- MAP_VLPI
+            |
+            +-> its_map_vm
+            | +-> its_send_vmapp
+            |
+            +-> lpi_write_config
+            | +-> ?
+            |
+            +-> its_send_discard
+            |
+            +-> its_send_vmapti
+```
+
+todo: vLPI pending配置enable的分析。todo：应该在active domain
+```
+```
+
+一个例子
+---------
+
+上帝视角看下当虚机系统里linux内核调用enable_irq时整个调用流程是怎么样的。
+```
+enable_irq -> __enable_irq -> irq_startup
+
+/* 配置中断使能 */
+__irq_startup
+  +-> enable_irq
+    +-> unmask_irq           <-- 直接找见最底层的its_msi_irq_chip中的unmask_irq
+      +-> its_unmask_msi_irq <-- todo: 内核这里有变动？
+
+/* 配置中断和core的关系 */
+irq_setup_affinity
+  +-> its_set_affinity
+```
+
+
+

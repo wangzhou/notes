@@ -392,16 +392,19 @@ vtimer(11)/arch_timer(12)/硬中断号，软中断号           doing #
 arm spe硬件逻辑，可以具体干什么		               doing
 gic硬件笔记				               doing #
 ARM中断虚拟化					       doing ##
-kvm pmu模拟逻辑					       doing ##
+kvm pmu模拟逻辑					       doing ###
 arm vtimer		                               doing
 vSGI		                                       doing
 IPI相关的基本逻辑                                      doing
-vLPI虚拟化/vfio				               doing ##
+vLPI虚拟化/vfio				               doing ###
 
 kvm debug/kvmtop	                               todo
 virsh						       todo
-基于iommufd的vSVA基本逻辑			       todo  ##
+基于iommufd的vSVA基本逻辑			       todo  ###
 vNMI
 acpi
 
 qemu gic的配置
+KVM errate framework
+cpu mode patch
+multiple vsmmu
