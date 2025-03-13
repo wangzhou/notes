@@ -126,13 +126,41 @@ enable_irq -> __enable_irq -> irq_startup
 /* 配置中断使能 */
 __irq_startup
   +-> enable_irq
-    +-> unmask_irq           <-- 直接找见最底层的its_msi_irq_chip中的unmask_irq
-      +-> its_unmask_msi_irq <-- todo: 内核这里有变动？
+    +-> unmask_irq
+         /* 
+          * 直接找见最底层的PCIe设备的irq_unmask回调，内核这里有变动，以前的版本
+          * 是its_unmask_msi_irq
+          */
+      +-> pci_irq_unmask_msix
+        +-> cond_unmask_parent
+              /* irq-gic-v3-its.c: its_irq_chip的its_unmask_irq */
+          +-> its_unmask_irq
+            +-> lpi_update_config
+                  /*
+                   * 对于虚机或者只有host的情况，就是直接配置LPI config table的
+                   * 对应位置，具体位置是从config table的8192 byte起，以hwirq为
+                   * 索引，每个中断粘一个byte。
+                   */
+              +-> lpi_write_config
+                  /* 
+                   * guest上执行这个命令会trap到KVM里面模拟，kvm里的执行流程是:
+                   *
+                   * vgic_its_cmd_handle_inv
+                   *   -> update_lpi_config
+                   *     -> its_prop_update_vlpi
+                   *       -> irq_set_vcpu_affinity  具体为its_irq_chip里的回调
+                   *         -> its_vlpi_prop_update
+                   *            ...
+                   * kvm直接读guest里的LPI config table对应中断的配置，在host中
+                   * 同步到vLPI config table。
+                   */
+              +-> its_send_inv
+            /* guest里访问MSIX BAR触发退出到qemu里处理 */
+        +-> pci_msix_unmask
 
 /* 配置中断和core的关系 */
 irq_setup_affinity
   +-> its_set_affinity
+        /* guest里movi命令触发kvm里对其的模拟 */
+    +-> its_send_movi
 ```
-
-
-
