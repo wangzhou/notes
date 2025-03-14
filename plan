@@ -408,3 +408,5 @@ qemu gic的配置
 KVM errate framework
 cpu mode patch
 multiple vsmmu
+
+kvm和调度

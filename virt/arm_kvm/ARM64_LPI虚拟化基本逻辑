@@ -175,3 +175,39 @@ irq_setup_affinity
         /* guest里movi命令触发kvm里对其的模拟 */
     +-> its_send_movi
 ```
+
+vCPU上下线逻辑
+---------------
+
+vCPU上下线中关于vLPI的处理。
+
+```
+kvm_sched_out
+  +-> kvm_arch_vcpu_put
+    ...
+    +-> kvm_vgic_put
+      +-> vgic_v3_put
+        +-> vgic_v4_put                        <-- 没有直通在这里返回
+          +-> its_make_vpe_non_resident
+            +-> its_send_vpe_cmd               <-- DESCHEDULE_VPE
+              +-> irq_set_vcpu_affinity
+                +-> its_vpe_set_vcpu_affinity  <-- irq_chip its_vpe_irq_chip
+                  +-> its_vpe_deschedule
+                    ...
+```
+
+```
+kvm_sched_in -> kvm_arch_vcpu_load -> kvm_vgic_load -> vgic_v3_load -> vgic_v4_load
+
+vgic_v4_load
+  +-> irq_set_affinity
+    ...
+    +-> its_vpe_set_affinity      <-- chip->irq_set_affinity, its_vpe_irq_chip
+      ...
+      +-> its_send_vmovp
+
+  +-> its_make_vpe_resident
+    ...
+    +-> its_vpe_set_vcpu_affinity <-- SCHEDULE_VPE
+      +-> todo: GICR_VPROPBASER/GICR_VPENDBASER
+```
