@@ -1,6 +1,7 @@
 -v0.1 2025.2.5   Sherlock init
 -v0.2 2025.3.12  Sherlock ...
 -v0.3 2025.3.13  Sherlock ...
+-v0.4 2025.3.14  Sherlock ...
 
 简介：本文整理ARM KVM中vLPI实现的基本逻辑。代码基于6.14-rc5内核。
 
@@ -14,19 +15,29 @@ KVM里向虚机注入中断，GICv4.0及后续的GIC版本支持vLPI直接注入
 虚拟机中的ITS设备是一个模拟出来的设备，对ITS相关资源的访问需要在KVM模拟，这些资源
 包括：ITS的mmio寄存器、ITS的command以及LPI config table/pending table。
 
-(todo: table怎么访问到的？guest的table有什么作用？)
-这里这个table可能就是放到IPA上的，只要把对应的地址配置给硬件就可以，然后下发一个
-清GICR cache的操作。
+虚机中的ITS的各种table是放到IPA上的。软件通过ITS command访问device table、ITT以及
+connection table，虚机中的ITS commnand触发KVM trap，KVM中模拟对应的ITS command，
+这里的模拟就是在host向物理ITS发ITS command，把对应的配置下发到硬件。软件直接可以
+访问LPI config table，虚机中配置LPI config table后会发INV命令清理硬件中对应的缓存，
+KVM模拟INV命令时读虚机LPI config table的对应地址拿到对应中断的配置信息，然后更新
+对应的vLPI config table域段。LPI pending table似乎只有硬件可以访问？
 
-完整的vLPI中断上报，需要提前把这个vLPI中断的相关信息配置到物理硬件里，这些信息包
-扩: 这个vLPI发出设备的device id、eventid(一般就是PCIe设备的BDF和MSI/MSI-X cap里
-的data域段)
+物理上看，完整的vLPI中断上报，需要提前把这个vLPI中断的相关信息配置到物理硬件里，
+这些信息包扩: 这个vLPI发出设备的device id、eventid(一般就是PCIe设备的BDF和MSI/MSI-X
+cap里的data域段)，vLPI的中断号，vLPI要发送到的vCPU，vCPU在哪个物理CPU上，当vCPU
+不在位时需要触发的doorbell中断。从虚机的视角上看，vLPI的配置信息只有device id、
+event id、中断号以及vCPU，虚机并不感知物理CPU。
 
-(todo: vPE在位哪个物理CPU怎么传到KVM，并配置下的？)
-这个和guest没关系，是KVM调度的逻辑。
+KVM里模拟虚机ITS command，把vLPI的device id、event id、中断号以及vCPU配置到物理
+ITS上。KVM在vCPU上下线时，把vCPU和物理CPU的映射关系配置给物理ITS(todo?)。
 
+KVM模拟虚机的MAPI时没有下ITS command，实际物理配置发生在kvm_vgic_v4_set_forwarding
+的流程里?
 (todo: 为啥要在访问vf msi/msi-x bar的时候，截获完成host的配置。似乎也确实需要一个
 guest/host信息都知晓的部件去完成这个操作)
+
+todo: vCPU上下线时对vCPU和物理CPU信息的调整。
+todo: 直通的基本逻辑。
 
 ITS模拟
 --------
