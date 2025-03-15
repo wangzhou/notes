@@ -58,7 +58,6 @@ shell wait
 write a qemu dma engine device
 qemu irq
 qemu cpu
-qemu vfio
 kernel kvm
 sva process kill logic
 glib g_hash_table  #
@@ -410,3 +409,4 @@ cpu mode patch
 multiple vsmmu
 
 kvm和调度
+qemu vfio/vLPI中断/热迁移/config和BAR空间模拟/iommufd

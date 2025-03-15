@@ -7,12 +7,17 @@ qemu模拟ARM构架综合分析
 
 简介：本文分析qemu模拟ARM平台的方式，我们并不会深入分析相关的技术细节，只是大概
       看下整体构架，点出各个模拟的关键点，保证我们在随后的深入分析中可以迅速找见
-      相关代码。
+      相关代码。使用的qemu版本是9.1.90。
 
 数据结构
 ---------
 
-todo: accel类，machine类
+todo: accel类
+
+machine类的继承关系：
+```
+TYPE_OBJECT <- TYPE_MACHINE <- TYPE_VIRT_MACHINE
+```
 
 ARM核的数据结果大概是如下：
 ```
@@ -92,17 +97,21 @@ main
     +-> qmp_x_exit_preconfig
       +-> qemu_machine_creation_done
         +-> qdev_machine_creation_done
-	  +-> cpu_synchronize_all_post_init
-	        /*
-		 * 调用accel/kvm/kvm-accel-ops.c里的kvm_cpu_synchronize_post_init
-		 * 的回调把kvm_arch_put_registers放到vcpu的work_list里。
-		 */
-	    +-> cpu_synchronize_post_init
+          +-> cpu_synchronize_all_post_init
+                /*
+                 * 调用accel/kvm/kvm-accel-ops.c里的kvm_cpu_synchronize_post_init
+                 * 的回调把kvm_arch_put_registers放到vcpu的work_list里。
+                 */
+            +-> cpu_synchronize_post_init
           /* 如果是热迁移的迁入端，做相应的准备工作 */
       +-> qmp_migrate_incoming
         todo: ...
+
+    +-> accel_setup_post
+      ...
 ```
 
+todo: machvirt_init何时调用?
 ```
 /* hw/arm/virt.c */
 machvirt_init
@@ -126,23 +135,23 @@ arm_cpu_realizefn
   +-> qemu_init_vcpu
     +-> cpus_accel->create_vcpu_thread
        do {
-	     /* vCPU执行的核心函数 */
+             /* vCPU执行的核心函数 */
          +-> kvm_cpu_exec
-	   +-> kvm_arch_put_registers(cpu, KVM_PUT_RUNTIME_STATE)
-	   +-> kvm_vcpu_ioctl(cpu, KVM_RUN, 0)
-	       /* 处理vCPU退出 */
-	   +-> switch (run->exit_reason)
-	       case ...
-	       case ...
+           +-> kvm_arch_put_registers(cpu, KVM_PUT_RUNTIME_STATE)
+           +-> kvm_vcpu_ioctl(cpu, KVM_RUN, 0)
+               /* 处理vCPU退出 */
+           +-> switch (run->exit_reason)
+               case ...
+               case ...
 
-	 +-> qemu_wait_io_event 
-	   +-> qemu_wait_io_event_common
-	         /*
-		  * 执行之前放入vcpu work_list里的任务，执行kvm_arch_put_registers。
-		  * 语意是把CPUState中的寄存器保存到list寄存器，再把list寄存器的
-		  * 数据通过ioctl KVM_SET_ONE_REG配置到KVM里。
-		  */
-	     +-> process_queued_cpu_work
+         +-> qemu_wait_io_event 
+           +-> qemu_wait_io_event_common
+                 /*
+                  * 执行之前放入vcpu work_list里的任务，执行kvm_arch_put_registers。
+                  * 语意是把CPUState中的寄存器保存到list寄存器，再把list寄存器的
+                  * 数据通过ioctl KVM_SET_ONE_REG配置到KVM里。
+                  */
+             +-> process_queued_cpu_work
        }
 ```
 
