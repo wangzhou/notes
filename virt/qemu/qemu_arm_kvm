@@ -1,9 +1,10 @@
 qemu模拟ARM构架综合分析
 ========================
 
--v0.1 2023.1.19 Sherlock init
--v0.2 2024.11.2 Sherlock ...
--v0.3 2024.11.3 Sherlock ...
+-v0.1 2023.1.19  Sherlock init
+-v0.2 2024.11.2  Sherlock ...
+-v0.3 2024.11.3  Sherlock ...
+-v0.4 2025.03.15 Sherlock ...
 
 简介：本文分析qemu模拟ARM平台的方式，我们并不会深入分析相关的技术细节，只是大概
       看下整体构架，点出各个模拟的关键点，保证我们在随后的深入分析中可以迅速找见
@@ -12,7 +13,10 @@ qemu模拟ARM构架综合分析
 数据结构
 ---------
 
-todo: accel类
+accel类的继承关系：
+```
+TYPE_OBJECT <- TYPE_ACCEL <- TYPE_KVM_ACCEL
+```
 
 machine类的继承关系：
 ```
@@ -68,6 +72,15 @@ aarch64_host_initfn
 
 可以看到aarch64_a57_initfn里直接定义了a57需要支持的CPU特性。
 
+虚机的数据结构为：
+```
+struct VirtMachineState {
+    MachineState parent;
+    Notifier machine_done;
+    ...
+}
+```
+
 
 启动流程
 ---------
@@ -77,7 +90,7 @@ todo: 分清实例创建和realize的点。
 ```
 main 
   +-> qemu_init
-
+    ...
     +-> qemu_create_machine
     |
     +-> configure_accelerators
@@ -93,38 +106,47 @@ main
     |          * /dev/kvm的fd和vm的fd保存在KVMState中，分别是fd和vmfd。
     |          */
     |     +-> acc->init_machine
+    |       ...
+    |       +-> kvm_arch_init
+    |       +-> kvm_irqchip_create
+    |       +-> kvm_memory_listener_register
+    |
     |
     +-> qmp_x_exit_preconfig
-      +-> qemu_machine_creation_done
-        +-> qdev_machine_creation_done
-          +-> cpu_synchronize_all_post_init
-                /*
-                 * 调用accel/kvm/kvm-accel-ops.c里的kvm_cpu_synchronize_post_init
-                 * 的回调把kvm_arch_put_registers放到vcpu的work_list里。
-                 */
-            +-> cpu_synchronize_post_init
-          /* 如果是热迁移的迁入端，做相应的准备工作 */
-      +-> qmp_migrate_incoming
-        todo: ...
-
+    | +-> qemu_machine_creation_done
+    |   +-> qdev_machine_creation_done
+    |     +-> cpu_synchronize_all_post_init
+    |           /*
+    |            * 调用accel/kvm/kvm-accel-ops.c里的kvm_cpu_synchronize_post_init
+    |            * 的回调把kvm_arch_put_registers放到vcpu的work_list里。
+    |            */
+    |       +-> cpu_synchronize_post_init
+    |
+    | +-> if (incoming)    <--- 如果是热迁移的迁入端，做相应的准备工作
+    |       +-> qmp_migrate_incoming
+    |         +-> todo: ...
+    |           +-> vm_start
+    |
+    |     else             <--- 如上流程中拉起的vCPU线程中vCPU并没有投入于行，这里
+    |       +-> qmp_cont        才实际上促使vCPU运行起来。
+    |         +-> vm_start
+    |           +-> resume_all_vcpus
+    |             +-> cpu_resume
+    |               +-> qemu_cpu_kick
+    |
     +-> accel_setup_post
       ...
+  +-> qemu_main
+    +-> main_loop_wait
 ```
 
-todo: machvirt_init何时调用?
+machvirt_init应该是在machine对象建立的时候调用。
 ```
 /* hw/arm/virt.c */
 machvirt_init
-  +-> kvm_arm_create_host_vcpu
-    |
-    +-> kvm_create_vcpu
-    | +-> kvm_vm_ioctl(s, KVM_CREATE_VCPU, vcpu_id)
-    |
-    +-> kvm_arch_init_vcpu
-    |     /* 拿到kvm里的寄存器信息，并更新到cpreg里 */
-    | +-> kvm_arm_init_cpreg_list
-    |
-    +-> kvm_park_vcpu
+  /* 创建虚机上的各个设备 */
+  ....
+  +-> qdev_realize <-- 对于每个possible CPU调用CPU的realize函数。
 ```
 
 vCPU线程在vCPU的realize函数中创建，线程函数是accel/kvm/kvm-accel-ops.c里的
@@ -133,9 +155,16 @@ kvm_start_vcpu_thread。这个是vCPU实际开始运行的位置。
 /* target/arm/cpu.c */
 arm_cpu_realizefn
   +-> qemu_init_vcpu
-    +-> cpus_accel->create_vcpu_thread
+    +-> cpus_accel->create_vcpu_thread   <-- kvm_vcpu_thread_fn in kvm-accel-ops.c
+       +-> kvm_init_vcpu
+         +-> kvm_create_vcpu
+           +-> kvm_vm_ioctl(s, KVM_CREATE_VCPU, vcpu_id)
+         +-> kvm_arch_init_vcpu
+               /* 拿到kvm里的寄存器信息，并更新到cpreg里 */
+           +-> kvm_arm_init_cpreg_list
+
+       /* vCPU执行的核心循环 */
        do {
-             /* vCPU执行的核心函数 */
          +-> kvm_cpu_exec
            +-> kvm_arch_put_registers(cpu, KVM_PUT_RUNTIME_STATE)
            +-> kvm_vcpu_ioctl(cpu, KVM_RUN, 0)
@@ -155,6 +184,7 @@ arm_cpu_realizefn
        }
 ```
 
+展开看下kvm_arch_put_registers的细节：
 ```
 kvm_arch_put_registers
   +-> write_cpustate_to_list     <--- 为啥要多这么一步？
@@ -184,6 +214,11 @@ kvm_arch_put_registers
        +-> define_arm_cp_regs
 ```
 
+内存模拟
+---------
+
+ todo: ...
+
 GIC模拟
 --------
 
@@ -199,8 +234,9 @@ SMMU模拟
 ACPI表构建
 -----------
 
- todo: ...
-
+ virt_machine_done
+   +-> virt_acpi_setup
+     +-> todo: ...
 
 热迁移的逻辑
 -------------
