@@ -364,7 +364,6 @@ pv virt逻辑/pv preempt/pv spinlock/pv steal time         todo
 linux/gic 中断体系构架				         todo
 cppc cpu capability的逻辑				 todo
 vfio中断的逻辑
-qemu dts/acpi/qemu生成acpi表的逻辑
 
 vm cache/pptt/clidr pptt表定义/acpi生成代码/内核解析代码/qemu呈现总逻辑，和命令行
 kvm vcpu cpu id初始化
@@ -401,7 +400,6 @@ kvm debug/kvmtop	                               todo
 virsh						       todo
 基于iommufd的vSVA基本逻辑			       todo  ###
 vNMI
-acpi
 
 qemu gic的配置
 KVM errate framework
@@ -410,3 +408,7 @@ multiple vsmmu
 
 kvm和调度
 qemu vfio/vLPI中断/热迁移/config和BAR空间模拟/iommufd
+qemu生成acpi表的逻辑，MADT(gic)/PPTT(cache)
+ARM GIC #
+LPI     #
+vLPI vCPU到物理CPU的映射。
