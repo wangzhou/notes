@@ -408,7 +408,8 @@ multiple vsmmu
 
 kvm和调度
 qemu vfio/vLPI中断/热迁移/config和BAR空间模拟/iommufd
-qemu生成acpi表的逻辑，MADT(gic)/PPTT(cache)
+qemu生成acpi表的逻辑，MADT(gic)/PPTT(cache)/cppc
 ARM GIC #
 LPI     #
-vLPI vCPU到物理CPU的映射。
+vLPI vCPU到物理CPU的映射 #
+kvm debug #

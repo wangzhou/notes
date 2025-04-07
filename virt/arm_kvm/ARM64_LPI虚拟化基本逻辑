@@ -2,6 +2,7 @@
 -v0.2 2025.3.12  Sherlock ...
 -v0.3 2025.3.13  Sherlock ...
 -v0.4 2025.3.14  Sherlock ...
+-v0.5 2025.4.04  Sherlock ...
 
 简介：本文整理ARM KVM中vLPI实现的基本逻辑。代码基于6.14-rc5内核。
 
@@ -12,37 +13,42 @@
 host上不同的GIC版本对vGIC LPI的支持方式是不一样的，GICv3时，需要先trap到KVM，在
 KVM里向虚机注入中断，GICv4.0及后续的GIC版本支持vLPI直接注入虚机。
 
-虚拟机中的ITS设备是一个模拟出来的设备，对ITS相关资源的访问需要在KVM模拟，这些资源
-包括：ITS的mmio寄存器、ITS的command以及LPI config table/pending table。
+虚拟机中的ITS设备是一个模拟出来的设备，对ITS相关资源的访问需要在KVM模拟。首先KVM
+需要模拟ITS的MMIO寄存器，通过模拟的MMIO寄存器，guest ITS上各种配置要被真实的配置
+到物理ITS上。
 
 虚机中的ITS的各种table是放到IPA上的。软件通过ITS command访问device table、ITT以及
-connection table，虚机中的ITS commnand触发KVM trap，KVM中模拟对应的ITS command，
-这里的模拟就是在host向物理ITS发ITS command，把对应的配置下发到硬件。软件直接可以
-访问LPI config table，虚机中配置LPI config table后会发INV命令清理硬件中对应的缓存，
-KVM模拟INV命令时读虚机LPI config table的对应地址拿到对应中断的配置信息，然后更新
-对应的vLPI config table域段。LPI pending table似乎只有硬件可以访问？
+connection table，向虚机中的ITS发commnand(更新虚拟ITS commnand队列的写入指针)触发
+KVM trap，KVM中模拟对应的ITS command，这里的模拟就是在host向物理ITS发ITS command，
+把对应的配置下发到硬件。软件直接可以访问LPI config table，虚机中配置LPI config table
+后会发INV命令清理硬件中对应的缓存，KVM模拟INV命令时读虚机LPI config table的对应
+地址拿到对应中断的配置信息，然后更新对应的vLPI config table域段。
 
 物理上看，完整的vLPI中断上报，需要提前把这个vLPI中断的相关信息配置到物理硬件里，
 这些信息包扩: 这个vLPI发出设备的device id、eventid(一般就是PCIe设备的BDF和MSI/MSI-X
 cap里的data域段)，vLPI的中断号，vLPI要发送到的vCPU，vCPU在哪个物理CPU上，当vCPU
-不在位时需要触发的doorbell中断。从虚机的视角上看，vLPI的配置信息只有device id、
+不在位时是否需要触发的doorbell中断。从虚机的视角上看，vLPI的配置信息只有device id、
 event id、中断号以及vCPU，虚机并不感知物理CPU。
 
 KVM里模拟虚机ITS command，把vLPI的device id、event id、中断号以及vCPU配置到物理
 ITS上。KVM在vCPU上下线时，把vCPU和物理CPU的映射关系配置给物理ITS(todo?)。
 
-KVM模拟虚机的MAPI时没有下ITS command，实际物理配置发生在kvm_vgic_v4_set_forwarding
-的流程里?
-(todo: 为啥要在访问vf msi/msi-x bar的时候，截获完成host的配置。似乎也确实需要一个
-guest/host信息都知晓的部件去完成这个操作)
-
-todo: vCPU上下线时对vCPU和物理CPU信息的调整。
-todo: 直通的基本逻辑。
+vLPI直通的基本逻辑可以参考[这里](https://todo)。
 
 ITS模拟
 --------
 
 ARM KVM虚拟化的整体逻辑可以参考[这里](https://)，其中有涉及ITS在KVM里的模拟逻辑。
+
+因为是模拟ITS，所以并不要需要模拟行为当下生效，只要功能正确就好。比如，KVM模拟虚机
+的MAPI时没有下ITS command，实际物理配置发生在kvm_vgic_v4_set_forwarding的流程里，
+是在guest访问VF MSI/MSI-X BAR的时候，截获完成host的配置。
+
+下面展开看下KVM里对ITS的各个命令都是怎么模拟的。KVM里为了模拟ITS，为ITS的device
+table/ITT/collection table建立了对应的软件数据结构，为创建的每个虚拟中断也建立了
+数据结构(vgic_irq)。对ITS comand的模拟基本上在改动这些数据结构中的内容，部分comand
+会涉及到硬件配置的改动。这些数据结构估计大部分是GICv3用的，GICv4.x后vLPI可以直通
+了，用的会比较少。
 
 
 GICv3中断注入
@@ -127,6 +133,42 @@ todo: vLPI pending配置enable的分析。todo：应该在active domain
 ```
 ```
 
+vCPU上下线逻辑
+---------------
+
+vCPU上下线中关于vLPI的处理。
+
+```
+kvm_sched_out
+  +-> kvm_arch_vcpu_put
+    ...
+    +-> kvm_vgic_put
+      +-> vgic_v3_put
+        +-> vgic_v4_put                        <-- 没有直通在这里返回
+          +-> its_make_vpe_non_resident
+            +-> its_send_vpe_cmd               <-- DESCHEDULE_VPE
+              +-> irq_set_vcpu_affinity
+                +-> its_vpe_set_vcpu_affinity  <-- irq_chip its_vpe_irq_chip
+                  +-> its_vpe_deschedule
+                    ...
+```
+
+```
+kvm_sched_in -> kvm_arch_vcpu_load -> kvm_vgic_load -> vgic_v3_load -> vgic_v4_load
+
+vgic_v4_load
+  +-> irq_set_affinity
+    ...
+    +-> its_vpe_set_affinity      <-- chip->irq_set_affinity, its_vpe_irq_chip
+      ...
+      +-> its_send_vmovp
+
+  +-> its_make_vpe_resident
+    ...
+    +-> its_vpe_set_vcpu_affinity <-- SCHEDULE_VPE
+      +-> todo: GICR_VPROPBASER/GICR_VPENDBASER
+```
+
 一个例子
 ---------
 
@@ -176,38 +218,3 @@ irq_setup_affinity
     +-> its_send_movi
 ```
 
-vCPU上下线逻辑
----------------
-
-vCPU上下线中关于vLPI的处理。
-
-```
-kvm_sched_out
-  +-> kvm_arch_vcpu_put
-    ...
-    +-> kvm_vgic_put
-      +-> vgic_v3_put
-        +-> vgic_v4_put                        <-- 没有直通在这里返回
-          +-> its_make_vpe_non_resident
-            +-> its_send_vpe_cmd               <-- DESCHEDULE_VPE
-              +-> irq_set_vcpu_affinity
-                +-> its_vpe_set_vcpu_affinity  <-- irq_chip its_vpe_irq_chip
-                  +-> its_vpe_deschedule
-                    ...
-```
-
-```
-kvm_sched_in -> kvm_arch_vcpu_load -> kvm_vgic_load -> vgic_v3_load -> vgic_v4_load
-
-vgic_v4_load
-  +-> irq_set_affinity
-    ...
-    +-> its_vpe_set_affinity      <-- chip->irq_set_affinity, its_vpe_irq_chip
-      ...
-      +-> its_send_vmovp
-
-  +-> its_make_vpe_resident
-    ...
-    +-> its_vpe_set_vcpu_affinity <-- SCHEDULE_VPE
-      +-> todo: GICR_VPROPBASER/GICR_VPENDBASER
-```
