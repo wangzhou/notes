@@ -3,6 +3,7 @@ Linux CPU online/offline
 
 -v0.1 2022.11.17 Sherlock init
 -v0.2 2024.10.25 Sherlock ...
+-v0.3 2025.04.07 Sherlock ...
 
 简介：本文分析Linux中CPU online/offline的实现逻辑。
 
@@ -73,14 +74,15 @@ cpu_subsys_online
        /* arch/arm64/kernel/smp.c */
    +-> __cpu_up
      +-> boot_secondary
-           /* 回调定义在arch/arm64/kernel/psci.c */
-       +-> ops->cpu_boot // cpu_psci_cpu_boot
+           /* 回调定义在arch/arm64/kernel/psci.c，cpu_psci_cpu_boot */
+       +-> ops->cpu_boot
              /* 不同版本的psci_ops定义在: drivers/firmware/psci/psci.c */
          +-> psci_ops.cpu_on
                /*
-                * 以0.2版本为例。todo：psci的协议，以及host/guest上的实现?
+                * 以0.2版本为例。
                 * 
-                * 一个用SMC，一个用HVC，KVM里支持了HVC的实现。
+                * 根据FADT.arm_boot_flags决定是用SMC还是用HVC(在psci_acpi_init())。
+                * psci_acpi_init->psci_probe中探测psci版本。
                 */
            +-> psci_0_2_cpu_on
 
@@ -89,31 +91,18 @@ cpu_subsys_online
      +-> if (cpu_online(cpu)) return 0;
          ...
 ```
-invoke_psci_fn = __invoke_psci_fn_hvc
-invoke_psci_fn = __invoke_psci_fn_smc
 
-static __always_inline unsigned long                                            
-__invoke_psci_fn_hvc(unsigned long function_id,                                 
-                     unsigned long arg0, unsigned long arg1,                    
-                     unsigned long arg2)                                        
-{                                                                               
-        struct arm_smccc_res res;                                               
-                                                                                
-        arm_smccc_hvc(function_id, arg0, arg1, arg2, 0, 0, 0, 0, &res);         
-        return res.a0;                                                          
-}                                                                               
-
+以SMC为例，展开psci_0_2_cpu_on的逻辑：
+```
 psci_0_2_cpu_on
   +-> __psci_cpu_on(PSCI_FN_NATIVE(0_2, CPU_ON), cpuid, entry_point)
-        /* function_id为PSCI_0_2_FN64_CPU_ON, cpuid的语意是mpidr */
+        /* function_id为PSCI_0_2_FN64_CPU_ON */
     +-> invoke_psci_fn(fn, cpuid, entry_point, 0)
-         /* arch/arm64/kvm/psci.c */
-       +-> kvm_psci_vcpu_on(vcpu)
+      +-> arm_smccc_smc(function_id, arg0, arg1, arg2, 0, 0, 0, 0, &res)
+            /* arch/arm64/kernel/smccc-call.S，smc为核心的一断汇编在这里 */
+        +-> __arm_smccc_smc
 
-
-
-
-
-
-
-
+               /* 虚机里执行smc，trap到KVM一路执行到arch/arm64/kvm/psci.c如下函数 */
+           +-> kvm_psci_vcpu_on(vcpu)
+```
+kvm_psci_vcpu_on reset vCPU，把vCPU线程投入执行。
