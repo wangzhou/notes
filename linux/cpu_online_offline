@@ -1,5 +1,5 @@
-Linux CPU online/offline
-=========================
+Linux CPU online/offline的基本逻辑
+===================================
 
 -v0.1 2022.11.17 Sherlock init
 -v0.2 2024.10.25 Sherlock ...
@@ -26,7 +26,7 @@ online/offline使用
 -------------
 
 kernel/sched/idle.c
-
+```
  do_idle
    +-> arch_cpu_idle_dead
      +-> cpu_ops[]->cpu_stop()
@@ -36,7 +36,7 @@ kernel/sched/idle.c
 
  cpu_startup_entry
    +-> do_idle
-
+```
 
  cpu device
 
@@ -51,7 +51,6 @@ driver_init
     +-> subsys_system_register(&cpu_subsys, cpu_root_attr_groups)
     +-> cpu_dev_register_generic
       +-> register_cpu
-
 ```
 
 ```
@@ -74,7 +73,14 @@ cpu_subsys_online
        /* arch/arm64/kernel/smp.c */
    +-> __cpu_up
      +-> boot_secondary
-           /* 回调定义在arch/arm64/kernel/psci.c，cpu_psci_cpu_boot */
+           /*
+            * 回调定义在arch/arm64/kernel/psci.c: cpu_psci_cpu_boot。注意，这个
+            * 函数把cpu编号转成mpidr，这个转换关系是提前解析，然后保存在
+            * __cpu_logical_map这个表里。CPU核的mpidr是从ACPI MADT表的GICC mpidr
+            * 域段解析到的，解析的具体路径为: (NUMA node的解析也在这里)
+            *
+            * smp_init_cpus->acpi_parse_and_init_cpus->acpi_table_parse_madt
+            */
        +-> ops->cpu_boot
              /* 不同版本的psci_ops定义在: drivers/firmware/psci/psci.c */
          +-> psci_ops.cpu_on

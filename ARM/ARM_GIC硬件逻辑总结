@@ -371,7 +371,7 @@ AIA其实都是一样的。可以看到VMAPP和VMAPI/VMAPTI的逻辑是独立的
 上在位的vCPU，硬件根据该信息决定是直通虚机中断还是把中断记录在虚机pend表里。
 
 - VMOVP vPEID, RD_base, ITS_list, Sequence_number (v4.0)
-        vPEID, RD_base, ITS_list, Sequence_number, doorbell (v4.1)
+- VMOVP vPEID, RD_base, ITS_list, Sequence_number, doorbell (v4.1)
 
 - VMOVP vPEID, RD_base
 
