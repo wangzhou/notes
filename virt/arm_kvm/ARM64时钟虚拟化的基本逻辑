@@ -69,7 +69,7 @@ QEMU/KVM代码分析
 -----------------
 
 在[这里](https://blog.csdn.net/sungeshilaoda/article/details/90698619)有个时钟虚拟机KVM代码的分析，写的很不错。时钟虚拟化的逻辑和ARM KVM的逻辑
-交织在一起，整体的逻辑也可以看到[这里](https://wangzhou.github.io/)。本文中我们
+交织在一起，整体的逻辑也可以看到[这里](https://wangzhou.github.io/Linux内核ARM64-KVM虚拟化基本逻辑/)。本文中我们
 再把和时钟有关的逻辑单独抽出来分析下。
 
 ARM64 KVM初始化入口，kvm_arm_init->init_subsystems->kvm_timer_hyp_init:

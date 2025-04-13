@@ -164,4 +164,4 @@ kvm_vcpu_ioctl KVM_RUN
 SGI内核代码分析
 ----------------
 
-Linux内核SGI相关逻辑可以参考[这里](https://)。
+Linux内核SGI相关逻辑可以参考[这里](https://wangzhou.github.io/Linux内核里IPI的基本逻辑/)。

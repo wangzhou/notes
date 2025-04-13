@@ -33,12 +33,12 @@ event id、中断号以及vCPU，虚机并不感知物理CPU。
 KVM里模拟虚机ITS command，把vLPI的device id、event id、中断号以及vCPU配置到物理
 ITS上。KVM在vCPU上下线时，把vCPU和物理CPU的映射关系配置给物理ITS(todo?)。
 
-vLPI直通的基本逻辑可以参考[这里](https://todo)。
+vLPI直通的基本逻辑可以参考[这里](https://wangzhou.github.io/ARM-GIC硬件逻辑总结/)。
 
 ITS模拟
 --------
 
-ARM KVM虚拟化的整体逻辑可以参考[这里](https://)，其中有涉及ITS在KVM里的模拟逻辑。
+ARM KVM虚拟化的整体逻辑可以参考[这里](https://wangzhou.github.io/Linux内核ARM64-KVM虚拟化基本逻辑/)，其中有涉及ITS在KVM里的模拟逻辑。
 
 因为是模拟ITS，所以并不要需要模拟行为当下生效，只要功能正确就好。比如，KVM模拟虚机
 的MAPI时没有下ITS command，实际物理配置发生在kvm_vgic_v4_set_forwarding的流程里，
