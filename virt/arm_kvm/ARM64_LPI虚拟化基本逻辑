@@ -3,12 +3,15 @@
 -v0.3 2025.3.13  Sherlock ...
 -v0.4 2025.3.14  Sherlock ...
 -v0.5 2025.4.04  Sherlock ...
+-v0.6 2025.4.13  Sherlock 补充vfio直通时中断的配置
 
 简介：本文整理ARM KVM中vLPI实现的基本逻辑。代码基于6.14-rc5内核。
 
 
 基本逻辑
 ---------
+
+LPI/vLPI硬件相关的逻辑可以参考[这里](https://wangzhou.github.io/ARM-GIC硬件逻辑总结/)。
 
 host上不同的GIC版本对vGIC LPI的支持方式是不一样的，GICv3时，需要先trap到KVM，在
 KVM里向虚机注入中断，GICv4.0及后续的GIC版本支持vLPI直接注入虚机。
@@ -25,15 +28,14 @@ KVM trap，KVM中模拟对应的ITS command，这里的模拟就是在host向物
 地址拿到对应中断的配置信息，然后更新对应的vLPI config table域段。
 
 物理上看，完整的vLPI中断上报，需要提前把这个vLPI中断的相关信息配置到物理硬件里，
-这些信息包扩: 这个vLPI发出设备的device id、eventid(一般就是PCIe设备的BDF和MSI/MSI-X
+这些信息包括: 这个vLPI发出设备的device id、eventid(一般就是PCIe设备的BDF和MSI/MSI-X
 cap里的data域段)，vLPI的中断号，vLPI要发送到的vCPU，vCPU在哪个物理CPU上，当vCPU
 不在位时是否需要触发的doorbell中断。从虚机的视角上看，vLPI的配置信息只有device id、
 event id、中断号以及vCPU，虚机并不感知物理CPU。
 
 KVM里模拟虚机ITS command，把vLPI的device id、event id、中断号以及vCPU配置到物理
-ITS上。KVM在vCPU上下线时，把vCPU和物理CPU的映射关系配置给物理ITS(todo?)。
+ITS上。KVM在vCPU上下线时，把vCPU和物理CPU的映射关系配置给物理ITS。
 
-vLPI直通的基本逻辑可以参考[这里](https://wangzhou.github.io/ARM-GIC硬件逻辑总结/)。
 
 ITS模拟
 --------
@@ -42,7 +44,7 @@ ARM KVM虚拟化的整体逻辑可以参考[这里](https://wangzhou.github.io/L
 
 因为是模拟ITS，所以并不要需要模拟行为当下生效，只要功能正确就好。比如，KVM模拟虚机
 的MAPI时没有下ITS command，实际物理配置发生在kvm_vgic_v4_set_forwarding的流程里，
-是在guest访问VF MSI/MSI-X BAR的时候，截获完成host的配置。
+这个是在guest访问VF MSI/MSI-X BAR的时候，截获完成host的配置。
 
 下面展开看下KVM里对ITS的各个命令都是怎么模拟的。KVM里为了模拟ITS，为ITS的device
 table/ITT/collection table建立了对应的软件数据结构，为创建的每个虚拟中断也建立了
@@ -62,7 +64,7 @@ GICV4.x中断直通
 
 针对vm fd的操作，本意是通过eventfd，在kvm中把虚机中断注入给虚机。对于支持中断直通
 的场景，这里会执行如下irq_bypass_register_consumer，注册架构相关的consumer。这里
-的consumer和如下vfio_pci_core_ioctl一起完成直通中断在host物理GIC上的配置。
+的consumer和如下vfio_pci_core_ioctl一起完成直通中断在物理GIC上的配置。
 ```
 /* virt/kvm/kvm_main.c */
 kvm_vm_ioctl
@@ -83,61 +85,95 @@ kvm_vm_ioctl
       +-> irq_bypass_register_consumer
 ```
 
-虚机中访问MSI-X BAR的时候，会导致虚机退出到KVM，KVM进一步推出到qemu的vfio设备的
-模拟逻辑里，其中会针对vfio设备的fd调用如下ioctl在host上配置对应中断的支持通路。
+虚机中访问MSI-X BAR的时候，会导致虚机退出到KVM，KVM进一步退出到qemu的vfio设备的
+模拟逻辑里，其中会针对vfio设备的fd调用如下ioctl，在host上配置对应中断的支持通路。
 (todo: MSI cap的逻辑是怎么样的？)
 ```
 vfio_pci_core_ioctl
-  +-> vfio_pci_ioctl_set_irqs     <--- VFIO_DEVICE_SET_IRQS
+  +-> vfio_pci_ioctl_set_irqs           <--- VFIO_DEVICE_SET_IRQS
     +-> vfio_pci_set_irqs_ioctl
-      +-> vfio_pci_set_msi_trigger   <--- VFIO_PCI_MSI_IRQ_INDEX
+      +-> vfio_pci_set_msi_trigger      <--- VFIO_PCI_MSI_IRQ_INDEX
+        |   /*
+        |    * ioctl参数VFIO_IRQ_SET_DATA_NONE和count为0，触发vf的MSI被disable。
+        |    * 具体行为是：释放该vfio设备对应的每个MSI中断资源，其中包括尝试对
+        |    * 之前分配host MSI中断的释放(free_irq)，经过中断子系统，最后调用到
+        |    * ITS驱动里的its_irq_domain_deactivate，最后会对host MSI中断发discard
+        |    * 命令。需要注意的是，如果这时还是有vf上的中断在上报，vf的全部MSI被
+        |    * disable这个行为可能导致对应的中断被discard掉。是否会导致这样的问题，
+        |    * 主要控制因素在QEMU里，vfio只是接口提供者。
+        |    */
+        +-> vfio_msi_disable
+        | +-> vfio_msi_set_vector_signal(..., fd = -1, ...)
+        |   +-> free_irq
+        |     ...
+        |       +-> its_irq_domain_deactivate
+        |         +-> its_send_discard
+        |   /*
+        |    * 根据ioctl的输入参数start和count，配置对应的MSI。vfio_msi_enable里
+        |    * 会配置irq_type，所以对于配置过irq_type的MSI，其已经运行过vfio_msi_enable，
+        |    * 所以直接做vfio_msi_set_block，这里估计是一个小的优化。
+        |    */
         +-> vfio_msi_set_block
-          +-> vfio_msi_set_vector_signal  // 循环配置多个MSI？
-
-            +-> vfio_msi_alloc_irq
-            +-> request_irq(irq, vfio_msihandler, 0, ctx->name, trigger)
-                /* token: trigger, irq: irq, */
-            +-> irq_bypass_register_producer
-                  /*
-                   * consumer和producer的token一样才执行__connect。这里是调用上面
-                   * 注册的consumer中的add_producer回调函数。
-                   */
-              +-> __connect()
+        |     /* 其中，要配置一个中断时，先把之前的配置去掉 */
+        | +-> vfio_msi_set_vector_signal
+        |       /* 分配中断 */
+        |   +-> vfio_msi_alloc_irq
+        |       /* 创建vfio里记录中断的数据结构 */
+        |   +-> vfio_irq_ctx_alloc
+        |       /* 获取对应的eventfd */
+        |   +-> trigger = eventfd_ctx_fdget
+        |       /* 
+        |        * 注册vf设备的中断，如果host是GICv3，那么vf的中断首先就会触发如下
+        |        * vfio_msihandler中断处理函数。该函数触发一个eventfd的signal，
+        |        * KVM收到这个signal会给vCPU注入中断。
+        |        */
+        |   +-> request_irq(irq, vfio_msihandler, 0, ctx->name, trigger)
+        |
+        |       /* token: trigger, irq: irq, */
+        |   +-> irq_bypass_register_producer
+        |         /*
+        |          * consumer和producer的token一样才执行__connect。这里是调用上面
+        |          * 注册的consumer中的add_producer回调函数。add_producer前后会
+        |          * 调用consumer stop/start，stop中挂起VM，start中reseume VM。
+        |          */
+        |     +-> __connect()
+        |       +-> cons->stop -> cons->add_producer -> cons->start
+        |
+        +->  vfio_msi_enable
+        +->  ...
 ```
 
 这里展开分析add_producer函数。
-(todo: 虚机里的GICv3的table和host上的vtable的对应关系？)
 ```
+/* 注意这里的virq是如上request_irq里的irq，是vf在host上的中断 */
 kvm_arch_irq_bypass_add_producer(kvm, virq, struct kvm_kernel_irq_routing_entry)
   +-> kvm_vgic_v4_set_forwarding
-    +-> vgic_its_resolve_lpi
+        /* 拿到虚拟中断对应的vgic_irq，保存在irq里，irq->host_irq为host irq */
+    +-> vgic_its_resolve_lpi(..., &irq)
         /* drivers/irqchip/irq-gic-v4.c */
     +-> its_map_vlpi(virq, map)
       +-> irq_set_vcpu_affinity(irq, xxx)
         ...
-        +-> its_irq_set_vcpu_affinity        <--- struct irq_chip its_irq_chip
-          +-> its_vlpi_map                   <--- MAP_VLPI
+        +-> its_irq_set_vcpu_affinity <--- struct irq_chip its_irq_chip
+          +-> its_vlpi_map            <--- MAP_VLPI
             |
-            +-> its_map_vm
+            +-> its_map_vm            <--- 如何确定物理CPU?
             | +-> its_send_vmapp
             |
             +-> lpi_write_config
-            | +-> ?
             |
-            +-> its_send_discard
+            +-> its_send_discard      <--- 去掉如上host irq在ITS里的map，所以这个
+            |                              命令的参数是vf的物理dev_id/event_id
             |
             +-> its_send_vmapti
 ```
-
-todo: vLPI pending配置enable的分析。todo：应该在active domain
-```
-```
+(todo: vLPI pending配置enable的分析，应该在active domain)
+(todo: 虚机里的GICv3的table和host上的vtable的对应关系？)
 
 vCPU上下线逻辑
 ---------------
 
 vCPU上下线中关于vLPI的处理。
-
 ```
 kvm_sched_out
   +-> kvm_arch_vcpu_put
@@ -153,9 +189,8 @@ kvm_sched_out
                     ...
 ```
 
-```
 kvm_sched_in -> kvm_arch_vcpu_load -> kvm_vgic_load -> vgic_v3_load -> vgic_v4_load
-
+```
 vgic_v4_load
   +-> irq_set_affinity
     ...
@@ -217,4 +252,3 @@ irq_setup_affinity
         /* guest里movi命令触发kvm里对其的模拟 */
     +-> its_send_movi
 ```
-
