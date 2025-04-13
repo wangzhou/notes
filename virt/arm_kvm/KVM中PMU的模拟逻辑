@@ -11,7 +11,7 @@ KVM中对PMU的模拟思路和其他设备的模拟思路是一致的，通过de
 和配置设备属性，CPU在EL1访问PMU相关寄存器的时候会trap的KVM进行模拟，因为host/guest
 是共享PMU物理硬件的，vCPU上下线时需要保存和恢复PMU寄存器的状态。
 
-整体的ARM KVM框架逻辑可以参考[这里](https://)
+整体的ARM KVM框架逻辑可以参考[这里](https://wangzhou.github.io/Linux内核ARM64-KVM虚拟化基本逻辑/)
 
 注意一下几点，vPMU的初始化和配置通过KVM_ARM_VCPU_PMU_V3_*的ioctl进行，PMU相关的
 系统寄存器的模拟逻辑在kvm_handle_sys_reg。

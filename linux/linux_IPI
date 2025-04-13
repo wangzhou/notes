@@ -10,7 +10,7 @@ Linux内核里IPI的基本逻辑
 ---------
 
 CPU直接可以通过核间中断(IPI)相互之间发中断，ARM上使用SGI支持核间中断。其中SGI的
-基本逻辑可以参考[这里](https://)，ARM KVM的vSGI的基本逻辑可以参考[这里](https://)。
+基本逻辑可以参考[这里](https://wangzhou.github.io/ARM-GIC硬件逻辑总结/)，ARM KVM的vSGI的基本逻辑可以参考[这里](https://wangzhou.github.io/ARM64-SGI虚拟化基本逻辑/)。
 
 Linux内核里，基于IPI封装的接口在include/linux/smp.h。基本的接口如下：
 ```
