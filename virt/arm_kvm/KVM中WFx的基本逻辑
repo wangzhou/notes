@@ -9,10 +9,9 @@
 
 这里的WFX指令指WFI/WFE/WFIT/WFET，带T后缀的指令是对应指令带超时的版本。
 
-ARM KVM整体的逻辑见: Linux内核ARM64 KVM虚拟化的基本逻辑。WFI指令的语意是把core
-进入低功耗，等待中断唤醒继续执行，所以，guest里执行到WFI时，系统完全可以把vCPU
-线程调度出去，换host上的其它线程执行，直到有中断发到vCPU上，KVM再把vCPU线程调度
-回来执行。
+ARM KVM整体的逻辑可以参考[这里](https://wangzhou.github.io/Linux内核ARM64-KVM虚拟化基本逻辑/)。WFI指令的语意是把core进入低功耗，等待中断唤醒继续
+执行，所以，guest里执行到WFI时，系统完全可以把vCPU线程调度出去，换host上的其它线程
+执行，直到有中断发到vCPU上，KVM再把vCPU线程调度回来执行。
 
 WFI在EL1执行可以trap到EL2，完成如上的逻辑。在支持GICv4.0/v4.1的系统上，直接注入
 guest的vLPI中断支持附带host doorbell中断的功能，当被注入vLPI的vCPU线程不在线时，
@@ -22,8 +21,8 @@ guest的vLPI中断支持附带host doorbell中断的功能，当被注入vLPI的
 WFE的虚拟化处理逻辑和WFI的逻辑基本一致，不过WFE是直接换一个vCPU的线程来跑。
 
 当物理核上只有一个vCPU线程在跑的时候，wfi/wfe没有必要再做trap，KVM在上线CPU的时候
-把wfe/wfi都配置为不再trap，所以它们是实际执行的。从host上就是vCPU线程一直有指令
-在运行，不管是正常跑还是做wfi。所以，host上看到host的CPU占用率是100%。
+把wfe/wfi都配置为不再trap，所以它们是实际执行的。从host上看就是vCPU线程一直有指令
+在运行，不管是正常跑还是做wfi。所以，host上看到vCPU线程的CPU占用率是100%。
 
 对于WFxT，KVM只是加了查询超时的一个动作，如果trap到KVM里处理的时候已经超时，就不
 处理直接返回了，如果没有超时就和如上wfe/wfi的处理逻辑一样。
@@ -73,7 +72,7 @@ vgic_v4_init
     +-> request_irq(irq, vgic_v4_doorbell_handler, 0, "vcpu", vcpu)
 ```
 
-doorbell中断处理里出发vCPU上线，vCPU上线后机会马上响应pending的中断。
+doorbell中断处理里触发vCPU上线，vCPU上线后就会马上响应pending的中断。
 ```
 vgic_v4_doorbell_handler
   +-> kvm_vcpu_kick
@@ -81,7 +80,7 @@ vgic_v4_doorbell_handler
       ...
 ```
 
-上面提到的，只有一个vCPU线程在运行，wfe/wfi关trap的逻辑子在：
+上面提到的，只有一个vCPU线程在运行，wfe/wfi关trap的逻辑在：
 ```
 kvm_arch_vcpu_load
   +-> kvm_vcpu_should_clear_twe
