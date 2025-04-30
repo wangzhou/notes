@@ -82,7 +82,11 @@ CPU通过ICC_CTRL_EL1配置EOI(active & pending -> pending)。对于处于active
 的语意不一样，电平中断下，表示CPU还没有控制外设拉低外设和GIC之间的电平，边沿触发
 中断，表示CPU在处理当前中断的时候，外设又来了一个中断。
 
-LPI只有inactive和pending，为什么只有两种？和ICC_IARn_EL1/ICC_CTRL_EL1如何配合?
+LPI都是边沿中断，且状态只有inactive和pending，为什么只有两种？和ICC_IARn_EL1/ICC_CTRL_EL1
+如何配合?
+
+物理SGI中断有如上四种状态，vSGI和LPI一样只有inactive和pending。
+
 
 GIC的各个模块
 --------------

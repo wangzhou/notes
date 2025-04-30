@@ -1,27 +1,12 @@
 -v0.1 2024.11.09 Sherlock init
 -v0.2 2025.02.23 Sherlock ...
+-v0.3 2025.04.20 Sherlock ...
 
 简介：本文分析Linux内核KVM中ARM PMU模拟的基本逻辑。基于内核版本v6.11-rc7。
 
 
-基本逻辑
----------
-
-KVM中对PMU的模拟思路和其他设备的模拟思路是一致的，通过device相关的ioctl创建设备
-和配置设备属性，CPU在EL1访问PMU相关寄存器的时候会trap的KVM进行模拟，因为host/guest
-是共享PMU物理硬件的，vCPU上下线时需要保存和恢复PMU寄存器的状态。
-
-整体的ARM KVM框架逻辑可以参考[这里](https://wangzhou.github.io/Linux内核ARM64-KVM虚拟化基本逻辑/)
-
-注意一下几点，vPMU的初始化和配置通过KVM_ARM_VCPU_PMU_V3_*的ioctl进行，PMU相关的
-系统寄存器的模拟逻辑在kvm_handle_sys_reg。
-
-PMU vCPU上下线时保存和恢复寄存器的逻辑不是很直白，它应该在vCPU线程和perf相关的
-sched_ini/sched_out的回调函数里。这个行为和KVM里PMU的模拟方式有直接的联系。
-
-todo: PMU模拟方式。
-
-PMU相关的寄存器总结如下：
+PMU寄存器
+----------
 
   PMINTENSET_EL1
   PMINTENCLR_EL1
@@ -54,17 +39,34 @@ PMU相关的寄存器总结如下：
   
   PMMIR_EL1
 
+基本逻辑
+---------
+
+KVM中对PMU的模拟思路和其他设备的模拟思路是一致的，通过device相关的ioctl创建设备
+和配置设备属性，CPU在EL1访问PMU相关寄存器的时候会trap的KVM进行模拟，因为host/guest
+是共享PMU物理硬件的，vCPU上下线时需要保存和恢复PMU寄存器的状态。
+
+整体的ARM KVM框架逻辑可以参考[这里](https://wangzhou.github.io/Linux内核ARM64-KVM虚拟化基本逻辑/)
+
+注意一下几点，vPMU的初始化和配置通过KVM_ARM_VCPU_PMU_V3_*的ioctl进行，PMU相关的
+系统寄存器的模拟逻辑在kvm_handle_sys_reg。
+
+PMU vCPU上下线时保存和恢复寄存器的逻辑不是很直白，它应该在vCPU线程和perf相关的
+sched_ini/sched_out的回调函数里。这个行为和KVM里PMU的模拟方式有直接的联系。
+
+todo: PMU模拟方式。
+
 代码分析
 ---------
 
 PMU相关的代码在arch/arm64/kvm/pmu.c、pmu-emul.c中。
 
-vCPU创建，kvm_vm_ioctl_create_vcpu->kvm_arch_vcpu_create:
+vCPU创建时，kvm_vm_ioctl_create_vcpu->kvm_arch_vcpu_create:
 ```
 kvm_pmu_vcpu_init
 ```
 
-vCPU init，kvm_arch_vcpu_ioctl_vcpu_init->kvm_vcpu_set_target->kvm_reset_vcpu:
+vCPU初始化时，kvm_arch_vcpu_ioctl_vcpu_init->kvm_vcpu_set_target->kvm_reset_vcpu:
 ```
 kvm_pmu_vcpu_reset
 ```
@@ -77,10 +79,6 @@ KVM_ARM_VCPU_PMU_V3_IRQ
 KVM_ARM_VCPU_PMU_V3_FILTER
 KVM_ARM_VCPU_PMU_V3_SET_PMU
 KVM_ARM_VCPU_PMU_V3_INIT
-
-KVM_GET_DEVICE_ATTR/KVM_ARM_VCPU_PMU_V3_CTRL -> kvm_arm_pmu_v3_get_attr:
-
-KVM_ARM_VCPU_PMU_V3_IRQ
 ```
 
 PMU的模拟逻辑。
@@ -96,5 +94,3 @@ KVM对guest呈现的PMU version的问题。KVM从host获得PMU的硬件版本，
 read_sanitised_id_aa64dfr0_el1
   +-> val |= SYS_FIELD_PREP(ID_AA64DFR0_EL1, PMUVer, kvm_arm_pmu_get_pmuver_limit());
 ```
-
-
