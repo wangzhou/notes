@@ -1,6 +1,7 @@
 -v0.1 2024.11.09 Sherlock init
 -v0.2 2025.02.23 Sherlock ...
 -v0.3 2025.04.20 Sherlock ...
+-v0.4 2025.05.03 Sherlock 增减PMU寄存器说明
 
 简介：本文分析Linux内核KVM中ARM PMU模拟的基本逻辑。基于内核版本v6.11-rc7。
 
@@ -8,34 +9,32 @@
 PMU寄存器
 ----------
 
-  PMINTENSET_EL1
-  PMINTENCLR_EL1
+  PMCEID0_EL0       event有无寄存器，每个bit表示对应的event有没有支持
+  PMCEID1_EL0       event有无寄存器
+
+  PMCR_EL0          PMU控制寄存器
+  PMUSERENR_EL0     控制各种counter EL0是否访问
+
+  PMCCNTR_EL0	    timer cycle的计数器，计数的频率和timer的频率一样
+  PMCCFILTR_EL0	    timer cycle计数器的控制寄存器
+
+  PMEVCNTR<n>_EL0   31个event的计数器
+  PMEVTYPER<n>_EL0  event计数器的控制寄存器，可以配置对应的event计数器记录哪个event
+
+  PMCNTENSET_EL0    如上counter计数器的使能控制，一个bit控制一个counter寄存器
+  PMCNTENCLR_EL0    如上counter计数器的去使能控制
+
+  PMINTENSET_EL1    如上counter计数器的中断使能控制
+  PMINTENCLR_EL1    如上counter计数器的中断去使能控制
+
+  PMSELR_EL0        选择一个counter，配置如下的PMXEVCNTR_EL0/PMXEVTYPER_EL0一起使用
+  PMXEVTYPER_EL0    通过该寄存器访问PMSELR_EL0选择的PMEVTYPER<n>_EL0的值
+  PMXEVCNTR_EL0	    通过该寄存器访问PMSELR_EL0选择的PMEVCNTR<n>_EL0的值
   
-  PMCR_EL0              PMU控制寄存器
-  
-  PMCNTENSET_EL0
-  PMCNTENCLR_EL0
-  
-  PMOVSCLR_EL0
+  PMOVSCLR_EL0		
   PMOVSSET_EL0
   
   PMSWINC_EL0
-  PMSELR_EL0
-  
-  PMCEID0_EL0           event有无寄存器
-  PMCEID1_EL0           event有无寄存器
-  
-  PMCCNTR_EL0
-  
-  PMXEVTYPER_EL0
-  PMXEVCNTR_EL0
-
-  PMEVTYPER<n>_EL0      配置对应counter的event
-  PMEVCNTR<n>_EL0
-  
-  PMUSERENR_EL0
-  PMCCNTR_EL0
-  PMCCFILTR_EL0
   
   PMMIR_EL1
 
