@@ -10,6 +10,7 @@ qemu操作命令总结
 -v0.7 2024.11.12 Sherlock 增加大页配置
 -v0.8 2024.12.07 Sherlock 增加QEMU_EFI.fd编译方法，补全内存/中断/网络/存储等
 -v0.9 2024.12.27 Sherlock 增加qemu chardev日志文件
+-v1.1 2025.05.06 Sherlock 修改pc-dim/nv-dim的描述
 
 简介：收集qemu各种配置命令。这里一般不区分kvm和tcg，在需要区分的时候，再作说明。
       如果qemu命令和平台相关，则使用ARM64平台。
@@ -198,6 +199,11 @@ qemu [...] -m 6GB,slots=4,maxmem=10G \
   -numa node,memdev=mem0,nodeid=0,cpus=0-15 \
   -numa node,memdev=mem1,nodeid=1,cpus=16-31 \
 ```
+
+ - pc-dimm/nv-dimm
+
+  qemu monitor里运行info memory_size_summary, 如上冷插的pc-dimm/nv-dimm都显示在
+  plugged memory一栏里，在linux系统内运行free命令，只有pc-dimm被看作系统内存。
 
 中断
 -----

@@ -397,6 +397,8 @@ vNMI
 qemu vfio/vLPI中断/热迁移/config和BAR空间模拟/iommufd综合
 kabi
 twed/wfxt/软件延时
+monitor unix/tcp sshpass
+qemu cmdline
 
 
 ---- iommufd系列文章 ----
