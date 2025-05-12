@@ -116,11 +116,9 @@
 
 - qemu monitor
 
-虚拟化调试
------------
+虚拟化调试和测试
+-----------------
 
-- DFX
+- DFX/trace/perf
 
-- trace
-
-- perf
+- KUT/KVM selftest/avocado
