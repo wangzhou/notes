@@ -1,4 +1,5 @@
 -v0.1 2024.9.18 Sherlock init
+-v0.2 2025.5.12 Sherlock ...
 
 
 单点技术
@@ -8,9 +9,27 @@
 
   * VHE
 
+  * nVHE
+
+  * PMU
+
+  * 单点指令虚拟化
+
+    > wfi/wfe/wfit/wfet
+
+    > sve/sve2
+
 - 内存虚拟化
 
+  * 两级地址翻译
+
+  * cache
+
+  * TLB
+
 - 中断虚拟化
+
+  * GICv3虚拟化
 
   * vLPI直通
 
@@ -20,7 +39,7 @@
 
 - IOMMU虚拟化
 
-  * iommufd
+  * iommufd基本框架
 
   * DMA内存标脏
 
@@ -30,7 +49,11 @@
 
   * virtio设备
 
-    > vhost
+    > vhost kernel
+
+    > vhost user
+
+    > vDPA
 
 系统技术
 ---------
@@ -47,24 +70,27 @@
 
   * 基础热迁移
 
-   > 内存标脏
+    > 内存标脏
+
+    > HDBSS
 
   * 带VFIO设备
 
-    > DMA内存标脏/httu
+    > DMA内存标脏/HTTU
 
     > 设备状体迁移
 
-  *  异构热迁移
+  * 异构热迁移
 
-    > qemu CPU module / writable CPU ID
+    > qemu CPU module
+
+    > writable CPU ID
 
     > errata框架
 
 - vSVA技术
 
   * iommufd
-
 
 性能相关
 ---------
@@ -75,7 +101,11 @@
 
 - 半虚拟化性能优化
 
-  * pv preempt/spinlock/steal time
+  * pv preempt
+
+  * pv spinlock
+
+  * pv time
 
 - 热迁移性能
 
@@ -86,3 +116,11 @@
 
 - qemu monitor
 
+虚拟化调试
+-----------
+
+- DFX
+
+- trace
+
+- perf

@@ -353,7 +353,6 @@ x86 cpu model					         done
 GICv4与GICv3，host是GICV4，CPU利用率，绑核。
 ARM HCR.IMO 中断路由
 
-irqbalance分析
 sve-stress/iperf/fio/memtester				 done
 pv virt逻辑/pv preempt/pv spinlock/pv steal time         todo
 
@@ -396,9 +395,12 @@ qemu生成acpi表的逻辑，MADT(gic)/PPTT(cache)/cppc
 vNMI
 qemu vfio/vLPI中断/热迁移/config和BAR空间模拟/iommufd综合
 kabi
-twed/wfxt/软件延时
-monitor unix/tcp sshpass
-qemu cmdline
+twed/wfxt/软件延时 #
+monitor unix/tcp sshpass #
+qemu cmdline #
+steal time #
+
+irqbalance分析/中断亲和性配置
 
 
 ---- iommufd系列文章 ----
