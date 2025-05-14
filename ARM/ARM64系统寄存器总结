@@ -181,9 +181,11 @@ regime，描述的是host的情况，只需要做stage1的翻译。
 可以看到，只有EL1&EL0 translation regime会使用到stage2翻译，就是只有虚拟机会使用
 到stage2翻译，host(包括hypervisor)自己只会使用stage1翻译。
 
-Stage1翻译相关的寄存器是TTBR_EL1/TCR_EL1，只不过在host上实际使用的就是它们本身，
-guest的stage1翻译实际使用的是TTBR_EL2/TCR_EL2。Stage2翻译相关的寄存器是VTTBR_EL2/
-VTCR_EL2。
+Stage1翻译相关的寄存器是TTBR_EL1/TCR_EL1，Stage2翻译相关的寄存器是VTTBR_EL2/VTCR_EL2。
+其中Stage1可能有两种情况，一种非虚拟化的情况，这种情况下又分nVHE/VHE，在nVHE下
+TTBR_EL1/TCR_EL1实际就是它本身，在VHE下访问TTBR_EL1/TCR_EL1实际访问的是TTBR_EL2/TCR_EL2；
+另一种是虚拟化情况，此时存在Stage1/Stage2翻译，其中Stage1翻译使用TTBR_EL1/TCR_EL1，
+Stage2翻译使用VTTBR_EL2/VTCR_EL2。
 
 todo: vtimer。
 
