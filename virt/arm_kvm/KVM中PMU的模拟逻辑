@@ -9,34 +9,34 @@
 PMU寄存器
 ----------
 ```
-PMCEID0_EL0       event有无寄存器，每个bit表示对应的event有没有支持                             
-PMCEID1_EL0       event有无寄存器                                                               
-                                                                                                
-PMCR_EL0          PMU控制寄存器                                                                 
-PMUSERENR_EL0     控制各种counter EL0是否访问                                                   
-                                                                                                
-PMCCNTR_EL0       timer cycle的计数器，计数的频率和timer的频率一样                              
-PMCCFILTR_EL0     timer cycle计数器的控制寄存器                                                 
-                                                                                                
-PMEVCNTR<n>_EL0   31个event的计数器                                                             
-PMEVTYPER<n>_EL0  event计数器的控制寄存器，可以配置对应的event计数器记录哪个event               
-                                                                                                
-PMCNTENSET_EL0    如上counter计数器的使能控制，一个bit控制一个counter寄存器                     
-PMCNTENCLR_EL0    如上counter计数器的去使能控制                                                 
-                                                                                                
-PMINTENSET_EL1    如上counter计数器的中断使能控制                                               
-PMINTENCLR_EL1    如上counter计数器的中断去使能控制                                             
-                                                                                                
-PMSELR_EL0        选择一个counter，配置如下的PMXEVCNTR_EL0/PMXEVTYPER_EL0一起使用               
-PMXEVTYPER_EL0    通过该寄存器访问PMSELR_EL0选择的PMEVTYPER<n>_EL0的值                          
-PMXEVCNTR_EL0     通过该寄存器访问PMSELR_EL0选择的PMEVCNTR<n>_EL0的值                           
-                                                                                                
+PMCEID0_EL0       event有无寄存器，每个bit表示对应的event有没有支持
+PMCEID1_EL0       event有无寄存器
+
+PMCR_EL0          PMU控制寄存器
+PMUSERENR_EL0     控制各种counter EL0是否访问
+
+PMCCNTR_EL0       timer cycle的计数器，计数的频率和timer的频率一样
+PMCCFILTR_EL0     timer cycle计数器的控制寄存器
+
+PMEVCNTR<n>_EL0   31个event的计数器
+PMEVTYPER<n>_EL0  event计数器的控制寄存器，可以配置对应的event计数器记录哪个event
+
+PMCNTENSET_EL0    如上counter计数器的使能控制，一个bit控制一个counter寄存器
+PMCNTENCLR_EL0    如上counter计数器的去使能控制
+
+PMINTENSET_EL1    如上counter计数器的中断使能控制
+PMINTENCLR_EL1    如上counter计数器的中断去使能控制
+
+PMSELR_EL0        选择一个counter，配置如下的PMXEVCNTR_EL0/PMXEVTYPER_EL0一起使用
+PMXEVTYPER_EL0    通过该寄存器访问PMSELR_EL0选择的PMEVTYPER<n>_EL0的值
+PMXEVCNTR_EL0     通过该寄存器访问PMSELR_EL0选择的PMEVCNTR<n>_EL0的值
+
 PMOVSCLR_EL0      PMEVCNTR_EL0/PMEVCNTR<n>_EL0的溢出标记寄存器，每个bit表示对应的counter是否溢出
-                  写对应的bit，清除溢出标记bit                                                  
-PMOVSSET_EL0      同上，软件可以写对应溢出bit置1，但是软件为啥要写:(                            
-PMSWINC_EL0                                                                                     
-                                                                                                
-PMMIR_EL1                                                                                       
+                  写对应的bit，清除溢出标记bit
+PMOVSSET_EL0      同上，软件可以写对应溢出bit置1，但是软件为啥要写:(
+PMSWINC_EL0
+
+PMMIR_EL1
 ```
 
 基本逻辑
@@ -104,8 +104,8 @@ kvm_pmu_vcpu_reset
 KVM_SET_DEVICE_ATTR/KVM_ARM_VCPU_PMU_V3_CTRL -> kvm_arm_pmu_v3_set_attr:
 
 KVM_ARM_VCPU_PMU_V3_IRQ        用户态配置的irq号配置到kvm_vcpu_arch.pmu.irq_num
-KVM_ARM_VCPU_PMU_V3_FILTER     
-KVM_ARM_VCPU_PMU_V3_SET_PMU    host arm_pmu挂到kvm->arch.arm_pmu 
+KVM_ARM_VCPU_PMU_V3_FILTER
+KVM_ARM_VCPU_PMU_V3_SET_PMU    host arm_pmu挂到kvm->arch.arm_pmu
 KVM_ARM_VCPU_PMU_V3_INIT       主要做PMU虚拟中断的初始化
 ```
 
