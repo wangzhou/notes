@@ -1,0 +1,97 @@
+-v0.1 2025.5.21 init Sherlock
+
+简介：本文总结Linux KVM环境下guest reboot的整个流程。Linux使用v6.14-rc5, qemu使用
+      9.1.90。 
+
+
+guest linux reboot
+-------------------
+
+```
+/* kernel/reboot.c */
+reboot
+  +-> kernel_restart
+        /* arch/arm64/kernel/process.c */
+    +-> machine_restart
+          /* 发IPI停止其它core */
+      +-> smp_send_stop
+          /* 
+	   * 支持efi runtime service的话，调用对应接口efi.reset_system接口，这里
+	   * 看不见了，姑且认为这个接口使用PSCI的PSCI_1_1_FN64_SYSTEM_RESET2实现。
+	   */
+      +-> efi_reboot
+```
+
+host KVM处理
+-------------
+
+PSCI使用smc/hvc实现，虚拟机里调用PSCI会trap到KVM，KVM会模拟实现对应的请求，调用
+流程如下：
+```
+kvm_arch_vcpu_ioctl_run -> handle_exit -> handle_trap_exceptions ->
+handle_smc/handle_hvc -> kvm_smccc_call_handler -> kvm_psci_call:
+  +-> kvm_psci_1_x_call
+    +-> kvm_psci_system_reset2
+          /*
+	   * 把从kvm退出的原因和类型记录，后续会传给qemu。可见这时从kvm退出的原因
+	   * 是退出系统，退出的类型是reset。最后从ioctl_run返回到qemu。
+	   */
+      +-> kvm_prepare_system_event
+        +-> vcpu->run->system_event.type = KVM_SYSTEM_EVENT_RESET
+            vcpu->run->exit_reason = KVM_EXIT_SYSTEM_EVENT
+```
+
+qemu处理
+---------
+
+qemu vCPU线程的主线逻辑如下：
+```
+kvm_vcpu_thread_fn
+ kvm_init_vcpu
+ do {
+       if (cpu_can_run(cpu)) {
+           r = kvm_cpu_exec(cpu);
+
+             kvm_vcpu_ioctl                       <--- 运行vCPU
+
+             switch (run->exit_reason)            <--- 处理kvm退出
+    	     ...
+    	     case KVM_EXIT_SYSTEM_EVENT
+    	       case KVM_SYSTEM_EVENT_RESET
+    	         qemu_system_reset_request  
+    	           ...
+    	           qemu_notify_event              <--- 触发qemu主线程
+
+           if (r == EXCP_DEBUG) {
+               cpu_handle_guest_debug(cpu);
+           }
+       }
+       qemu_wait_io_event(cpu);
+ } while (!cpu->unplug || cpu_can_run(cpu));
+ ...
+```
+
+qemu主线程逻辑
+
+各个设备reset逻辑注册
+
+  vCPU reset
+  GIC/ITS reset
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
