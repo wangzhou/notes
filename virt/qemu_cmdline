@@ -362,8 +362,8 @@ qemu/kvm调试选项
 
   qemu monitor的使用方式收集在[这里](https://wangzhou.github.io/qemu-monitor介绍/)。
 
-  monitor支持通过telnet/tcp/udp使用，所以可以用程序和monitor做交互。在qemu命令行
-  里加上如下配置：
+  monitor支持通过telnet/tcp/udp/unix domain使用，所以可以用程序和monitor做交互。
+  例如，可以在qemu命令行里加上如下配置：
 ```
   -monitor tcp:127.0.0.1:3333,server,nowait
 ```
@@ -375,6 +375,14 @@ qemu/kvm调试选项
 nc 127.0.0.1 3333 << EOF
 q
 EOF
+```
+  使用unix domain的方式为：
+```
+  -monitor unix:/tmp/monitor,server,nowait
+```
+ 可以通过如下方式给monitor发信息，unix domain使用文件作为通信的接口。
+```
+ echo "command send to monitor" | nc -U /tmp/monitor
 ```
 
  - telnet/串口
@@ -404,5 +412,3 @@ EOF
   -chardev stdio,mux=on,logfile=./qemu_log,id=char0 \
   -serial chardev:char0
 ```
-
-

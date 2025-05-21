@@ -3,6 +3,7 @@
 -v0.3 2024.5.04 Sherlock 继续补充虚拟化部分
 -v0.4 2024.5.06 Sherlock 继续补充虚拟和timer
 -v0.5 2024.5.07 Sherlock 继续补充timer
+-v0.6 2025.5.14 Sherlock 修改TTBR_EL1/2的描述，修复todo
 
 简介：本文总结ARM64系统寄存器的基本逻辑，我们从基本的CPU配置、中断异常逻辑、地址
       翻译、时钟、GIC、SMMU以及虚拟化的逻辑出发，看看对应功能的基本系统寄存器。
@@ -187,16 +188,15 @@ TTBR_EL1/TCR_EL1实际就是它本身，在VHE下访问TTBR_EL1/TCR_EL1实际访
 另一种是虚拟化情况，此时存在Stage1/Stage2翻译，其中Stage1翻译使用TTBR_EL1/TCR_EL1，
 Stage2翻译使用VTTBR_EL2/VTCR_EL2。
 
-todo: vtimer。
+timer虚拟化的逻辑和相关寄存器整理可以参考[这里](https://wangzhou.github.io/ARM64时钟虚拟化基本逻辑/)。vLPI的逻辑可以参考[这里](https://wangzhou.github.io/ARM64-LPI虚拟化基本逻辑/)。
+vSGI的逻辑可以参考[这里](https://wangzhou.github.io/ARM64-SGI虚拟化基本逻辑/)。
 
 todo: 普通外部中断虚拟化。
-
-todo: vLPI/vSGI/vNMI各自直接注入的逻辑。
 
 PMU相关寄存器
 --------------
 
-PMU基本逻辑和寄存器定义在独立的文档中描述。
+PMU基本逻辑和寄存器定义可以参考[这里](https://wangzhou.github.io/KVM中PMU的基本逻辑/)。
 
 GIC
 ----
@@ -204,12 +204,7 @@ GIC
 GIC有设备一侧的MMIO寄存器以及核一层的系统寄存器，这里只描述核一侧的系统寄存器。
 GIC核一侧的系统寄存器主要有：ICC_XXX_ELn/ICV_XXX_ELn/ICH_XXX_ELn。
 
-ICC_SRE_ELn, system register enable。
-ICC_PMR_ELn, priority mask register。
-ICC_CTRL_ELn, control completion of interrupt。
-ICC_IGRPEN1_ELn，interrupt group enable。
-
-需要在独立的文档中展开逻辑，再说吧。
+在独立的文档中展开逻辑，具体可以参考[这里](https://wangzhou.github.io/ARM-GIC硬件逻辑总结/)。
 
 SMMU
 -----

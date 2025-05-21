@@ -396,10 +396,13 @@ vNMI
 qemu vfio/vLPI中断/热迁移/config和BAR空间模拟/iommufd综合
 kabi
 twed/wfxt/软件延时 #
-monitor unix/tcp sshpass #
 qemu cmdline #
 steal time #
-arm64系统寄存器总结 topost
+SMCCC          doing
+虚拟化和调度   doing
+guest reboot   流程  doing
+虚拟化关中断和关抢占 doing
+
 
 irqbalance分析/中断亲和性配置
 
@@ -409,7 +412,12 @@ irqbalance分析/中断亲和性配置
 ---- vfio系统 -----
 
 ---- 热迁移系列 ----
+1. 基本逻辑
+2. vfio逻辑
 
 ---- 虚拟化内存管理 ----
+1. 基本逻辑
+2. S2FWB
+3. vfio
 
 
