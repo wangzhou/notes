@@ -1,7 +1,11 @@
 -v0.1 2024.8.21 Sherlock init
+-v0.2 2025.6.14 Sherlock 增加代码构架分析
 
 简介：kvm_unit_test的一个使用速记
 
+
+快速使用
+---------
 
 kvm_unit_test是一个kvm的测试套，代码仓库路径在[这里](https://github.com/kvm-unit-tests/kvm-unit-tests.git)。
 
@@ -39,3 +43,46 @@ PASS micro-bench
 
 可以看见kvm_unit_test的脚本会拉起一个qemu做测试，被测试内容被隔离到了一个vm里，
 理论上是不会对系统运行的其他qemu有影响的。
+
+代码构架分析
+-------------
+
+kut整个结构可以大概分为两个部分，一个是后面要直接在qemu上跑的程序，一个是一堆shell
+脚本，编译的时候使用这些脚本生成可以直接跑的测试用例。
+
+前者的C代码在kvm-unit-tests/arm(这里以ARM构架为例)，对应的配置文件为
+kvm-unit-tests/arm/unittests.cfg，这个配置文件里定义每个测试用例的参数，比如，
+qemu上跑的文件，qemu配置多少个core，qemu架构，启动参数等。
+
+后者根据配置文件生成测试脚本，每个测试用例对应一个测试脚本，每个测试脚本拉起一个
+qemu跑测试程序。可以顺着make standalone看看大概的逻辑。
+
+这里$cfg就是unittests.cfg，for_each_unittest对于unittests.cfg中的每个配置项调用
+mkstandalone生成测试脚本。
+```
+/* scripts/mkstandalone.sh */
+for_each_unittest $cfg mkstandalone
+```
+
+mkstandalone的入参就是从配置项里解析得到的具体配置，mkstandalone再调用generate_test
+具体生成测试脚本。
+```
+mkstandalone
+  +-> generate_test
+    +-> echo "#!/usr/bin/env bash"             <-- 生成测试脚本
+        ...
+    +-> temp_file ERRATATXT "$ERRATATXT"
+      +-> echo "$var=\`mktemp\`"               <-- 插入测试脚本中生成临时文件，
+          echo "cleanup=\"\$$var \$cleanup\""      清理环境，解压二进制的脚本  
+          echo "base64 -d << 'BIN_EOF' | zcat > \$$var || exit 2"
+          gzip -c "$file" | base64             <-- 把测试代码的二进制压缩base64
+          ...                                      编码后写入测试脚本
+    +-> cat scripts/runtime.bash               <-- 加入公共脚本
+    +-> echo "run ${args[*]}"                  <-- 加入最后运行的shell函数
+```
+这里需要注意的是，对于qemu执行的二进制，generate_test把对应的二进制gzip压缩并用
+base64编码，然后把编码直接写入最终的测试脚本文件里。测试脚本里先生成一个临时文件，
+再把脚本中保存的二进制解码解压缩后写入临时文件，qemu使用对应的临时文件跑测试。
+相关的辅助脚本也都在generate_test里写入测试脚本文件。
+
+对着生成的测试脚本，如上的逻辑会看的很清楚。

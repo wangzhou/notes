@@ -398,14 +398,14 @@ kabi
 twed/wfxt/软件延时 #
 qemu cmdline #
 steal time #
-SMCCC                       doing
-虚拟化和调度                doing
-guest reboot 流程           doing
-虚拟化关中断和关抢占        doing
+SMCCC                                            topost
+虚拟化和调度/虚拟化关中断和关抢占                doing
+guest reboot 流程                                doing
+虚拟化关中断和关抢占
 arm nmi watchdog/cppc
 
 kvmtool
-kvm unit test		    todo
+kvm unit test		                         topost
 kvm self test
 
 
