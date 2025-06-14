@@ -404,6 +404,10 @@ guest reboot 流程           doing
 虚拟化关中断和关抢占        doing
 arm nmi watchdog/cppc
 
+kvmtool
+kvm unit test		    todo
+kvm self test
+
 
 irqbalance分析/中断亲和性配置
 
@@ -414,7 +418,11 @@ irqbalance分析/中断亲和性配置
 
 ---- 热迁移系列 ----
 1. 基本逻辑
-2. vfio逻辑
+2. vfio热迁移基本逻辑
+3. GIC热迁移基本逻辑        doing
+4. SMMU热迁移基本逻辑       doing
+
+
 
 ---- 虚拟化内存管理 ----
 1. 基本逻辑
