@@ -22,19 +22,34 @@ Service Calls，Vendor Specific Hypervisor Calls，Trusted Application Calls以�
 Trusted OS Calls。
 
 SMCCC协议里明确定义了Arm Architecture Calls的接口，并给PSCI、SDEI在Standard
-Secure Service Calls里余留了空间。
+Secure Service Calls里保留了空间。
 
 Arm Architecture Call里定义的接口主要用来获取SMCCC的版本号、查询Arm Architecture
 接口是否实现、当前机器上ARM安全漏洞的情况(SMCCC_ARCH_WORKAROUND_1/2/3/4)。
 
-SMCCC在不断的升级版本，新的版本会有接口新增。
+SMCCC在不断的升级版本，新的版本会有接口新增。这里需要注意的是，可能PSCI协议在前
+SMCCC在后，SMCCC使用smc还是hvc是在PSCI初始化的时候确定的。
 
 KVM里SMCCC的支持
 -----------------
 
-虚机在使用smc或hvc时，会trap到KVM，KVM负责模拟对应SMCCC接口。
-(todo: 虚机里使用的是smc还是hvc？)
+内核里SMCCC的接口在drivers/firmware/smccc、include/linux/arm-smccc.h里实现。具体
+由smccc_conduit这个变量决定使用smc还是hvc，这个变量在PSCI的初始化逻辑里根据psci_conduit
+配置，而psci_conduit的值是通过读ACPI FADT表里的boot_flags来决定的。直接看下qemu里
+生成ACPI FADT表的代码，可以看到如果guest有EL2则使用smc，如果guest只有EL0/EL1就用hvc。
+```
+machvirt_init
+    if (vms->secure && firmware_loaded) {              
+        vms->psci_conduit = QEMU_PSCI_CONDUIT_DISABLED;
+    } else if (vms->virt) {          <--- 虚机支持ARM Virtualization Extensions
+        vms->psci_conduit = QEMU_PSCI_CONDUIT_SMC;     
+    } else {                                           
+        vms->psci_conduit = QEMU_PSCI_CONDUIT_HVC;     
+    }                                                   
+```
 
+虚机在使用smc或hvc时，会trap到KVM，KVM负责模拟对应SMCCC接口。KVM里模拟SMCCC支持
+的逻辑如下:
 ```
 handle_smc/handle_hvc
   +-> kvm_smccc_call_handler
@@ -72,5 +87,5 @@ PV特性和SMCCC
 
 ARM上的PV特性在Documentation/virt/kvm/arm里有对应的描述文件，目前只有pvtime和ptp。
 这些PV特性和虚机系统的通信就可以通过SMCCC。比如pvtime这个特性对应的function id就
-定义在Standard Hypervisor Service Call这个接口类别里。guest系统通过这个接口初始化
+定义在Standard Hypervisor Service Call这个接口类别里，guest系统通过这个接口初始化
 pvtime。
