@@ -404,7 +404,7 @@ kvmtool构架分析
 kvm unit test		                         topost
 kvm self test				         todo
 
-vcpu上下线时gic的逻辑				 todo
+vcpu上下线时gic的逻辑				 todo       ###
 ARM GIC硬件逻辑                                  topost
 
 跨代热迁移逻辑整理
@@ -419,16 +419,14 @@ irqbalance分析/中断亲和性配置
 ---- vfio系统 -----
 
 ---- 热迁移系列 ----
-1. 基本逻辑
+1. 基本逻辑                                 ###
 2. vfio热迁移基本逻辑
 3. GIC热迁移基本逻辑        doing
 4. SMMU热迁移基本逻辑       doing
-
+5. 标脏处理：kvm fault基础/hdbss/AFdirtybit/SMMUhttu       ###
 
 
 ---- 虚拟化内存管理 ----
 1. 基本逻辑
 2. S2FWB
 3. vfio
-
-
