@@ -9,6 +9,7 @@
 -v0.9 2024.8.17 Sherlock ...
 -v1.0 2025.3.05 Sherlock 重新整理虚拟化部分
 -v1.1 2025.3.31 Sherlock ...
+-v1.2 2025.6.18 Sherlock 增加group/security/irq-fiq关系
 
 简介：本文是ARM的文档《GICv3 and GICv4 Software Overview》的一个学习笔记，GICv3/
       GICv4的基本逻辑会持续的总结到这个文档里。这个文档貌似是基于2016的GIC协议，
@@ -40,6 +41,8 @@ GIC的需求
 
 6. 对于支持虚拟化的CPU核，GIC要配合支持，并尽量降低开销。
 
+7. 需要和系统的各种安全状态联合定义，不因为中断破坏安全定义。
+
 INTID和中断种类
 ----------------
 
@@ -59,6 +62,20 @@ GICv4对于SPI也有大量的配置寄存器。
 
 MSI数量巨大，配置信息保存在内存中的表格里，下配置的方式也改用命令进行，也就有comand
 queue之类的设计。
+
+一个中断可以被定义成group0或者group1中断，以及secure中断，但是确定的中断类型只有：
+group0中断、secure group1、non-secure group1三种类型。GIC使用GICD_CTLR.DS定义其
+支持的安全状态，当GICD_CTLR.DS是0的时候表示GIC支持secure和non-secure，以及如上的
+三种中断类型。注意，CPU在安全和非安全状态，比如EL3以及非安全EL0/1，同一个GIC寄存
+器对CPU可能呈现出不同的域段。比如GICD_CTLR就分安全和非安全的访问，其中GICD_CTLR.DS
+只在安全访问下可见(这里只看同时支持安全和非安全的GIC)。一般需要在EL3(BIOS)把这个
+DS域段配置成0，这样GIC支持secure和non-secure，以及如上的三种中断类型配置。
+
+GIC上的中断最终通过IRQ或者FIQ报给CPU，是通过IRQ还是FIQ报给CPU，决定要素有如上的
+三个中断类型以及CPU当前的EL状态，GIC spec里有具体定义表格。这里没有看出这些定义
+的内在关系。
+
+GIC上有寄存器配置每个中断的中断类型，具体寄存器是GICD(R)_IGROUPR<n>和GICD(R)_IGRPMODR<n>。
 
 中断触发方式和中断状态
 -----------------------

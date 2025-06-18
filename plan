@@ -285,14 +285,14 @@ linux进程调度：
 
 ARM64:
 
- - 中断异常定义(定义和委托情况            todo
- - 虚拟化控制基础逻辑                     todo
- - 系统寄存器基础逻辑			  to post
- - GIC基础逻辑                            todo
+ - 中断异常定义(定义和委托情况            
+ - 虚拟化控制基础逻辑                    
+ - 系统寄存器基础逻辑			  
+ - GIC基础逻辑                            
  - 系统指令基础逻辑: TLB/cache/barrier
  - VMMA基础定义: 页表
  - PMU基础逻辑
- - Timer基础逻辑(以及高精度定时器)        todo
+ - Timer基础逻辑(以及高精度定时器)        
 
  - ARM NMI中断/ARM SP的逻辑 	          c
  - NMI Watchdog hard lockup		  c
@@ -383,13 +383,10 @@ Linux IPI相关的基本逻辑                                c
 kvm debug/kvmto/perf kvmqemu -name VM,debug_threads=on
 arm spe硬件逻辑，可以具体干什么		               doing
 qemu vfio代码分析/怎么给guest呈现pci设备的config空间和BAR空间的/中断
-vfio热迁移驱动					   	 ##
 vm live migration/heterogenous: 基本逻辑/用法/trace    doing #
 virsh						       todo
 qemu gic代码分析
-KVM errate framework
 cpu mode patch
-kvm和调度
 qemu生成acpi表的逻辑，MADT(gic)/PPTT(cache)/cppc
 
 vNMI
@@ -401,12 +398,17 @@ steal time #
 SMCCC                                            topost
 虚拟化和调度/虚拟化关中断和关抢占                doing
 guest reboot 流程                                doing
-虚拟化关中断和关抢占
 arm nmi watchdog/cppc
 
-kvmtool
+kvmtool构架分析
 kvm unit test		                         topost
-kvm self test
+kvm self test				         todo
+
+vcpu上下线时gic的逻辑				 todo
+ARM GIC硬件逻辑                                  topost
+
+跨代热迁移逻辑整理
+kvm调试整理
 
 
 irqbalance分析/中断亲和性配置
