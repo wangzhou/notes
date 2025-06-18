@@ -374,12 +374,12 @@ linux内核arm64 kvm虚拟化基本逻辑		       c
 WFI trap/WFE delay trap                                c
 arm vtimer		                               c
 vSGI		                                       c
-kvm pmu模拟逻辑					       c
+kvm pmu模拟逻辑					       c   ### 5
 vLPI虚拟化/vfio/vCPU到物理CPU的映射		       c
 linux online/offline cpu逻辑			       c
 Linux IPI相关的基本逻辑                                c
 
-基于iommufd的vSVA基本逻辑/multiple vsmmu               todo  ###
+基于iommufd的vSVA基本逻辑/multiple vsmmu               todo  ### 4
 kvm debug/kvmto/perf kvmqemu -name VM,debug_threads=on
 arm spe硬件逻辑，可以具体干什么		               doing
 qemu vfio代码分析/怎么给guest呈现pci设备的config空间和BAR空间的/中断
@@ -404,7 +404,7 @@ kvmtool构架分析
 kvm unit test		                         topost
 kvm self test				         todo
 
-vcpu上下线时gic的逻辑				 todo       ###
+vcpu上下线时gic的逻辑				 todo       ### 1
 ARM GIC硬件逻辑                                  topost
 
 跨代热迁移逻辑整理
@@ -419,11 +419,11 @@ irqbalance分析/中断亲和性配置
 ---- vfio系统 -----
 
 ---- 热迁移系列 ----
-1. 基本逻辑                                 ###
+1. 基本逻辑                                 ### 2
 2. vfio热迁移基本逻辑
 3. GIC热迁移基本逻辑        doing
 4. SMMU热迁移基本逻辑       doing
-5. 标脏处理：kvm fault基础/hdbss/AFdirtybit/SMMUhttu       ###
+5. 标脏处理：kvm fault基础/hdbss/AFdirtybit/SMMUhttu       ### 3
 
 
 ---- 虚拟化内存管理 ----
