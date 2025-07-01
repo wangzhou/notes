@@ -430,3 +430,6 @@ irqbalance分析/中断亲和性配置
 1. 基本逻辑
 2. S2FWB
 3. vfio
+
+kvm wfx trap补齐
+cache idc/dic ctr/clidr/cssidr等

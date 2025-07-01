@@ -1,4 +1,6 @@
 -v0.1 2025.6.14 Sherlock init
+-v0.2 2025.6.19 Sherlock ...
+-v0.3 2025.6.20 Sherlock ...
 
 简介：本文分析KVM虚拟化场景下vCPU上下线的基本逻辑，重点分析vCPU上下线的时间点。
 
@@ -22,29 +24,49 @@ vCPU先退出到KVM，然后换上host的中断异常向量，开中断后，这
 处理完中断后，继续从KVM进入原来的vCPU。
 
 KVM里让出CPU的点都有: 1. WFI/WFE的模拟逻辑，具体逻辑可以参考[这里](todo: ...)。
+2. ioctl run里进入guest之前，KVM会查下vCPU线程的状态，如果需要调度也会显示进行
+调度。
+```
+/* linux/arch/arm64/kvm/arm.c */
+kvm_arch_vcpu_ioctl_run
+  +-> xfer_to_guest_mode_handle_work 
+    +-> xfer_to_guest_mode_work
+      +-> if (ti_work & (_TIF_NEED_RESCHED | _TIF_NEED_RESCHED_LAZY))
+              schedule()
+```
 
-需要退出到qemu处理的情况定义到了include/uapi/linux/kvm.h的KVM_EXIT_XXX。
+在看kvm退出到qemu的逻辑，需要退出到qemu处理的情况定义到了include/uapi/linux/kvm.h
+的KVM_EXIT_XXX。
 
-内核中的一段流程长时间占据CPU就会触发softlockup，那不是可以写一段不触发退出的
-程序，在qemu-kvm上运行就会触发softlockup?
+内核中的一段流程长时间占据CPU就会触发softlockup，那不是可以写一段不触发退出的程序，
+在qemu-kvm上运行就会触发softlockup?
 
-todo: 对于支持抢占的内核。
+对于支持抢占的内核，在如上基础上，凡事内核抢占时都会有vCPU线程的调度。
 
 vCPU上线时间点
 ---------------
 
+vCPU的上线的时间点有：1. vCPU初次运行时上线，2. vCPU线程被调度出物理CPU后，再次
+被调度进来执行。后者又分为，vCPU作为host上的一个线程被正常调度到，或者是KVM显示
+wakeup对应vCPU线程。
 
 vCPU下线时间点
 ---------------
 
+vCPU下线的可能点在上面已经提到过，注意，vCPU从guest退到KVM并没有下线，我们这里说
+的下线是vCPU线程被调度出物理CPU。那么，在禁止内核抢占的内核，vCPU下线只会发生在：
+1. KVM里主动调度，让出物理CPU，2. KVM退出到qemu时，vCPU线程被调度走。
+
+KVM里使用kvm_vcpu_kick函数使得一个vCPU至少下线一下，一般KVM更新了vCPU对应的资源
+需要vCPU重新加载对应的资源的时候，要kick下vCPU，叫它先下线随后再上线。
+
+代码上看，kvm_vcpu_kick的点有: vCPU power off、vCPU suspend、kvm_vm_ioctl_irq_line，
+pmu模拟(?)，需要给一个vCPU注入中断的时候，GICD_CTLR和vSGI直通的逻辑(?)。
 
 vCPU上下线API
 --------------
 
-
-vCPU线程调度点
----------------
-
+kvm_vcpu_kick/kvm_vcpu_wake_up/kvm_kick_many_cpus
 
 vCPU关中断关抢占逻辑
 ---------------------
