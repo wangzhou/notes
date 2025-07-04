@@ -1,6 +1,7 @@
 -v0.1 2024.11.9 Sherlock init
 -v0.2 2024.12.7 Sherlock 补齐相关逻辑
 -v0.3 2025.05.7 Sherlock 增加WFxT和TWED的逻辑
+-v0.4 2025.07.4 Sherlock 增加wfi/wfe trap逻辑的细节
 
 简介：本文分析Linux内核KVM中ARM WFX指令模拟的基本逻辑。基于内核版本v6.11-rc7。
 
@@ -21,9 +22,12 @@ guest的vLPI中断支持附带host doorbell中断的功能，当被注入vLPI的
 
 WFE的虚拟化处理逻辑和WFI的逻辑基本一致，不过WFE是直接换一个vCPU的线程来跑。
 
-当物理核上只有一个vCPU线程在跑的时候，wfi/wfe没有必要再做trap，KVM在上线CPU的时候
-把wfe/wfi都配置为不再trap，所以它们是实际执行的。从host上看就是vCPU线程一直有指令
-在运行，不管是正常跑还是做wfi。所以，host上看到vCPU线程的CPU占用率是100%。
+当物理核上只有一个vCPU线程在跑的时候，wfe没有必要再做trap，trap出去也没有另外的
+vCPU线程可以换进来跑；wfi在GIC支持vLPI/vSGI直通的时候，也不trap到KVM，这里似乎是
+更倾向保证vLPI/vSGI的性能，注意wfi在host是GICv3的时候，还是要trap的，反正GICv3时，
+所有虚机中断都要先trap的KVM里，再注入到虚机。这样如果把wfe/wfi都配置为不再trap，
+那么它们是实际执行的，从host上看就是vCPU线程一直有指令在运行，不管是正常跑还是做
+wfi/wfe，所以，host上看到vCPU线程的CPU占用率是100%。
 
 WFxT编码了一个通用寄存器，软件可以把一个counter数值放到这个寄存器里，当超时发生时，
 硬件触发唤醒事件，WFxT被唤醒。对于WFxT，虚拟化下如果发生了trap，KVM中只是加了查询
@@ -56,7 +60,7 @@ kvm_handle_wfx
 
     +-> kvm_vgic_put
     | +-> vgic_v3_put
-    |       /* todo: vcpu下线，vgic要做什么处理 */
+    |       /* vcpu下线时，vgic的相关处理在这里进行 */
     |   +-> vgic_v4_put
     |         /* 在WFI处理中需要enable doorbell中断 */
     |     +-> its_make_vpe_non_resident(vpe, !!vcpu_clear_flag(vcpu, IN_WFI))
@@ -107,7 +111,7 @@ vgic_v4_doorbell_handler
       ...
 ```
 
-上面提到的，只有一个vCPU线程在运行，wfe/wfi关trap的逻辑在：
+上面提到的，wfe/wfi开关trap的逻辑在vCPU上线的时候：
 ```
 kvm_arch_vcpu_load
   +-> kvm_vcpu_should_clear_twe
@@ -122,5 +126,5 @@ kvm_arch_vcpu_load
 host调度vCPU线程上下线的时候，会调用到kvm注册给调度器的回调函数kvm_sched_out/in。
 
 host上中断处理中，是否会调用kvm_sched_out/in? 对于非抢占内核，中断打断当前的内核
-执行流程，在中断执行完成后，应该继续返回被打断的点执行，而不执行内核抢占，所以会
-调用kvm_sched_out/in么？
+执行流程，在中断执行完成后，应该继续返回被打断的点执行，而不执行内核抢占，所以应
+该不会调用kvm_sched_out/in？
