@@ -420,7 +420,7 @@ irqbalance分析/中断亲和性配置
 
 ---- 热迁移系列 ----
 1. 基本逻辑                                 ### 2
-2. vfio热迁移基本逻辑
+2. vfio热迁移基本逻辑                                   <---
 3. GIC热迁移基本逻辑        doing
 4. SMMU热迁移基本逻辑       doing
 5. 标脏处理：kvm fault基础/hdbss/AFdirtybit/SMMUhttu       ### 3
@@ -433,5 +433,5 @@ irqbalance分析/中断亲和性配置
 
 kvm wfx trap补齐                   topost
 cache idc/dic ctr/clidr/cssidr等   topost
-NMI虚拟化逻辑补齐
+NMI虚拟化逻辑补齐		   doing
 qemu arm启动逻辑
