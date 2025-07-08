@@ -6,14 +6,40 @@
 基本逻辑
 ---------
 
+Linux内核vSMMU的方案现在都基于iommufd来搞，vSMMU的基本逻辑可以参考[这里]()。本文
+的分析重点是把iommufd的逻辑打开，结合qemu从上到下完整梳理其中的逻辑。现在内核相关
+的代码基本上已经在主线(v6.16)，QEMU相关的代码基本上被整合到OpenEuler的[qemu仓库](https://gitee.com/openeuler/qemu.git)，
+分支是qemu-8.2.0。
 
 内核相关逻辑
 -------------
 
+iommufd的对外接口在内核文档里有完整的描述，位置在Documentation/userspace-api/iommufd.rst。
 
+todo: VFIO_DEV_CDEV 和 IOMMUFD兼容VFIO的配置。
 
 qemu相关逻辑
 -------------
+
+1. open /dev/iommufd
+
+2. open vfio cdev
+
+3. connect and bind
+
+4. alloc ioas
+
+5. alloc hwpt
+
+6. bind ioas and hwpt
+
+7. 针对S1和S2的逻辑
+
+8. S1 guest/host通信的逻辑
+
+
+iommufd标脏的逻辑
+------------------
 
 
 
@@ -24,3 +50,8 @@ vSMMU支持IO fault的逻辑
 
 vSMMU热迁移的逻辑
 ------------------
+
+备注
+-----
+
+[1] HiSilicon的QEMU github仓库也有整合的代码，分支为qemu-8.2.0-vSVA-backport-wip。

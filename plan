@@ -416,7 +416,9 @@ irqbalance分析/中断亲和性配置
 
 ---- iommufd系列文章 ----
 
+
 ---- vfio系统 -----
+
 
 ---- 热迁移系列 ----
 1. 基本逻辑                                 ### 2
@@ -424,7 +426,6 @@ irqbalance分析/中断亲和性配置
 3. GIC热迁移基本逻辑        doing
 4. SMMU热迁移基本逻辑       doing
 5. 标脏处理：kvm fault基础/hdbss/AFdirtybit/SMMUhttu       ### 3
-
 
 ---- 虚拟化内存管理 ----
 1. 基本逻辑
