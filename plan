@@ -407,7 +407,6 @@ kvm self test				         todo
 vcpu上下线时gic的逻辑				 todo       ### 1
 ARM GIC硬件逻辑                                  topost
 
-跨代热迁移逻辑整理
 kvm调试整理
 
 
@@ -436,3 +435,4 @@ kvm wfx trap补齐                   topost
 cache idc/dic ctr/clidr/cssidr等   topost
 NMI虚拟化逻辑补齐		   doing
 qemu arm启动逻辑
+跨代热迁移逻辑整理   	           todo

@@ -170,6 +170,8 @@ kvm_arch_irq_bypass_add_producer(kvm, virq, struct kvm_kernel_irq_routing_entry)
 (todo: vLPI pending配置enable的分析，应该在active domain)
 (todo: 虚机里的GICv3的table和host上的vtable的对应关系)
 
+todo: unmap的流程？
+
 vCPU上下线逻辑
 ---------------
 

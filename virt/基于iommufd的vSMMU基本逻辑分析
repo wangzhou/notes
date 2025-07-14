@@ -1,4 +1,6 @@
--v0.1 2025.7.5 Sherlock init
+-v0.1 2025.7.5  Sherlock init
+-v0.2 2025.7.9  Sherlock ...
+-v0.3 2025.7.10 Sherlock ...
 
 简介：本文分析基于iommufd实现的vSMMU的基本逻辑。
 
@@ -15,41 +17,162 @@ Linux内核vSMMU的方案现在都基于iommufd来搞，vSMMU的基本逻辑可�
 -------------
 
 iommufd的对外接口在内核文档里有完整的描述，位置在Documentation/userspace-api/iommufd.rst。
+目前，既支持使用新接口使用IOMMUFD，又支持使用VFIO原来的接口使用IOMMUFD，后者就是
+用IOMMUFD的实现代替vfio container的实现。
 
-todo: VFIO_DEV_CDEV 和 IOMMUFD兼容VFIO的配置。
+新接口对应的内核配置项是VFIO_DEVICE_CDEV，设备和VFIO驱动绑定的时候会创建一个新的
+字符设备，后续和用户态的交互都使用这个新字符设备，它的路径是/dev/vfio/devices/vfioN。
+创建新字符设备的代码逻辑大概是：
+```
+vfio_pci_probe -> vfio_pci_core_register_device -> vfio_register_group_dev ->
+__vfio_register_dev -> vfio_device_add
+```
+这个字符设备对应的file_operations定义在drivers/vfio/vfio_main.c: vfio_device_fops，
+其实就是原来VFIO从vfio_group得到的匿名文件的fops，两者都是VF在用户态的代表文件。
+
+使用IOMMUFD支持原来的vfio container对应的配置项是IOMMUFD_VFIO_CONTAINER。
 
 qemu相关逻辑
 -------------
 
-1. open /dev/iommufd
+qemu里关于iommufd的逻辑基本上可以用vfio_realize里的逻辑串起来。
+```
+vfio_realize
+  +-> vfio_attach_device
+        /*
+         * 这里的VFIOIOMMUClass是TYPE_VFIO_IOMMU_IOMMUFD，对应类的初始化函数挂
+         * 的回调是: iommufd_cdev_attach，语意是VF设备和IOMMU绑定。
+         */
+    +-> ops->attach_device   // iommufd_cdev_attach
+      +-> iommufd_cdev_getfd               <-- 1. open vfio cdev
 
-2. open vfio cdev
+      +-> iommufd_cdev_connect_and_bind
+        +-> iommufd_backend_connect        <-- 2. open /dev/iommufd
+        +-> iommufd_cdev_kvm_device_add
+        +-> ioctl(vbasedev->fd, VFIO_DEVICE_BIND_IOMMUFD, $bind)  <-- 3. VF cdev和iommufd绑定
 
-3. connect and bind
+      +-> iommufd_cdev_attach_container    <-- container已存在的，就直接attach，并跳过如下流程
 
-4. alloc ioas
+      +-> iommufd_backend_alloc_ioas       <-- 4. alloc ioas, 首次创建containers
+        +-> ioctl(fd, IOMMU_IOAS_ALLOC, ...)
 
-5. alloc hwpt
+      +-> iommufd_cdev_attach_container
+        +-> iommufd_cdev_autodomains_get   
+              /* 这里配置的是dirty tracking的hwpt? 如何理解 */
+          +-> iommufd_backend_alloc_hwpt     <-- 5. alloc hwpt
+          +-> iommufd_cdev_attach_ioas_hwpt  <-- 6 attach iommufd hwpt
+            +-> ioctl(vbasedev->fd, VFIO_DEVICE_ATTACH_IOMMUFD_PT, &attach_data)
 
-6. bind ioas and hwpt
+      +-> iommufd_cdev_ram_block_discard_disable ?
 
-7. 针对S1和S2的逻辑
+      +-> iommufd_cdev_get_info_iova_range ?
 
-8. S1 guest/host通信的逻辑
+      +-> memory_listener_register ?
+      
+      +-> ioctl(devfd, VFIO_DEVICE_GET_INFO, ...)
+
+  +-> vfio_populate_device
+
+      /* 第二个参数是Host iommu device，信息在哪里得到的？*/
+  +-> pci_device_set_iommu_device(pdev, vbasedev->hiod, ...)
+        /*
+         * 回调函数定义在hw/arm/smmu-common.c: PCIIOMMUOps smmu_ops
+         * 在smmu_base_realize里注册到PCIBus上: pci_setup_iommu
+         * 
+         * 此处的语意给这个PCI设备关联对应的iommu设备。
+         */
+    +-> iommu_bus->iommu_ops->set_iommu_device // smmu_dev_set_iommu_device
+      +-> smmu_dev_attach_viommu
+        +-> host_iommu_device_iommufd_attach_hwpt ?
+        +-> iommufd_backend_alloc_hwpt  <--- 7. alloc S2 hwpt
+        +-> host_iommu_device_iommufd_attach_hwpt  <--- MSI cookie? 
+        +-> iommufd_backend_alloc_viommu  <--- 8. create vSMMU
+
+        +-> iommufd_backend_alloc_hwpt  <--- 9. abort_data?
+        +-> iommufd_backend_alloc_hwpt  <--- 10. bypass_data?
+
+        +-> host_iommu_device_iommufd_attach_hwpt  <--- bypass_data?
+
+```
+
+vSMMU运行时调用IOMMUFD的逻辑，1. STE/CD install，2. TLB/CONFIG invalidate。
+
+smmu_hwpt_invalidate_cache    没有地方调用？
+  +-> iommufd_backend_invalidate_cache
+
+smmu_viommu_invalidate_cache
+  +-> iommufd_backend_invalidate_cache
+        /* 注意，这个接口不感知具体命令语意，cmd直接送到最底下的SMMUv3驱动 */
+    +-> ioctl(fd, IOMMU_HWPT_INVALIDATE, ...)
+
+host内核对应的实现arm_vsmmu_cache_invalidate
+
+smmuv3_install_nested_ste
+  +-> iommufd_backend_alloc_vdev
+
+  +-> smmu_dev_install_nested_ste
+    +-> iommufd_backend_alloc_hwpt  没有到硬件上？
+    +-> host_iommu_device_iommufd_attach_hwpt
+          /* idev是HostIOMMUDeviceIOMMUFDClass，初始化在hw/vfio/iommufd.c */
+      +-> idev->attach_hwpt     // host_iommu_device_iommufd_vfio_attach_hwpt
+        +-> ioctl(..., VFIO_DEVICE_ATTACH_IOMMUFD_PT, ...)
+
+  +-> create_fault_handlers         <--- 支持vSMMU io fault
+
+VFIO_DEVICE_ATTACH_IOMMUFD_PT内核态的支持在drivers/vfio/vfio_main.c: vfio_df_ioctl_attach_pt。
+
+vfio_df_ioctl_attach_pt
+      /*
+       * 具体回调定义在drivers/vfio/vfio_pci.c: vfio_pci_ops, 作为vfio device文
+       * 件ioctl的拓展操作函数。
+       */
+  +-> device->ops->attach_ioas // vfio_iommufd_physical_attach_ioas
+        /* drivers/iommu/iommufd子模块的API */
+    +-> iommufd_device_attach
+      +-> iommufd_device_change_pt
+        +-> iommufd_device_do_replace
+          +-> iommufd_hwpt_replace_device
+            ...
+                  /*
+                   * 回调定义在arm-smmu-v3-iommufd.c: arm_smmu_nested_ops, 初始
+                   * 化的点是arm_vsmmu_alloc->iommufd_viommu_alloc
+                   *
+                   * 应该是把vSMMU上的CD地址(IPA)直接写到物理STE的的CD地址域段了。
+                   */
+              +-> domain->ops->attach_dev // arm_smmu_attach_dev_nested
+                +-> arm_smmu_attach_prepare
+                +-> arm_smmu_make_nested_domain_ste
+                +-> arm_smmu_install_ste_for_dev
+                +-> arm_smmu_attach_commit
+  
 
 
 iommufd标脏的逻辑
 ------------------
 
+todo: ...
 
 
 vSMMU支持IO fault的逻辑
 ------------------------
 
+smmuv3_install_nested_ste
+      /*
+       * 目前的hack实现是，和内核态的接口使用io_uring, qemu中起两个线程，一个用
+       * 来poll host内核发上来的IO page fault请求，vSMMU拿到请求后，在vSMMU里模
+       * 拟报上来的event；一个用来给内核发response。
+       */
+  +-> create_fault_handlers         <--- 支持vSMMU io fault
+    +-> io_uring_queue_init
+    +-> qemu_thread_create(...,  read_fault_handler, ...)
+    +-> qemu_thread_create(...,  write_fault_handler, ...)
 
 
 vSMMU热迁移的逻辑
 ------------------
+
+todo: ...
+
 
 备注
 -----
