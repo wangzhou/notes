@@ -1,0 +1,29 @@
+sudo apt-get install lmbench
+
+sherlock@m1:/usr/lib/lmbench/bin$ ls
+bw_file_rd  getopt.o       lat_mem_rd     lat_sem           lib_sched.o   lmhttp
+bw_mem      hello          lat_mmap       lat_sig           lib_stats.o   loop_o
+bw_mmap_rd  lat_cmd        lat_ops        lat_syscall       lib_tcp.o     memsize
+bw_pipe     lat_connect    lat_pagefault  lat_tcp           lib_timing.o  mhz
+bw_tcp      lat_ctx        lat_pipe       lat_udp           lib_udp.o     msleep
+bw_unix     lat_dram_page  lat_pmake      lat_unix          lib_unix.o    par_mem
+cache       lat_fcntl      lat_proc       lat_unix_connect  line          par_ops
+disk        lat_fifo       lat_rand       lat_usleep        lmbench       stream
+enough      lat_fs         lat_rpc        lib_debug.o       lmbench.a     timing_o
+flushdisk   lat_http       lat_select     lib_mem.o         lmdd          tlb
+sherlock@m1:/usr/lib/lmbench/bin$ ./lat_syscall 
+Usage: ./lat_syscall [-P <parallelism>] [-W <warmup>] [-N <repetitions>] null|read|write|
+stat|fstat|open [file]
+sherlock@m1:/usr/lib/lmbench/bin$ ./lat_mmap 
+Usage: ./lat_mmap [-r] [-C] [-P <parallelism>] [-W <warmup>] [-N <repetitions>] size file
+sherlock@m1:/usr/lib/lmbench/bin$ ./lat_select
+Usage: ./lat_select [-n <#descriptors>] [-P <parallelism>] [-W <warmup>] [-N <repetitions
+>] file|tcp
+sherlock@m1:/usr/lib/lmbench/bin$ ./lat_signal
+bash: ./lat_signal: No such file or directory
+sherlock@m1:/usr/lib/lmbench/bin$ ./lat_sig
+Usage: ./lat_sig [-P <parallelism>] [-W <warmup>] [-N <repetitions>] install|catch|prot [
+file]
+sherlock@m1:/usr/lib/lmbench/bin$ taskset -c 0 ./lat_syscall -P 1 -W  0 -N 10 null /dev/n
+ull
+Simple syscall: 0.0767 microseconds
