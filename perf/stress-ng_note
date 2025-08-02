@@ -5,7 +5,7 @@
 stress-ng是一个系统压力测试的工具。
 
 stress-ng --io 2 -d 3 --timeout 4
-表示，起2个线程一只作sync/fsync的系统调用，代码在stress_io.c里，起3个线程一直对
+表示，起2个线程一直作sync/fsync的系统调用，代码在stress_io.c里，起3个线程一直对
 一个临时创建的文件做大数据量的write，一般是64KB写入。测试时间是4秒。
 
 如果想迅速知道stress-ng的的测试逻辑，可以先大概看下stress-ng的代码，然后用strace

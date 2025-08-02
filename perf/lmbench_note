@@ -1,29 +1,52 @@
-sudo apt-get install lmbench
+-v0.1 2025.8.2 Sherlock init
 
-sherlock@m1:/usr/lib/lmbench/bin$ ls
-bw_file_rd  getopt.o       lat_mem_rd     lat_sem           lib_sched.o   lmhttp
-bw_mem      hello          lat_mmap       lat_sig           lib_stats.o   loop_o
-bw_mmap_rd  lat_cmd        lat_ops        lat_syscall       lib_tcp.o     memsize
-bw_pipe     lat_connect    lat_pagefault  lat_tcp           lib_timing.o  mhz
-bw_tcp      lat_ctx        lat_pipe       lat_udp           lib_udp.o     msleep
-bw_unix     lat_dram_page  lat_pmake      lat_unix          lib_unix.o    par_mem
-cache       lat_fcntl      lat_proc       lat_unix_connect  line          par_ops
-disk        lat_fifo       lat_rand       lat_usleep        lmbench       stream
-enough      lat_fs         lat_rpc        lib_debug.o       lmbench.a     timing_o
-flushdisk   lat_http       lat_select     lib_mem.o         lmdd          tlb
-sherlock@m1:/usr/lib/lmbench/bin$ ./lat_syscall 
-Usage: ./lat_syscall [-P <parallelism>] [-W <warmup>] [-N <repetitions>] null|read|write|
-stat|fstat|open [file]
-sherlock@m1:/usr/lib/lmbench/bin$ ./lat_mmap 
-Usage: ./lat_mmap [-r] [-C] [-P <parallelism>] [-W <warmup>] [-N <repetitions>] size file
-sherlock@m1:/usr/lib/lmbench/bin$ ./lat_select
-Usage: ./lat_select [-n <#descriptors>] [-P <parallelism>] [-W <warmup>] [-N <repetitions
->] file|tcp
-sherlock@m1:/usr/lib/lmbench/bin$ ./lat_signal
-bash: ./lat_signal: No such file or directory
-sherlock@m1:/usr/lib/lmbench/bin$ ./lat_sig
-Usage: ./lat_sig [-P <parallelism>] [-W <warmup>] [-N <repetitions>] install|catch|prot [
-file]
+简介：随手记录一些lmbench的东西。
+
+lmbench的官网在[这里](https://lmbench.sourceforge.net)，按照提示下载的是源码，
+下载完后直接make编译出各个测试项的二进制，这个会保存在源码的bin目录下。用linux
+发行版的也可以直接按转lmbench，比如，在ubuntu下直接：sudo apt-get install lmbench
+就可以安装lmbench，这时lmbench被安装到/usr/lib/lmbench/。lmbench有详细的man文档，
+可以man具体命令查看其对应用法。
+
+lmbench的测试套项大概分三类带宽、时延和其它，带宽测试项的前缀是bw、时延是lat。
+下面依次看看每个测试项：
+
+- bw_mem
+
+测试内存带宽，其中又包含各种测试子项。如下是在M1上测试的一个数据，每个子项测试
+10次，内存大小100MB。
+```
+sherlock@m1:~/repos/lmbench/lmbench-3.0-a9/bin$ ./bw_mem -P 1 -W 0 -N 10 1000m wr
+1048.58 19233.22
+sherlock@m1:~/repos/lmbench/lmbench-3.0-a9/bin$ ./bw_mem -P 1 -W 0 -N 10 1000m rd
+1048.58 31315.73
+sherlock@m1:~/repos/lmbench/lmbench-3.0-a9/bin$ ./bw_mem -P 1 -W 0 -N 10 1000m rdwr
+1048.58 23817.74
+sherlock@m1:~/repos/lmbench/lmbench-3.0-a9/bin$ ./bw_mem -P 1 -W 0 -N 10 1000m cp
+1048.58 18237.37
+sherlock@m1:~/repos/lmbench/lmbench-3.0-a9/bin$ ./bw_mem -P 1 -W 0 -N 10 1000m fwr
+1048.58 19501.86
+sherlock@m1:~/repos/lmbench/lmbench-3.0-a9/bin$ ./bw_mem -P 1 -W 0 -N 10 1000m frd
+1048.58 23887.73
+sherlock@m1:~/repos/lmbench/lmbench-3.0-a9/bin$ ./bw_mem -P 1 -W 0 -N 10 1000m fcp
+1048.58 17456.48
+sherlock@m1:~/repos/lmbench/lmbench-3.0-a9/bin$ ./bw_mem -P 1 -W 0 -N 10 1000m bzero
+1048.58 64899.18
+sherlock@m1:~/repos/lmbench/lmbench-3.0-a9/bin$ ./bw_mem -P 1 -W 0 -N 10 1000m bcopy
+1048.58 23556.09
+```
+
+- lat_mem_rd
+
+内存读时延测试
+
+- lat_syscall
+
+测试getpid/open/read/write/stat/fstat的时间，比如，M1系统上getpid要大概需要如下
+的时间：
+```
 sherlock@m1:/usr/lib/lmbench/bin$ taskset -c 0 ./lat_syscall -P 1 -W  0 -N 10 null /dev/n
 ull
 Simple syscall: 0.0767 microseconds
+```
+

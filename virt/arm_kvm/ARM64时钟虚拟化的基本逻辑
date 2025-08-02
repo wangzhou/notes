@@ -35,7 +35,7 @@ EL1 virtual timer，非安全EL2 physical timer, 非安全EL2 virtual timer，EL
 virtual timer对应的中断被触发的逻辑是vitual timer的CompareValue寄存器和CNTVCT_EL0
 做比较。
 
-各个timer分别有自己的中断号，不考虑EL3和安全的话，常用的就是如下这几个：
+ARM SBSA规范里定义了各个timer的中断号，不考虑EL3的话，有如下这几个timer：
 ```
                                               host                 guest
 +----------------------------------+------+--------------------+-------------+
@@ -56,6 +56,11 @@ virtual timer对应的中断被触发的逻辑是vitual timer的CompareValue寄�
 | security EL2 virtual timer       |  19  |                    |             |
 +----------------------------------+------+--------------------+-------------+
 ```
+EL1 physical timer: nVHE时，host/guest内核的timer？
+non security EL2 physical timer: VHE时，host内核的timer。
+EL1 virtual timer: VHE时，对于虚机中的timer，timer中断先触发EL2 27号中断trap，再
+向vCPU中注入27号中断，所以虚机中看到的arch_timer是27号中断。
+
 
 时钟虚拟化的逻辑
 -----------------

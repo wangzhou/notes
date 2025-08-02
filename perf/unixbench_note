@@ -1,0 +1,194 @@
+-v0.1 2025.8.2 Sherlock init
+
+简介：随手记录一些unixbench的东西。
+
+
+unixbench是类unix/linux系统上很老的一个性能测试套，现在github上的下载地址在[这里](https://github.com/kdlucas/byte-unixbench)。
+这里下载的是源码，下载完后，进入UnixBench目录，运行make编译。可以看见源码在src
+目录，编译出来的子测试用例的二进制在pgms，运行Run执行测试，Run是一个Perl脚本，具
+体的用法可以看USAGE文件。
+
+在我的macbook air M1上大概的运行效果是：
+```
+sherlock@m1:~/repos/byte-unixbench/UnixBench$ ./Run 
+make all
+make[1]: Entering directory '/home/sherlock/repos/byte-unixbench/UnixBench'
+make distr
+make[2]: Entering directory '/home/sherlock/repos/byte-unixbench/UnixBench'
+Checking distribution of files
+./pgms  exists
+./src  exists
+./testdir  exists
+./tmp  exists
+./results  exists
+make[2]: Leaving directory '/home/sherlock/repos/byte-unixbench/UnixBench'
+make programs
+make[2]: Entering directory '/home/sherlock/repos/byte-unixbench/UnixBench'
+make[2]: Nothing to be done for 'programs'.
+make[2]: Leaving directory '/home/sherlock/repos/byte-unixbench/UnixBench'
+make[1]: Leaving directory '/home/sherlock/repos/byte-unixbench/UnixBench'
+sh: 1: 3dinfo: not found
+
+   #    #  #    #  #  #    #          #####   ######  #    #   ####   #    #
+   #    #  ##   #  #   #  #           #    #  #       ##   #  #    #  #    #
+   #    #  # #  #  #    ##            #####   #####   # #  #  #       ######
+   #    #  #  # #  #    ##            #    #  #       #  # #  #       #    #
+   #    #  #   ##  #   #  #           #    #  #       #   ##  #    #  #    #
+    ####   #    #  #  #    #          #####   ######  #    #   ####   #    #
+
+   Version 5.1.3                      Based on the Byte Magazine Unix Benchmark
+
+   Multi-CPU version                  Version 5 revisions by Ian Smith,
+                                      Sunnyvale, CA, USA
+   January 13, 2011                   johantheghost at yahoo period com
+
+------------------------------------------------------------------------------
+   Use directories for:
+      * File I/O tests (named fs***) = /home/sherlock/repos/byte-unixbench/UnixBench/tmp
+      * Results                      = /home/sherlock/repos/byte-unixbench/UnixBench/results
+------------------------------------------------------------------------------
+
+1 x Dhrystone 2 using register variables  1 2 3 4 5 6 7 8 9 10
+
+1 x Double-Precision Whetstone  1 2 3 4 5 6 7 8 9 10
+
+1 x Execl Throughput  1 2 3
+
+1 x File Copy 1024 bufsize 2000 maxblocks  1 2 3
+
+1 x File Copy 256 bufsize 500 maxblocks  1 2 3
+
+1 x File Copy 4096 bufsize 8000 maxblocks  1 2 3
+
+1 x Pipe Throughput  1 2 3 4 5 6 7 8 9 10
+
+1 x Pipe-based Context Switching  1 2 3 4 5 6 7 8 9 10
+
+1 x Process Creation  1 2 3
+
+1 x System Call Overhead  1 2 3 4 5 6 7 8 9 10
+
+1 x Shell Scripts (1 concurrent)  1 2 3
+
+1 x Shell Scripts (8 concurrent)  1 2 3
+
+4 x Dhrystone 2 using register variables  1 2 3 4 5 6 7 8 9 10
+
+4 x Double-Precision Whetstone  1 2 3 4 5 6 7 8 9 10
+
+4 x Execl Throughput  1 2 3
+
+4 x File Copy 1024 bufsize 2000 maxblocks  1 2 3
+
+4 x File Copy 256 bufsize 500 maxblocks  1 2 3
+
+4 x File Copy 4096 bufsize 8000 maxblocks  1 2 3
+
+4 x Pipe Throughput  1 2 3 4 5 6 7 8 9 10
+
+4 x Pipe-based Context Switching  1 2 3 4 5 6 7 8 9 10
+
+4 x Process Creation  1 2 3
+
+4 x System Call Overhead  1 2 3 4 5 6 7 8 9 10
+
+4 x Shell Scripts (1 concurrent)  1 2 3
+
+4 x Shell Scripts (8 concurrent)  1 2 3
+
+========================================================================
+   BYTE UNIX Benchmarks (Version 5.1.3)
+
+   System: m1: GNU/Linux
+   OS: GNU/Linux -- 5.4.0-100-generic -- #113-Ubuntu SMP Thu Feb 3 18:44:51 UTC 2022
+   Machine: aarch64 (aarch64)
+   Language: en_US.utf8 (charmap="UTF-8", collate="UTF-8")
+   CPU 0:  (48.0 bogomips)
+          
+   CPU 1:  (48.0 bogomips)
+          
+   CPU 2:  (48.0 bogomips)
+          
+   CPU 3:  (48.0 bogomips)
+          
+   11:47:09 up 4 days, 12:30,  7 users,  load average: 0.12, 0.09, 0.09; runlevel 2025-06-24
+
+------------------------------------------------------------------------
+Benchmark Run: Sat Aug 02 2025 11:47:09 - 12:15:07
+4 CPUs in system; running 1 parallel copy of tests
+
+Dhrystone 2 using register variables       70834777.8 lps   (10.0 s, 7 samples)
+Double-Precision Whetstone                     8144.4 MWIPS (9.9 s, 7 samples)
+Execl Throughput                              11812.3 lps   (30.0 s, 2 samples)
+File Copy 1024 bufsize 2000 maxblocks       2018489.3 KBps  (30.0 s, 2 samples)
+File Copy 256 bufsize 500 maxblocks          550021.7 KBps  (30.0 s, 2 samples)
+File Copy 4096 bufsize 8000 maxblocks       3184794.4 KBps  (30.0 s, 2 samples)
+Pipe Throughput                             2948091.2 lps   (10.0 s, 7 samples)
+Pipe-based Context Switching                  40529.9 lps   (10.0 s, 7 samples)
+Process Creation                              18253.6 lps   (30.0 s, 2 samples)
+Shell Scripts (1 concurrent)                  21096.8 lpm   (60.0 s, 2 samples)
+Shell Scripts (8 concurrent)                   5903.1 lpm   (60.0 s, 2 samples)
+System Call Overhead                        2167813.6 lps   (10.0 s, 7 samples)
+
+System Benchmarks Index Values               BASELINE       RESULT    INDEX
+Dhrystone 2 using register variables         116700.0   70834777.8   6069.8
+Double-Precision Whetstone                       55.0       8144.4   1480.8
+Execl Throughput                                 43.0      11812.3   2747.0
+File Copy 1024 bufsize 2000 maxblocks          3960.0    2018489.3   5097.2
+File Copy 256 bufsize 500 maxblocks            1655.0     550021.7   3323.4
+File Copy 4096 bufsize 8000 maxblocks          5800.0    3184794.4   5491.0
+Pipe Throughput                               12440.0    2948091.2   2369.8
+Pipe-based Context Switching                   4000.0      40529.9    101.3
+Process Creation                                126.0      18253.6   1448.7
+Shell Scripts (1 concurrent)                     42.4      21096.8   4975.7
+Shell Scripts (8 concurrent)                      6.0       5903.1   9838.5
+System Call Overhead                          15000.0    2167813.6   1445.2
+                                                                   ========
+System Benchmarks Index Score                                        2489.0
+
+------------------------------------------------------------------------
+Benchmark Run: Sat Aug 02 2025 12:15:07 - 13:17:03
+4 CPUs in system; running 4 parallel copies of tests
+
+Dhrystone 2 using register variables      206613621.7 lps   (10.0 s, 7 samples)
+Double-Precision Whetstone                    29884.4 MWIPS (10.1 s, 7 samples)
+Execl Throughput                              29475.4 lps   (29.8 s, 2 samples)
+File Copy 1024 bufsize 2000 maxblocks       4431886.2 KBps  (30.0 s, 2 samples)
+File Copy 256 bufsize 500 maxblocks         1343416.9 KBps  (30.0 s, 2 samples)
+File Copy 4096 bufsize 8000 maxblocks       6318983.4 KBps  (30.0 s, 2 samples)
+Pipe Throughput                             2933254.0 lps   (300.7 s, 7 samples)
+Pipe-based Context Switching                1618058.8 lps   (10.0 s, 7 samples)
+Process Creation                              42164.5 lps   (30.0 s, 2 samples)
+Shell Scripts (1 concurrent)                  44011.6 lpm   (60.0 s, 2 samples)
+Shell Scripts (8 concurrent)                   6253.4 lpm   (60.0 s, 2 samples)
+System Call Overhead                        8105239.1 lps   (10.0 s, 7 samples)
+
+System Benchmarks Index Values               BASELINE       RESULT    INDEX
+Dhrystone 2 using register variables         116700.0  206613621.7  17704.7
+Double-Precision Whetstone                       55.0      29884.4   5433.5
+Execl Throughput                                 43.0      29475.4   6854.7
+File Copy 1024 bufsize 2000 maxblocks          3960.0    4431886.2  11191.6
+File Copy 256 bufsize 500 maxblocks            1655.0    1343416.9   8117.3
+File Copy 4096 bufsize 8000 maxblocks          5800.0    6318983.4  10894.8
+Pipe Throughput                               12440.0    2933254.0   2357.9
+Pipe-based Context Switching                   4000.0    1618058.8   4045.1
+Process Creation                                126.0      42164.5   3346.4
+Shell Scripts (1 concurrent)                     42.4      44011.6  10380.1
+Shell Scripts (8 concurrent)                      6.0       6253.4  10422.3
+System Call Overhead                          15000.0    8105239.1   5403.5
+                                                                   ========
+System Benchmarks Index Score                                        6925.7
+```
+可以看到，unixbench分别跑了1 parallel和4 parallel的测试，因为环境是4核机器，所以
+unixbench跑的是4 parallel的测试。其中每个测试项都有一个基准分数，这个是很早的一
+台机器上的测试分数，还有本台机器上的测试分数，index是折算出的增加倍数，最后的总
+分是所有测试项的折算出来的一个分数。
+
+
+
+
+
+
+
+
+
