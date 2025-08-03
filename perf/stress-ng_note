@@ -2,7 +2,8 @@
 
 简介：迅速记录下调试问题时stress-ng的使用笔记。
 
-stress-ng是一个系统压力测试的工具。
+stress-ng是一个系统压力测试的工具，它的前生应该是stress，stress-ng比stress有更
+多的测试命令。
 
 stress-ng --io 2 -d 3 --timeout 4
 表示，起2个线程一直作sync/fsync的系统调用，代码在stress_io.c里，起3个线程一直对
