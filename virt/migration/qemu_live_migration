@@ -1,4 +1,5 @@
 -v0.1 2024.6.22 Sherlock init
+-v0.2 2025.8.3  Sherlock ...
 
 简介：先记录下qemu热迁移的一个小测试。
 
@@ -51,8 +52,48 @@ done
 可以看到热迁移开始数秒后，迁出端qemu的打印停止，迁入端的串口上开始接着迁出端的打
 印持续的输出。
 
-QEMU热迁移代
+热迁移整体逻辑
+---------------
+
+热迁移是在虚机内用户不感知的基础上把虚机从一台物理机上迁移到另外一台物理机上。
+虚机的状态有：1. vCPU的所有寄存器，2. 内存，3. 各种外设的状态，可能包括存储、网
+络以及各种其它加速器的状态，ARM上还包括vGIC/vSMMU的状态。
+
+- vCPU
+
+- 内存
+
+- vGIC
+
+- vSMMU
+
+QEMU热迁移
 -------------
+
+所有热迁移涉及的部件都有一个VMStateDescription结构，qemu用这个结构描述热迁移的相
+关信息，ARM的定义在target/arm/machine.c里。
+```
+ VMStateDescription vmstate_arm_cpu
+       /*
+        * 源端会把kvm里的CPU寄存器得到，并保存在list寄存器，最后保存到热迁移专用
+        * 的cpreg_vmstate_indexes/values等寄存器。
+        */
+   +-> cpu_pre_save
+     +-> write_kvmstate_to_list
+     +-> memcpy(cpreg_vmstate_indexes, cpreg_indexes, ...)
+     +-> memcpy(cpreg_vmstate_values, cpreg_values, ...)
+   +-> cpu_post_save
+   +-> cpu_pre_load
+       /* 
+        * 目的端会把cpreg_vmstate_values保存到list寄存器，并把list寄存器的值保存
+        * 到kvm和qemu cpustate寄存器里。
+        */
+   +-> cpu_post_load
+     +-> cpu->cpreg_values[i] = cpu->cpreg_vmstate_values[v]
+     +-> write_list_to_kvmstate(cpu, KVM_PUT_FULL_STATE)
+     +-> write_list_to_cpustate(cpu)
+```
+
 
 
 异构热迁移
