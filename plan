@@ -395,18 +395,13 @@ kabi
 twed/wfxt/软件延时 #
 qemu cmdline #
 steal time #
-SMCCC                                            topost
 虚拟化和调度/虚拟化关中断和关抢占                doing
 guest reboot 流程                                doing
 arm nmi watchdog/cppc
 
 kvmtool构架分析
-kvm unit test		                         topost
-kvm self test				         todo
 
 vcpu上下线时gic的逻辑				 todo       ### 1
-ARM GIC硬件逻辑                                  topost
-
 kvm调试整理
 
 
@@ -431,8 +426,14 @@ irqbalance分析/中断亲和性配置
 2. S2FWB
 3. vfio
 
-kvm wfx trap补齐                   topost
-cache idc/dic ctr/clidr/cssidr等   topost
 NMI虚拟化逻辑补齐		   doing
 qemu arm启动逻辑
 跨代热迁移逻辑整理   	           todo
+
+内核启动打印，在什么时候有启动打印
+内核IPI					         todo
+kvm self test				         todo
+mpam分析
+linux_arm_kvm		topost
+gicv5
+

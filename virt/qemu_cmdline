@@ -335,8 +335,10 @@ migrate -d tcp:0:6666
 
 ```
 -object iommufd,id=iommufd0
--device vfio-pci,host=0000:02:00.0,iommufd=iommufd0,enable-migration=on
+-device vfio-pci,host=0000:02:00.0,iommufd=iommufd0,enable-migration=on,pre-copy-dirty-page-tracking=off
 ```
+  qemu vfio热迁移的文档里有介绍，pre-copy-dirty-page-tracking=off的话，所有的脏
+  页是在停机拷贝(stop-and-copy)的时候，才从源端copy到目的端。
 
  - 热迁移和热插拔联合
 

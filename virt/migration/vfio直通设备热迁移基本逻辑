@@ -1,31 +1,36 @@
 -v0.1 2024.9.22 Sherlock init
+-v0.2 2025.8.12 Sherlock ...
 
 简介：本文总结vfio直通设备虚拟化热迁移的基本逻辑，分析基于内核代码v6.11-rc7。
 
 
-使用方法
+基本逻辑
 ---------
 
-我们以海思加速器驱动为例做说明。vf在透给guest的时候需要绑定驱动hisi_acc_vfio_pci.ko。
-qemu启动命令行里vf的配置需要增加关于热迁移的提示: todo
+我们先以海思加速器驱动为例做说明下使用方法。vf在透给guest的时候需要绑定驱动hisi_acc_vfio_pci.ko。
+qemu启动命令行里vf的配置需要增加关于热迁移的提示，具体配置可以参考[这里](https://wangzhou.github.io/QEMU命令行总结/)。
 
-代码逻辑
----------
+完整的vfio直通设备热迁移包括，设备状态、中断以及内存的热迁移。
+
+内核代码逻辑
+-------------
 
 内核代码主要分析drivers/vfio/pci/hisilicon/hisi_acc_vfio_pci.c。这个驱动是一个
 PCIe设备驱动，和vfio-pci驱动一样接管vf并提供一组接口到用户态，虚拟机可以使用这组
 接口控制vf设备。
 
 这里只看和vf热迁移相关的接口。对于热迁移驱动提供了两个匿名文件，一个是迁出端用来
-获得设备状态的文件，一个是迁入端用来恢复设备状态的文件。
-
+获得设备状态的文件(save)，一个是迁入端用来恢复设备状态的文件(resume)。
 ```
  migf->filp = anon_inode_getfile("hisi_acc_vf_mig", &hisi_acc_vf_save_fops, migf, O_RDONLY);
+ migf->filp = anon_inode_getfile("hisi_acc_vf_mig", &hisi_acc_vf_resume_fops, migf, O_WRONLY);
 ```
+这两个匿名文件接口通过vfio device的ioctl接口获得。
 
-```
-migf->filp = anon_inode_getfile("hisi_acc_vf_mig", &hisi_acc_vf_resume_fops, migf, O_WRONLY);
-```
-
+查看如上save/resume的回调函数可以得到整个迁移过程
 
 
+
+
+QEMU代码逻辑
+-------------

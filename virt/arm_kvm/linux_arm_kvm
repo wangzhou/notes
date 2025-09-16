@@ -204,7 +204,7 @@ kvm_vm_ioctl的KVM_CREATE_VCPU
 kvm_vcpu_ioctl
       /* 拉起vCPU的入口，下面拉出来独立分析 */
   +-> KVM_RUN
-    +-> kvm_arch_vcpu_run_pid_change    <--- 语意是第一次运行？
+    +-> kvm_arch_vcpu_run_pid_change    <--- 第一次运行或者迁移后重新拉起vCPU线程
     | +-> kvm_vgic_map_resources
     | |
     | | +-> vgic_v3_map_resources
@@ -215,6 +215,9 @@ kvm_vcpu_ioctl
     | | +-> vgic_register_dist_iodev
     | |       /* 更新kvm->buses[bus_idx] */
     | |   +-> kvm_io_bus_register_dev
+    | |
+    | +-> kvm_calculate_traps         <--- 根据guest的vCPU id配置trap逻辑
+    | |
     | +-> kvm_timer_enable
     |       /* todo: ... */
     |   +-> kvm_vgic_map_phys_irq
