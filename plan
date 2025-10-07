@@ -428,12 +428,13 @@ irqbalance分析/中断亲和性配置
 
 NMI虚拟化逻辑补齐		   doing
 qemu arm启动逻辑
-跨代热迁移逻辑整理   	           todo
 
 内核启动打印，在什么时候有启动打印
+跨代热迁移逻辑整理   	                         todo
 内核IPI					         todo
 kvm self test				         todo
-mpam分析
-linux_arm_kvm		topost
-gicv5
+mpam分析					 todo
+gicv5						 todo
+qemu vfio/pci
 
+cpuhp/pm notifier
