@@ -400,7 +400,6 @@ guest reboot 流程                                doing
 arm nmi watchdog/cppc
 
 kvmtool构架分析
-
 vcpu上下线时gic的逻辑				 todo       ### 1
 kvm调试整理
 
@@ -436,5 +435,5 @@ kvm self test				         todo
 mpam分析					 todo
 gicv5						 todo
 qemu vfio/pci
-
 cpuhp/pm notifier
+
