@@ -1,9 +1,10 @@
--v0.1 2024.4.30 Sherlock init
--v0.2 2024.5.02 Sherlock 开始补充虚拟化部分
--v0.3 2024.5.04 Sherlock 继续补充虚拟化部分
--v0.4 2024.5.06 Sherlock 继续补充虚拟和timer
--v0.5 2024.5.07 Sherlock 继续补充timer
--v0.6 2025.5.14 Sherlock 修改TTBR_EL1/2的描述，修复todo
+-v0.1 2024.4.30  Sherlock init
+-v0.2 2024.5.02  Sherlock 开始补充虚拟化部分
+-v0.3 2024.5.04  Sherlock 继续补充虚拟化部分
+-v0.4 2024.5.06  Sherlock 继续补充虚拟和timer
+-v0.5 2024.5.07  Sherlock 继续补充timer
+-v0.6 2025.5.14  Sherlock 修改TTBR_EL1/2的描述，修复todo
+-v0.7 2025.10.7  Sherlock ...
 
 简介：本文总结ARM64系统寄存器的基本逻辑，我们从基本的CPU配置、中断异常逻辑、地址
       翻译、时钟、GIC、SMMU以及虚拟化的逻辑出发，看看对应功能的基本系统寄存器。
@@ -36,6 +37,12 @@ CTR_EL0中相关域段的含义。DIC表示icache是否要刷到PoU，IDC dcache
 CLIDR_EL1中相关域段的含义。LoC表示PoC的cache等级，LoUU表示PoU的cache等级，LoUIS
 表示inner share域PoU的cache等级，Ctype[n]表示对应级别的cache是分I/D cache的还是
 unified cache。
+
+浮点/neon(Advanced SIMD)/SVE/SME控制相关的寄存器：
+CPACR_EL1，控制如上特性的使能。注意VHE时，CPACR_EL1实际映射到CPTR_EL2。
+CPTR_EL2/CPTR_EL3，其中的CPTR在VHE/nVHE的域段定义是不一样的，VHE时使用FPEN/ZEN/SMEM
+控制浮点/neon(Advanced SIMD)、SVE、SME是否trap。nVHE时用的是TFP/TZ/TSM。这里SVE
+似乎控制的FEAT_SVE/FEAT_SVE2。
 
 GPR/中断异常/VMMA寄存器
 ------------------------
