@@ -1,5 +1,37 @@
 -v0.1 2025.10.7 Sherlock init
 
-简介：使用本文持续整理ARM MPAM协议的相关内容。
+简介：使用本文持续整理ARM MPAM协议的相关内容，分析依据MPAM spec A.a。
 
 
+需求
+-----
+
+现代服务器上运行多个用户的多个程序，硬件资源是共享的。我们可以通过类似cgroup的技
+术对共享的硬件资源做调控，比如cgroup可以调控CPU和内存等资源。但是诸如cache使用、
+内存带宽使用，软件难以直接做调控，这就需要引入新硬件，软件通过新硬件提供的接口做
+资源调控。ARM上引入MPAM(memory partition and monitor)对内存相关的资源做控制和监
+测。
+
+对应的内存相关资源有：1. cache使用大小；2. 内存带宽使用大小；3. 内存带宽使用优先
+级。
+
+概念和模型
+-----------
+
+MPAM使用一个全局唯一的三元组标记每个内存访问的源头，在cache/内存控制器/SMMU上增加
+MPAM控制节点(MSG(memory system compoment))，节点提供MMIO寄存器接口，这些接口接受
+三元组的资源控制和监控的配置。相关配置提前配置好，系统运行的时候，访问cache或者
+内存的请求根据提前配置的信息进行资源控制和监控。
+
+三元组的三个元素是：partition ID space，partition ID，PMG(performance monitor group)。
+partition ID space是安全态，主要用partition ID区分资源类型，PMG用来聚集一组监测
+资源。
+
+todo: ACPI MPAM
+
+resource partitioning control
+-------------------------------
+
+
+resource monitor
+------------------

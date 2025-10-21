@@ -1,0 +1,12 @@
+-v0.1 2025.10.21 Sherlock init
+
+简介: 速记下怎么编译linux/tools/testing/selftests/arm64/abi/hwcap
+
+1. 安装内核头文件，linux源码根目录下运行如下的命令会把内核头文件安装在linux源码
+   根目录:
+   make ARCH=aarch64 headers_install
+
+2. 编译所有selftests下的测试工具，编译好的hwcap在源码对应目录:
+   make TARGETS=arm64 -C tools/testing/selftests
+
+3. 进入linux/tools, make help可以看到可能的编译目标，selftests是其中的一个。

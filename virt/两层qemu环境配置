@@ -1,6 +1,7 @@
 qemu in qemu
 
--v0.1 2021.9.11 Sherlock init
+-v0.1 2021.9.11  Sherlock init
+-v0.2 2025.10.20 Sherlock 增加-cpu的限制
 
 简介：本文介绍qemu启动的系统里再起一个qemu的环境配置。这样可以搭建一个完全虚拟的
       虚拟化环境，方便调试虚拟化相关的东西。本文说明整个搭建的逻辑，并搭建一个arm64
@@ -26,6 +27,9 @@ arm构架下，打开vcpu hypvisor extention特性的配置是：
 	-initrd ~/rootfs.cpio.gz
 ```
 其中 -M virt,virtualization=true 打开vcpu hypvisor extention。
+
+注意: 对于v6.17-rc1的内核，如果-cpu指定cortex-a57，系统显示为nVHE，把-cpu换成
+      cortex-a76, 第一层内核可以启动为VHE模式。
 
 第二层qemu
 ----------

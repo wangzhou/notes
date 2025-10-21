@@ -374,7 +374,6 @@ linux内核arm64 kvm虚拟化基本逻辑		       c
 WFI trap/WFE delay trap                                c
 arm vtimer		                               c
 vSGI		                                       c
-kvm pmu模拟逻辑					       c   ### 5
 vLPI虚拟化/vfio/vCPU到物理CPU的映射		       c
 linux online/offline cpu逻辑			       c
 Linux IPI相关的基本逻辑                                c
@@ -429,11 +428,14 @@ NMI虚拟化逻辑补齐		   doing
 qemu arm启动逻辑
 
 内核启动打印，在什么时候有启动打印
-跨代热迁移逻辑整理   	                         todo
-内核IPI					         todo
-kvm self test				         todo
-mpam分析					 todo
-gicv5						 todo
+
+跨代热迁移逻辑整理   	                         doing
+内核IPI					         doing
+kvm self test				         doing
+mpam分析					 doing
+gicv5						 doing
+kvm pmu模拟逻辑					 c   ### 5
+
 qemu vfio/pci
 cpuhp/pm notifier
 
