@@ -439,3 +439,7 @@ kvm pmu模拟逻辑					 c   ### 5
 qemu vfio/pci
 cpuhp/pm notifier
 
+hdbss             doing
+GIC               post
+iommufd vsmmu     doing
+

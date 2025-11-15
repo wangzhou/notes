@@ -1,6 +1,7 @@
--v0.1 2025.7.5  Sherlock init
--v0.2 2025.7.9  Sherlock ...
--v0.3 2025.7.10 Sherlock ...
+-v0.1 2025.7.5   Sherlock init
+-v0.2 2025.7.9   Sherlock ...
+-v0.3 2025.7.10  Sherlock ...
+-v0.4 2025.11.15 Sherlock ...
 
 简介：本文分析基于iommufd实现的vSMMU的基本逻辑。
 
@@ -8,7 +9,7 @@
 基本逻辑
 ---------
 
-Linux内核vSMMU的方案现在都基于iommufd来搞，vSMMU的基本逻辑可以参考[这里]()。本文
+Linux内核vSMMU的方案现在都基于iommufd来搞，vSMMU的基本逻辑可以参考[这里](https://wangzhou.github.io/vSVA逻辑分析/)。本文
 的分析重点是把iommufd的逻辑打开，结合qemu从上到下完整梳理其中的逻辑。现在内核相关
 的代码基本上已经在主线(v6.16)，QEMU相关的代码基本上被整合到OpenEuler的[qemu仓库](https://gitee.com/openeuler/qemu.git)，
 分支是qemu-8.2.0。
@@ -32,10 +33,34 @@ __vfio_register_dev -> vfio_device_add
 
 使用IOMMUFD支持原来的vfio container对应的配置项是IOMMUFD_VFIO_CONTAINER。
 
+内核相关数据结构
+-----------------
+
+todo: ...
+
+qemu相关数据结构
+-----------------
+
+VFIOContainerBase / VFIOIOMMUFDContainer / VFIOAddressSpace
+
+VFIOIOMMUClass
+
+VFIODevice / VFIOPCIDevice / PCIDevice
+
+IOMMUFDBackend
+
+HostIOMMUDeviceClass / HostIOMMUDeviceIOMMUFDClass
+HostIOMMUDevice / HostIOMMUDeviceIOMMUFD
+  HostIOMMUDeviceCaps
+
+PCIBus / SMMUDevice / SMMUViommu
+
+
 qemu相关逻辑
 -------------
 
-qemu里关于iommufd的逻辑基本上可以用vfio_realize里的逻辑串起来。
+qemu里关于iommufd的逻辑基本上可以用vfio_realize里的逻辑串起来，vfio_realize是实例
+一个vfio设备最后阶段要做的处理。
 ```
 vfio_realize
   +-> vfio_attach_device
@@ -47,7 +72,7 @@ vfio_realize
       +-> iommufd_cdev_getfd               <-- 1. open vfio cdev
 
       +-> iommufd_cdev_connect_and_bind
-        +-> iommufd_backend_connect        <-- 2. open /dev/iommufd
+        +-> iommufd_backend_connect        <-- 2. open /dev/iommu
         +-> iommufd_cdev_kvm_device_add
         +-> ioctl(vbasedev->fd, VFIO_DEVICE_BIND_IOMMUFD, $bind)  <-- 3. VF cdev和iommufd绑定
 
@@ -67,7 +92,23 @@ vfio_realize
 
       +-> iommufd_cdev_get_info_iova_range ?
 
-      +-> memory_listener_register ?
+         /*
+          * 注册container地址空间的listener，region_add/del里会做dma map/unmap。
+          * listener中的log_global_start/stop、log_sync和DMA内存标脏有关系，热
+          * 迁移标脏迭代中估计会调用每个memory listener中的标脏相关的会调。
+          *
+          * 基于iommufd的标脏估计和VFIOIOMMUClass里的set_dirty_page_tracking、
+          * query_dirty_bitmap会调有关系，定义在hw/vfio/iommufd.c。
+          *
+          * vfio_listener_log_sync -> vfio_sync_dirty_bitmap -> vfio_get_dirty_bitmap ->
+          * vfio_container_query_dirty_bitmap -> iommufd_query_dirty_bitmap
+          * 其中vfio_listener_log_sync为listener中的log_sync, iommufd_query_dirty_bitmap
+          * 为iommufd的对应会调。
+          *
+          * 迁移子系统开启关闭标脏的点是：ram_init_bitmaps和ram_save_cleanup。
+          * 每一轮获取脏页的点在：migration_bitmap_sync?
+          */
+      +-> memory_listener_register
       
       +-> ioctl(devfd, VFIO_DEVICE_GET_INFO, ...)
 
@@ -83,8 +124,8 @@ vfio_realize
          */
     +-> iommu_bus->iommu_ops->set_iommu_device // smmu_dev_set_iommu_device
       +-> smmu_dev_attach_viommu
-        +-> host_iommu_device_iommufd_attach_hwpt ?
-        +-> iommufd_backend_alloc_hwpt  <--- 7. alloc S2 hwpt
+        +-> host_iommu_device_iommufd_attach_hwpt ? 对于已经存在hwpt的，attach下就好了？
+        +-> iommufd_backend_alloc_hwpt  <--- 7. alloc S2 hwpt，如何做replace？
         +-> host_iommu_device_iommufd_attach_hwpt  <--- MSI cookie? 
         +-> iommufd_backend_alloc_viommu  <--- 8. create vSMMU
 
@@ -151,6 +192,10 @@ iommufd标脏的逻辑
 ------------------
 
 todo: ...
+
+1. 内核框架
+2. 内核SMMU HTTU支持
+3. qemu适配
 
 
 vSMMU支持IO fault的逻辑

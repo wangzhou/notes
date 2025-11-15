@@ -166,7 +166,15 @@ SGI做IPI，CPU写ICC_SGI0R_EL1/ICC_SGI1R_EL1/ICC_ASGI1R_EL1触发SGI。
 到这个信息后会根据提前配置好的信息查找对应的INTID以及路由信息，并根据提前配置的
 路由信息，把中断信号送到对应的CPU。
 
-hypervisor可以写ICH_LRn_EL2向vCPU注入中断。(todo: 展开细节)
+hypervisor可以写ICH_LRn_EL2向vCPU注入中断。整体的逻辑是，在非虚拟中断直通的场景，
+HCR_EL2.IMO = 1时，所有中断被先路由到EL2处理，EL2使用ICH_LRn_EL2寄存器向vCPU注入
+中断，KVM需要把需要注入的中断信息先写在ICH_LRn_EL2寄存器里，注意这里没有vCPU信息，
+ICH_LRn_EL2中的虚拟中断会注入到下次调度上线的vCPU里，KVM需要做必要的控制。这里还
+有一个点要注意，ICH_LRn_EL2.HW控制是否做物理中断到虚拟中断的映射，映射之后，虚机
+内deactive虚拟中断，host上的物理中断会同步被deactive掉。目前，通过ICH_LRn_EL2注
+入的vtimer中断在注入时会配置ICH_LRn_EL2.HW域段。
+
+(todo: 展开细节)
 
 GIC编程接口
 ------------
