@@ -107,6 +107,15 @@ vfio_realize
           *
           * 迁移子系统开启关闭标脏的点是：ram_init_bitmaps和ram_save_cleanup。
           * 每一轮获取脏页的点在：migration_bitmap_sync?
+          *
+          * DMA map的入口也在listener的回调中: vfio_listener_region_add ->
+          * vfio_container_region_add -> vfio_container_dma_map ->
+          * iommufd_cdev_map(如果使用iommufd) -> iommufd_backend_map_dma
+          * 可见实际使用的是iommfd的ioctl(..., IOMMU_IOAS_MAP, ...)，带的参数是
+          * ioas_id、va、iova和size。
+          *
+          * 按道理讲，内核应该通过va找见对应的VMA，找见对应host上的VMA，然后做
+          * CPU侧GPA到PA的映射。如果CPU测还没有做map，没有找见对应的逻辑。
           */
       +-> memory_listener_register
       
@@ -124,13 +133,18 @@ vfio_realize
          */
     +-> iommu_bus->iommu_ops->set_iommu_device // smmu_dev_set_iommu_device
       +-> smmu_dev_attach_viommu
-        +-> host_iommu_device_iommufd_attach_hwpt ? 对于已经存在hwpt的，attach下就好了？
+            /* 对于已经存在hwpt的，attach下就好了？*/
+        +-> host_iommu_device_iommufd_attach_hwpt
         +-> iommufd_backend_alloc_hwpt  <--- 7. alloc S2 hwpt，如何做replace？
-        +-> host_iommu_device_iommufd_attach_hwpt  <--- MSI cookie? 
-        +-> iommufd_backend_alloc_viommu  <--- 8. create vSMMU
+        +-> host_iommu_device_iommufd_attach_hwpt  <--- 8. attach hwpt
+	      /* 这个回调？*/
+	  +-> host_iommu_device_iommufd_vfio_attach_hwpt
+	    +-> iommufd_cdev_attach_ioas_hwpt
+              +-> ioctl(vbasedev->fd, VFIO_DEVICE_ATTACH_IOMMUFD_PT, &attach_data)
+        +-> iommufd_backend_alloc_viommu  <--- 9. create vSMMU
 
-        +-> iommufd_backend_alloc_hwpt  <--- 9. abort_data?
-        +-> iommufd_backend_alloc_hwpt  <--- 10. bypass_data?
+        +-> iommufd_backend_alloc_hwpt  <--- 10. abort_data?
+        +-> iommufd_backend_alloc_hwpt  <--- 11. bypass_data?
 
         +-> host_iommu_device_iommufd_attach_hwpt  <--- bypass_data?
 
@@ -174,20 +188,18 @@ vfio_df_ioctl_attach_pt
         +-> iommufd_device_do_replace
           +-> iommufd_hwpt_replace_device
             ...
-                  /*
-                   * 回调定义在arm-smmu-v3-iommufd.c: arm_smmu_nested_ops, 初始
-                   * 化的点是arm_vsmmu_alloc->iommufd_viommu_alloc
-                   *
-                   * 应该是把vSMMU上的CD地址(IPA)直接写到物理STE的的CD地址域段了。
-                   */
+                 /*
+                  * 回调定义在arm-smmu-v3-iommufd.c: arm_smmu_nested_ops, 初始
+                  * 化的点是arm_vsmmu_alloc->iommufd_viommu_alloc
+                  *
+                  * 应该是把vSMMU上的CD地址(IPA)直接写到物理STE的的CD地址域段了。
+                  */
               +-> domain->ops->attach_dev // arm_smmu_attach_dev_nested
                 +-> arm_smmu_attach_prepare
                 +-> arm_smmu_make_nested_domain_ste
                 +-> arm_smmu_install_ste_for_dev
                 +-> arm_smmu_attach_commit
   
-
-
 iommufd标脏的逻辑
 ------------------
 
