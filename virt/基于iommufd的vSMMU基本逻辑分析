@@ -2,6 +2,7 @@
 -v0.2 2025.7.9   Sherlock ...
 -v0.3 2025.7.10  Sherlock ...
 -v0.4 2025.11.15 Sherlock ...
+-v0.5 2025.11.19 Sherlock ...
 
 简介：本文分析基于iommufd实现的vSMMU的基本逻辑。
 
@@ -69,23 +70,29 @@ vfio_realize
          * 的回调是: iommufd_cdev_attach，语意是VF设备和IOMMU绑定。
          */
     +-> ops->attach_device   // iommufd_cdev_attach
-      +-> iommufd_cdev_getfd               <-- 1. open vfio cdev
+      +-> iommufd_cdev_getfd               <-- 1. open vfio cdev，返回vfio设备fd
 
       +-> iommufd_cdev_connect_and_bind
-        +-> iommufd_backend_connect        <-- 2. open /dev/iommu
+        +-> iommufd_backend_connect        <-- 2. open /dev/iommu，返回iommfd fd
         +-> iommufd_cdev_kvm_device_add
-        +-> ioctl(vbasedev->fd, VFIO_DEVICE_BIND_IOMMUFD, $bind)  <-- 3. VF cdev和iommufd绑定
-
+        +-> ioctl(vfio fd, VFIO_DEVICE_BIND_IOMMUFD, ...)  <-- 3. VF cdev和iommufd绑定，返回devid
+                                                   
       +-> iommufd_cdev_attach_container    <-- container已存在的，就直接attach，并跳过如下流程
-
-      +-> iommufd_backend_alloc_ioas       <-- 4. alloc ioas, 首次创建containers
+          
+      +-> iommufd_backend_alloc_ioas       <-- 4. alloc ioas, 首次创建containers，返回ioas_id
         +-> ioctl(fd, IOMMU_IOAS_ALLOC, ...)
 
       +-> iommufd_cdev_attach_container
         +-> iommufd_cdev_autodomains_get   
-              /* 这里配置的是dirty tracking的hwpt? 如何理解 */
-          +-> iommufd_backend_alloc_hwpt     <-- 5. alloc hwpt
-          +-> iommufd_cdev_attach_ioas_hwpt  <-- 6 attach iommufd hwpt
+             /*
+              * alloc hwpt的入参有：devid, ioas_id, ioctl的fd是iommufd，
+              * IOMMU_HWPT_DATA_NONE，如果vfio device的hostIOMMUDevice有
+              * IOMMU_HW_CAP_DIRTY_TRACKING，也把对应硬件标脏的标记加上，这里对应
+              * SMMU的话，可能是SMMU HTTU这个特性。输出hwpt_id。
+              */
+          +-> iommufd_backend_alloc_hwpt    <-- 5. alloc hwpt
+              /* attach的入参是：vfio fd, hwpt_id */
+          +-> iommufd_cdev_attach_ioas_hwpt <-- 6. attach iommufd hwpt
             +-> ioctl(vbasedev->fd, VFIO_DEVICE_ATTACH_IOMMUFD_PT, &attach_data)
 
       +-> iommufd_cdev_ram_block_discard_disable ?
