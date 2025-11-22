@@ -19,10 +19,12 @@
 概念和模型
 -----------
 
-MPAM使用一个全局唯一的三元组标记每个内存访问的源头，在cache/内存控制器/SMMU上增加
-MPAM控制节点(MSC(memory system compoment))，节点提供MMIO寄存器接口，这些接口接受
-三元组的资源控制和监控的配置。相关配置提前配置好，系统运行的时候，访问cache或者
-内存的请求根据提前配置的信息进行资源控制和监控。
+MPAM使用一个全局唯一的三元组标记每个内存访问的源头，对于PE，这些信息需要配置到
+MPAMx_ELn相关系统寄存器里，可以看到如果partition ID的语意就是PE本身，配置一次就
+好，如果partition ID表示线程，就需要在线程切换的时候更新这个配置。在cache/内存控制器/
+SMMU上增加MPAM控制节点(MSC(memory system compoment))，节点提供MMIO寄存器接口，这
+些接口接受三元组的资源控制和监控的配置。相关配置提前配置好，系统运行的时候，访问
+cache或者内存的请求根据提前配置的信息进行资源控制和监控。
 
 注意，现代处理器实现都采用流水线技术，在单点控制相当于控制流水线中的一个点，容易
 引发系统问题。另外，一旦系统里有共享部件，硬件逻辑综合起来就容易冲突，也可能引发
@@ -45,7 +47,7 @@ MPAM协议里简单描述了下硬件内部partitioning control的逻辑，简�
 可以看到硬件内部会用表格记录各种资源配置，如果这个表格在硬件内部，那么这个部件在
 使用中有低功耗的上下电动作时，这些内容都要做保存和恢复。
 
-todo: cache行为
+
 
 RIS(resource instance selection)里resource value是啥？
 
@@ -54,13 +56,18 @@ MPAM只有两种类型中断：1. 报告错误的中断；2. monitor计数溢出
 resource partitioning control
 -------------------------------
 
+1. 各种resource的定义
+
+2. 配置方法
 
 resource monitor
 ------------------
 
+(todo: ...)
 
 寄存器
 -------
 
 
 MPAMCFG_PART_SEL
+todo: cache行为
