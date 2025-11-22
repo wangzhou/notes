@@ -1,4 +1,5 @@
--v0.1 2025.10.7 Sherlock init
+-v0.1 2025.10.7  Sherlock init
+-v0.2 2025.11.22 Sherlock ...
 
 简介：使用本文持续整理ARM MPAM协议的相关内容，分析依据MPAM spec A.a。
 
@@ -12,22 +13,43 @@
 资源调控。ARM上引入MPAM(memory partition and monitor)对内存相关的资源做控制和监
 测。
 
-对应的内存相关资源有：1. cache使用大小；2. 内存带宽使用大小；3. 内存带宽使用优先
-级。
+对应的内存相关资源有：1. cache；2. 内部总线；3. 内存。控制的角度有：1. 使用大小；
+2. 优先级；3. ？
 
 概念和模型
 -----------
 
 MPAM使用一个全局唯一的三元组标记每个内存访问的源头，在cache/内存控制器/SMMU上增加
-MPAM控制节点(MSG(memory system compoment))，节点提供MMIO寄存器接口，这些接口接受
+MPAM控制节点(MSC(memory system compoment))，节点提供MMIO寄存器接口，这些接口接受
 三元组的资源控制和监控的配置。相关配置提前配置好，系统运行的时候，访问cache或者
 内存的请求根据提前配置的信息进行资源控制和监控。
+
+注意，现代处理器实现都采用流水线技术，在单点控制相当于控制流水线中的一个点，容易
+引发系统问题。另外，一旦系统里有共享部件，硬件逻辑综合起来就容易冲突，也可能引发
+问题。
 
 三元组的三个元素是：partition ID space，partition ID，PMG(performance monitor group)。
 partition ID space是安全态，主要用partition ID区分资源类型，PMG用来聚集一组监测
 资源。
 
-todo: ACPI MPAM
+MSC集成在各个内存相关的部件里，由专门的ACPI或者DTS MPAM表格报给OS。(todo: ...)
+
+MPAM协议里还定义了一些MPAM内部传递控制信息的概念(第四章)，感觉这些概念以及相关的
+部件是软件较少感知的。
+
+MPAM协议里简单描述了下硬件内部partitioning control的逻辑，简单讲就是当前使用的资
+源和提前配置好的资源不断的做比较，如果还有余量就给分资源，反之就不给分资源。更近
+一步看，capacity-based partitioning才需要这种动态调整，portion-based partitioning
+(比如，直接配置可以用哪几个cache way的情况)的调整逻辑就可以比较简单。
+
+可以看到硬件内部会用表格记录各种资源配置，如果这个表格在硬件内部，那么这个部件在
+使用中有低功耗的上下电动作时，这些内容都要做保存和恢复。
+
+todo: cache行为
+
+RIS(resource instance selection)里resource value是啥？
+
+MPAM只有两种类型中断：1. 报告错误的中断；2. monitor计数溢出中断。
 
 resource partitioning control
 -------------------------------
@@ -35,3 +57,10 @@ resource partitioning control
 
 resource monitor
 ------------------
+
+
+寄存器
+-------
+
+
+MPAMCFG_PART_SEL
