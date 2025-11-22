@@ -49,25 +49,58 @@ MPAM协议里简单描述了下硬件内部partitioning control的逻辑，简�
 
 
 
-RIS(resource instance selection)里resource value是啥？
 
 MPAM只有两种类型中断：1. 报告错误的中断；2. monitor计数溢出中断。
 
 resource partitioning control
 -------------------------------
 
-1. 各种resource的定义
+MPAMCFG_CASSOC,     Cache Maximum Associativity Partition
 
-2. 配置方法
+MPAMCFG_CMAX,       Cache Maximum Capacity Partition
+配置cache使用的最大百分比
+
+MPAMCFG_CMIN,       Cache Minimum Capacity Partition
+配置cache使用的最小百分比，小于这个百分比的partition ID的优先级被提高，优先分
+cache。
+
+MPAMCFG_CPBM<n>,    Cache Portion Bitmap Partition
+按照portion的配置寄存器。配置的方式: 1. 最大bit数，2. select出要配置的partition
+ID，3. 执行配置。这东西每个partition ID都配置一把，很难看到一个综合的结构啊？
+有接口到处目前配置的所有策略么?
+
+
+MPAMCFG_MBW_MAX,    Memory Bandwidth Maximum Partition
+MPAMCFG_MBW_MIN,    Memory Bandwidth Minimum Partition
+MPAMCFG_MBW_PBM<n>, Bandwidth Portion Bitmap Partition 
+MPAMCFG_MBW_PROP,   Memory Bandwidth Proportional Stride Partition
+MPAMCFG_MBW_WINWD,  Memory Bandwidth Partitioning Window Width 
+
+MPAMCFG_PRI,        Priority Partition
+todo: 怎么搞的优先级？
 
 resource monitor
 ------------------
 
 (todo: ...)
 
+软件实现
+---------
+
+MPAM对外使用resctrl文件系统作为接口。
+
+以openEuler为例，驱动代码在drivers/platform/mpam/。这个驱动是一个平台设备驱动，
+但是但是真正probe的地方在注册的cpu online的会调函数里。
+
+resctrl和驱动的借口似乎是直接arch实现函数调用的... 如此粗暴...
+
 寄存器
 -------
 
+软件需要配置MSC上各种资源的配置，这些配置用partition ID和RIS做标记，RIS(resource
+instance selection)里resource value是啥？
+软件需要用MPAMCFG_PART_SEL选择当前要配置的partition ID和RIS。
 
-MPAMCFG_PART_SEL
 todo: cache行为
+
+
