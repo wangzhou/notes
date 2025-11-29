@@ -1,0 +1,12 @@
+-v0.1 2025.11.29 Sherlock init
+
+简介：收集下ACPI MADT表的基本逻辑
+
+MADT表用来定义CPU core和中断控制器的信息，从系统中dump出来的MADT表是apic.dsl，
+估计是沿用了X86的表名字。
+
+对于ARM，MADT中定义了GICR/GICD/ITS，subtable type分别是：0x0B、0x0C、0x0F，每个
+core一个GICR，所以GICR里也顺带定义了core的信息，包括core的MPIDR，CPU ID等。
+
+注意，IORT里的ITS节点中的Identifiers就是MADT里ITS节点的标号，使用这种方法可以定
+义哪些PCIe设备的MSI/MSIX中断报给哪个ITS。

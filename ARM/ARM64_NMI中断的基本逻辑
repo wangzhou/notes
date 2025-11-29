@@ -1,6 +1,8 @@
--v0.1 2024.4.26 Sherlock init
--v0.2 2024.4.30 Sherlock 补充相关逻辑
--v0.3 2025.7.4  Sherlock
+-v0.1 2024.4.26  Sherlock init
+-v0.2 2024.4.30  Sherlock 补充相关逻辑
+-v0.3 2025.7.4   Sherlock ...
+-v0.4 2025.11.27 Sherlock ...
+
 
 简介：本文梳理ARM64中不可屏蔽中断(NMI)的基本逻辑。
 
@@ -34,21 +36,41 @@ GIC spec上规定支持NMI的中断类型有PPI/SGI/SPI，LPI是不支持NMI的�
 版本上，这里的关系有点绕，GICv3.3/GICv4.2都支持NMI。首先，GICv3.x相当于GICv3的一
 个stable分支，GICv4.x支持虚拟中断直通特性，ARM定义GICv3.3支持NMI，是说在GICv3.2
 的基础上支持NMI，其中vNMI支持是说注入的PPI/SGI/SPI支持NMI，GICv4.2支持NMI，是说
-直通的vSGI支持NMI。有意思吧，这种留个stable版本的定义方式也太脑残了。
+直通的vSGI支持NMI。有意思吧，这种留个stable版本的定义方式感觉主要是为了只支持GICv3
+的系统。
 
 NMI相关系统寄存器
 ------------------
 
+core相关的寄存器：
+
 ID_AA64PFR1_EL1.NMI   表示系统是否支持NMI。
 SCTLR_ELx.NMI         表示系统是否enable NMI。
 SCTLR_ELx.SPINTMASK   表示是否使用如上的第二种mask NMI的方式。
+ICC_NMIAR1_EL1        NMI对应的IAR寄存器。
 
-todo: GICD/GICR上关于的标记。
+GIC相关的NMI寄存器有:
+GICD_INMIR	      配置对应的SPI中断是否是NMI中断。
+GICR_INMIR            配置对应的PPI/SGI中断是否是NMI中断。
 
 NMI虚拟化相关的逻辑
 --------------------
 
-(todo: 基本上就是注入，或者vSGI的时候带上NMI这个标记)
+基本上就是LR注入或者vSGI的时候带上NMI这个标记，对应的硬件支持方式是LR寄存器上增加
+NMI标记位，vSGI的情况是先用ITS vSGI命令把NMI这个标记配置给硬件，保存在vLPI pending
+table的vSGI的NMI预算，后续vSGI直通的时候就可以带上这个信息。
+
+
+软件支持
+----------
+
+目前，ARM上host和虚机里的NMI支持都还没有进入主线，host NMI的补丁可以参考[这里](https://lwn.net/Articles/914838/)。
+Guest NMI的补丁可以参考[这里](https://gitee.com/openeuler/kernel/issues/I97WGU?skip_mobile=true)。
+
+Linux内核驱动使用request_percpu_nmi或者request_nmi申请NMI中断。
+
+目前，ARM里使用NMI的只有PMU中断和基于PMU的hardlock up，关于hardlock up的基本逻辑
+可以参考[这里](todo...)。
 
 NMI使用注意事项
 ----------------
@@ -59,12 +81,7 @@ NMI，在中断或异常进入和退出时，任何中断包括NMI中断都是�
 CPU mask掉普通中断的时候(配置PSTATE.I)，CPU是可以响应NMI的，这就需要系统程序员小
 心编程，避免因使用NMI而带来问题。
 
-NMI的使用
-----------
-
-todo: ...
-
-Pseudo NMI/NMI/SDEI的比较
---------------------------
+Pseudo NMI
+-----------
 
 todo: ...
