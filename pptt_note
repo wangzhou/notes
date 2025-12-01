@@ -2,3 +2,29 @@
 
 简介：收集下ACPI PPTT表的基本逻辑
 
+PPTT定义的是系统里CPU核和cache的层次信息，对于CPU核，定义thread/core/die/cluster/
+socket/system的层次结构，对于cache，定义和CPU核层级对应的cache关系。
+
+thread/core/die/cluster/socket/system在PPTT表里都会占一个节点，使用节点里的parent
+域段从叶子节点逐层指向parent节点。cache节点的parent域段指向对应的CPU核层级节点。
+```
+  +---------+      +------+
+  | socket  | <--- |  L3  |
+  +---------+      +------+
+       ^
+       |
+  +---------+
+  | cluster |
+  +---------+
+       ^
+       |           +------+
+  +---------+ <--- |  L1  |
+  |   core  |      +------+
+  +---------+ <--- +------+
+     ^   ^         |  L2  |
+     |   |         +------+
+     |   +------------+
+  +--+------+    +----+----+
+  | thread  |    | thread  |
+  +---------+    +---------+     ...
+```
