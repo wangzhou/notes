@@ -3,3 +3,34 @@
 简介: 本文收集整理ARM64中和HDBSS相关的硬件逻辑，顺带也记录下硬件access flag和dirtiy bit的逻辑。
 
 
+基本逻辑
+---------
+
+ID_AA64MMFR1_EL1.HAFDBS是HDBSS的能力定义域段，多个特性复用这个域段。总结起来如下：
+```
+   1     HAFDBS        硬件更新page和block的access flag
+   
+   2     HAFDBS        硬件更新dirty state
+   
+   3     HAFT          硬件更新table的access flag
+   
+   4     HDBSS         硬件把脏页写到指定的软件buffer
+```
+
+
+
+
+
+
+
+
+
+
+
+KVM标脏逻辑
+------------
+
+
+
+HDBSS软件支持
+--------------
