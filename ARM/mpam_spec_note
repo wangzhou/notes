@@ -1,5 +1,6 @@
 -v0.1 2025.10.7  Sherlock init
 -v0.2 2025.11.22 Sherlock ...
+-v0.3 2026.01.04 Sherlock ...
 
 简介：使用本文持续整理ARM MPAM协议的相关内容，分析依据MPAM spec A.a。
 
@@ -87,10 +88,37 @@ resource monitor
 软件实现
 ---------
 
-MPAM对外使用resctrl文件系统作为接口。
+MPAM对外使用resctrl文件系统作为接口。以openEuler v6.6内核为例，驱动代码在
+drivers/platform/mpam/。这个驱动是一个平台设备驱动，但是但是真正probe的地方在注
+册的cpu online的会调函数里。
 
-以openEuler为例，驱动代码在drivers/platform/mpam/。这个驱动是一个平台设备驱动，
-但是但是真正probe的地方在注册的cpu online的会调函数里。
+
+核心数据结构
+
+struct mpam_class       - MPAM设备的分类，比如，cache/memory/IOMMU等
+struct mpam_msc         - 表示一个MSC设备
+struct mpam_msc_ris     - 
+struct mpam_component   - 
+
+struct mpam_resctrl_res
+
+
+MSC设备解析
+
+mpam_msc_drv_probe                  <-- probe以及创建MSC
+  +-> acpi_mpam_parse_resources     <-- 创建mpam_ris
+    +-> mpam_ris_create 
+
+mpam_discovery_cpu_online
+  +-> mpam_msc_hw_probe
+      /* work queue里执行 */
+  +-> mpam_resctrl_setup
+    +-> mpam_resctrl_resource_init  <-- 创建mpam_resctrl_res数组
+    +-> resctrl_init                <-- 创建resctrl相关文件
+
+
+resctrl文件创建
+
 
 resctrl和驱动的借口似乎是直接arch实现函数调用的... 如此粗暴...
 

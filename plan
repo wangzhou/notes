@@ -439,7 +439,6 @@ qemu vfio/pci
 cpuhp/pm notifier
 
 hdbss                                            doing
-GIC                                              to post
 iommufd vsmmu                                    doing
 perf bench futex wake
 mpam分析					 doing
