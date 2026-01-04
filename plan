@@ -432,15 +432,15 @@ qemu arm启动逻辑
 跨代热迁移逻辑整理   	                         doing
 内核IPI					         doing
 kvm self test				         doing
-mpam分析					 doing
 gicv5						 doing
 kvm pmu模拟逻辑					 c   ### 5
 
 qemu vfio/pci
 cpuhp/pm notifier
 
-hdbss             doing
-GIC               to post
-iommufd vsmmu     doing
+hdbss                                            doing
+GIC                                              to post
+iommufd vsmmu                                    doing
 perf bench futex wake
+mpam分析					 doing
 

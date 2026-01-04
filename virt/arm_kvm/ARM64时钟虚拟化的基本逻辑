@@ -1,6 +1,7 @@
 -v0.1 Sherlock 2024.8.17 init
 -v0.2 Sherlock 2024.8.18 ...
 -v0.3 Sherlock 2024.9.01 ...
+-v0.4 Sherlock 2026.1.04 ...
 
 简介：文本整理Linux下基于KVM的ARM64时钟虚拟化的基本逻辑。
 
@@ -109,6 +110,8 @@ kvm_timer_hyp_init
    * 当vCPU正在运行时，这个中断被触发，中断会被taken，但是会进入kvm的中断向量里，
    * 但是kvm中断向量里并不会处理这个中断，vCPU退出到KVM后，换上host的中断异常向量，
    * 打开中断后，这个中断会再次被taken。
+   *
+   * 当host在运行时，直接在中断处理中给vCPU注入vtimer irq。
    */
   request_percpu_irq(host_vtimer_irq, kvm_arch_timer_handler, "kvm guest vtimer", ...) 
     kvm_arch_timer_handler
@@ -139,7 +142,11 @@ kvm_timer_vcpu_init
    * 挂上background timer的处理函数，其中检测是否有timer到期，如果没有到期就重置
    * background timer，如果到期，就唤醒对应vCPU：kvm_vcpu_wake_up。
    *
-   * todo: background timer作用？什么时候start它？
+   * 当退出guest时检测到guest有为到期timer时，kvm配置上background timer，通过这个
+   * host上的timer及时唤醒guest线程。
+   * 
+   * 对应的逻辑是kvm_vcpu_block挂起当前vCPU线程。kvm_arch_vcpu_put中，kvm_timer_vcpu_put
+   * -> kvm_timer_blocking -> soft_timer_start启动bg_timer。
    */
   timer->bg_timer.function = kvm_bg_timer_expire
 ```
@@ -149,7 +156,7 @@ kvm_arch_vcpu_ioctl_vcpu_init->kvm_vcpu_set_target->kvm_reset_vcpu:
 ```
 kvm_timer_vcpu_reset
   timer_set_ctl
-  /* todo: ? */
+  /* 第二个参数是false，初始化先拉低timer的"电平" */
   kvm_timer_update_irq
   kvm_vgic_reset_mapped_irq
 ```
@@ -157,19 +164,34 @@ kvm_timer_vcpu_reset
 拉起vCPU投入运行，kvm_vcpu_ioctl(KVM_RUN)->kvm_arch_vcpu_run_pid_change:
 ```
 kvm_timer_enable
-   /* todo: ... */
+   /* 填充vtimer irq的vgic_irq，一般只用direct vtimer */
    kvm_vgic_map_phys_irq
 ```
 
-实际timer相关配置物理寄存器的地方。 todo
+实际timer相关配置物理寄存器的地方。
 ```
 kvm_arch_vcpu_put
   kvm_timer_vcpu_put
-    /* 保存下线vCPU vtimer的状态 */
+    /* 保存下线vCPU vtimer的状态，一般只用direct_vtimer */
     timer_save_state
+    /* 启动bg_timer */
+    kvm_timer_blocking
 
 kvm_arch_vcpu_load
   kvm_timer_vcpu_load
+    /*
+     * vcpu上位时，发现存在超时的timer，就直接注入一个vtimer irq。并把host timer
+     * irq配置成active，这样后续timer_restore_state恢复vtimer状态，vtimer irq也
+     * 不会报到GIC。LR.HW支持虚拟中断和对应物理中断deactive联动，虚机内对vtimer
+     * irq deactive对应物理中断也会deactive。
+     *
+     * 如果，这里少了kvm_timer_vcpu_load_gic，timer_restore_state恢复vtimer上下
+     * 文时，会触发host vtimer中断，中断处理里注入vtimer irq，随后vCPU上线后就可
+     * 以响应vtimer中断。
+     *
+     * 注意：如上bg_timer只是唤醒guest vCPU线程，注入vtimer irq实际在这里。
+     */
+    kvm_timer_vcpu_load_gic
     /* 恢复上线vCPU vtimer的状态 */
     timer_restore_state
 ```
