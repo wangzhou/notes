@@ -1,0 +1,31 @@
+-v0.1 2026.1.6
+
+
+gic_handle_irq
+  +-> __gic_handle_irq_from_irqson
+    +-> __gic_handle_irq
+      +-> generic_handle_domain_irq
+        +-> handle_irq_desc
+          +-> generic_handle_irq_desc
+            +-> desc->handle_irq
+
+/* 对于timer中断，如上的handle_irq是handle_percpu_devid_irq */
+handle_percpu_devid_irq
+  +-> __kstat_incr_irqs_this_cpu  <-- 记录/proc/interrupts里的信息
+  +-> action->handler     <-- timer的irq handler
+  +-> chip->irq_eoi
+
+
+/* 如上handle_percpu_devid_irq的注册逻辑 */
+gic_init_bases
+  +-> irq_domain_create_tree(xxx, &gic_irq_domain_ops, xxx)
+
+gic_irq_domain_alloc
+  +-> gic_irq_domain_map
+        /*
+         * 可以看到对于SGI/PPI/SPI注册的是handle_percpu_devid_irq, LPI注册的是
+         * handle_fasteoi_irq
+         */
+    +-> irq_domain_set_info(xxx, handle_percpu_devid_irq, xxx)
+
+
