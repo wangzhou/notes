@@ -3,6 +3,7 @@
 -v0.3 2026.01.04 Sherlock ...
 -v0.4 2026.01.05 Sherlock ...
 -v0.5 2026.01.06 Sherlock ...
+-v0.6 2026.01.07 Sherlock ...
 
 简介：使用本文持续整理ARM MPAM协议的相关内容，分析依据MPAM spec A.a。
 
@@ -56,15 +57,20 @@ ID和PMG。
 ID和系统寄存器
 ---------------
 
-MPAMF_AIDR
-MPAMF_CCAP/CPOR/CSUMON_IDR
-MPAMF_IDR
-MPAMF_IIDR
-MPAMF_IMPL_IDR
-MPAMF_MBW/MBWUMON_IDR
-MPAMF_PRI_IDR
-MPAMF_PARTID_NRW_IDR
-MPAMF_SIDR
+系统寄存器就是如上提到的: MPAMx_ELn
+
+ID寄存器整理如下：
+
+MPAMF_AIDR                    版本信息
+MPAMF_IIDR                    厂商信息
+MPAMF_IMPL_IDR                自定义特性信息
+MPAMF_SIDR                    安全相关特性支持情况
+
+MPAMF_IDR                     特性总体支持信息
+MPAMF_CCAP/CPOR/CSUMON_IDR    cache相关信息
+MPAMF_MBW/MBWUMON_IDR         memory相关信息
+MPAMF_PRI_IDR                 优先级相关信息
+MPAMF_PARTID_NRW_IDR          partition ID narrow相关信息
 
 resource partitioning control
 -------------------------------
