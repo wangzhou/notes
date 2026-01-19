@@ -7,6 +7,7 @@ Linux内核ARM64 KVM虚拟化的基本逻辑
 -v0.5 2024.12.07 Sherlock 
 -v0.6 2025.01.25 Sherlock 补充__guest_enter的逻辑
 -v0.7 2025.01.31 Sherlock 继续整理中断的逻辑
+-v0.8 2026.01.19 Sherlock 补充PM和PSTAT
 
 简介：本文梳理Linux内核中ARM64虚拟化的基本逻辑，本文只梳理基于KVM的虚拟化。梳理
       基于的Linux内核版本是v6.10-rc4，基于的QEMU版本是v9.0.50。
@@ -313,15 +314,17 @@ kvm_arm_vcpu_enter_exit
 cpu_set_hyp_vector里从一些异常向量里选择一个更新kvm_hyp_vector。
 ```
 init_subsystems
-  -> cpu_hyp_init       // 每个物理core上运行这个函数
-    -> cpu_hyp_reinit
-      -> cpu_hyp_init_features
-        -> cpu_set_hyp_vector
-       /*
-        * 表示kvm里关于hyp的东西已经初始化。这个变量在cpu online/offline，
-        * kvm create/destory的时候也会做对应的配置和清零。
-        */
-    -> __this_cpu_write(kvm_hyp_initialized, 1)
+  +-> cpu_hyp_init       // 每个物理core上运行这个函数
+  | +-> cpu_hyp_reinit
+  | | +-> cpu_hyp_init_features
+  | |   +-> cpu_set_hyp_vector
+  | |   /*
+  | |    * 表示kvm里关于hyp的东西已经初始化。这个变量在cpu online/offline，
+  | |    * kvm create/destory的时候也会做对应的配置和清零。
+  | |    */
+  | +-> __this_cpu_write(kvm_hyp_initialized, 1)
+  |   /* 其中注册和PM相关的回调，进入低功耗时走CPU_PM_ENTER，低功耗出来走CPU_PM_EXIT */
+  +-> hyp_cpu_pm_init
 ```
 先看一个向量__kvm_hyp_vector。
 /* arch/arm64/kvm/hyp/hyp-entry.S */
@@ -358,7 +361,13 @@ el1_sync->el1_trap->__guest_exit，在__guest_exit里恢复host的上下文，�
 __guest_enter的下一条指令。整体逻辑上看，虚机从__guest_enter进入，同样从__guest_enter
 退出来。el1_irq/el1_fiq/el1_error，把异常原因保存到x0，同样跳到__guest_exit。
 
-todo: 中断在host异常向量表taken的逻辑。
+具体看下中断在kvm和host异常向量表taken的逻辑。eret进虚机前会先关EL2中断(__kvm_vcpu_run->local_daif_mask)，
+进入虚机恢复虚机PSTAT情况，当虚机内有一个中断的时候，中断被路由到EL2，低特权级中
+断被路由到高特权级，跳转到kvm向量表，同时硬件自动关EL2中断，__guest_enter中出来
+后在__deactivate_traps里换上host vector，随后开中断。注意，这时刚刚报上来的中断
+还是pending状态，开中断后，这个pending的中断就会被taken。需要注意的是，ARM架构下
+PSTAT只有一个，表示当前EL下处理器的各种状态。
+
 
 ## 内存虚拟化
 
