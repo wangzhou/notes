@@ -313,13 +313,18 @@ kvm_arm_vcpu_enter_exit
 cpu_set_hyp_vector里从一些异常向量里选择一个更新kvm_hyp_vector。
 ```
 init_subsystems
-  -> cpu_hyp_init
+  -> cpu_hyp_init       // 每个物理core上运行这个函数
     -> cpu_hyp_reinit
       -> cpu_hyp_init_features
         -> cpu_set_hyp_vector
+       /*
+        * 表示kvm里关于hyp的东西已经初始化。这个变量在cpu online/offline，
+        * kvm create/destory的时候也会做对应的配置和清零。
+        */
+    -> __this_cpu_write(kvm_hyp_initialized, 1)
 ```
 先看一个向量__kvm_hyp_vector。
-/* arch/arm64/kvm/kvm/hyp/hyp-entry.S */
+/* arch/arm64/kvm/hyp/hyp-entry.S */
 ```
 SYM_CODE_START(__kvm_hyp_vector)                                                
         invalid_vect    el2t_sync_invalid   // Synchronous EL2t             
@@ -348,8 +353,8 @@ host本身有异常或中断需要处理时，才会进入到这个异常向量�
 进入高级别特权级处理异常和中断，就是B这组异常向量。而A组异常向量只有el2_sync和
 el2_error两个有效，似乎是EL2遇到非法指令才会走到这里。
 
-具体看下B这组异常向量里的各个向量。EL1异常需要EL2处理时，跳到el2_sync，随后
-el2_sync->el1_trap->__guest_exit，在__guest_exit里恢复host的上下文，然后ret返回到
+具体看下B这组异常向量里的各个向量。EL1异常需要EL2处理时，跳到el1_sync，随后
+el1_sync->el1_trap->__guest_exit，在__guest_exit里恢复host的上下文，然后ret返回到
 __guest_enter的下一条指令。整体逻辑上看，虚机从__guest_enter进入，同样从__guest_enter
 退出来。el1_irq/el1_fiq/el1_error，把异常原因保存到x0，同样跳到__guest_exit。
 

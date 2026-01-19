@@ -4,6 +4,7 @@
 -v0.4 2026.01.05 Sherlock ...
 -v0.5 2026.01.06 Sherlock ...
 -v0.6 2026.01.07 Sherlock ...
+-v0.7 2026.01.15 Sherlock ...
 
 简介：使用本文持续整理ARM MPAM协议的相关内容，分析依据MPAM spec A.a。
 
@@ -185,24 +186,39 @@ MPAM对外使用resctrl文件系统作为接口。以openEuler v6.6内核为例�
 drivers/platform/mpam/。这个驱动是一个平台设备驱动，但是但是真正probe的地方在注
 册的cpu online的会调函数里。
 
-核心数据结构
+核心数据结构:
 
-struct mpam_class       - MPAM设备的分类，比如，cache/memory/IOMMU等
-struct mpam_msc         - 表示一个MSC设备
-struct mpam_msc_ris     - 
-struct mpam_component   - 
+/* MPAM设备的分类，比如，cache/memory/IOMMU等 */
+struct mpam_class
+  +-> components list
+
+/* 表示一个MSC设备 */
+struct mpam_msc
+  +-> ris list
+
+struct mpam_msc_ris
+
+struct mpam_component
+  +-> ris list
 
 struct mpam_resctrl_res
 
 
-MSC设备解析
+MSC设备解析:
 
 mpam_msc_drv_probe                  <-- probe以及创建MSC
   +-> acpi_mpam_parse_resources     <-- 创建mpam_ris
     +-> mpam_ris_create 
+      +-> mpam_class_get            <-- 如果还没有，就创建一个
+          /*
+           * class和component_id为入参，对于cache是ACPI表中的cache_reference，
+           * 对于memory是proximity_domain。所以compoment的语意是什么？
+           * 
+           */
+      +-> mpam_component_get
 
 mpam_discovery_cpu_online
-  +-> mpam_msc_hw_probe
+  +-> mpam_msc_hw_probe             <-- probe MSC硬件
       /* work queue里执行 */
   +-> mpam_resctrl_setup
     +-> mpam_resctrl_resource_init  <-- 创建mpam_resctrl_res数组

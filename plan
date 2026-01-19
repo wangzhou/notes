@@ -438,8 +438,10 @@ kvm pmu模拟逻辑					 c   ### 5
 qemu vfio/pci
 cpuhp/pm notifier
 
-hdbss                                            doing
 iommufd vsmmu                                    doing
 perf bench futex wake
 mpam分析					 doing
+PSTATE
+hdbss                                            
+linux_arm
 
