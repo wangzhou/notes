@@ -1,5 +1,6 @@
 -v0.1 2025.11.15 Sherlock init
 -v0.2 2026.01.15 Sherlock ...
+-v0.3 2026.01.19 Sherlock ...
 
 简介: 本文收集整理ARM64中和HDBSS相关的硬件逻辑，顺带也记录下硬件access flag和dirtiy bit的逻辑。
 
@@ -17,7 +18,19 @@ ID_AA64MMFR1_EL1.HAFDBS是HDBSS的能力定义域段，多个特性复用这个�
    
    4     HDBSS         硬件把脏页写到指定的软件buffer
 ```
+硬件更新access flag，要注意下HAFT的逻辑。
 
+页表里的DBM bit表示是否开启硬件更新dirty state。S2AP[1]表示是否可写，S2AP[0]表示
+只读，对于S2翻译的情况，当DBM没有配置时，对应的读写权限不对的时候，会触发异常。
+
+当DBM配置为1时，不管S2AP[1]/S2AP[0]的配置，写一个地址会导致S2AP[1]为1，且不触发
+异常。所以，DBM相当于增加可写并打开硬件标脏，S2AP[1]的含义变成dirty state。
+
+writable-clean
+writable-dirty
+
+AP[1]
+AP[0]
 
 
 
@@ -35,3 +48,5 @@ KVM标脏逻辑
 
 HDBSS软件支持
 --------------
+
+https://lkml.org/lkml/2025/11/21/560

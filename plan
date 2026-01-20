@@ -441,7 +441,4 @@ cpuhp/pm notifier
 iommufd vsmmu                                    doing
 perf bench futex wake
 mpam分析					 doing
-PSTATE
 hdbss                                            
-linux_arm
-
