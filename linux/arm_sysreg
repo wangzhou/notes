@@ -1,0 +1,14 @@
+-v0.1 2026.1.31 Sherlock init
+
+简介：收集下linux内核ARM arch下系统寄存器的使用方式。
+
+
+在arch/arm64/tools/sysreg文件中定义了各个系统寄存器，相同目录下的gen-sysreg.awk
+根据定义，生成各个系统寄存器的各种宏，生成的文件在arch/arm64/include/generated/asm/sysreg-defs.h。
+
+系统寄存器访问函数有两种: read_sysreg/write_sysreg，read_sysreg_s/write_sysreg_s，
+定义在arch/arm64/include/asm/sysreg.h。前者可以直接用寄存器的名字访问，后者实际
+上是直接使用opcode编码组合成的裸二进制指令编码访问寄存器。
+
+在sysreg.h里，也存在直接定义的系统寄存器宏，感觉这些宏是历史遗留的产物，或者不适
+合做成自动生成。sysreg.h直接include sysreg-defs.h。
