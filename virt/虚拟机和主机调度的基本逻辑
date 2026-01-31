@@ -35,7 +35,7 @@ kvm_arch_vcpu_ioctl_run
               schedule()
 ```
 
-在看kvm退出到qemu的逻辑，需要退出到qemu处理的情况定义到了include/uapi/linux/kvm.h
+再看kvm退出到qemu的逻辑，需要退出到qemu处理的情况定义到了include/uapi/linux/kvm.h
 的KVM_EXIT_XXX。
 
 内核中的一段流程长时间占据CPU就会触发softlockup，那不是可以写一段不触发退出的程序，
