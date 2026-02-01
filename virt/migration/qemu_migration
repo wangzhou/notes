@@ -1,0 +1,58 @@
+
+
+migration_connect
+  +-> qemu_thread_create(..., migration_thread, ...)  <-- 创建源端migration_thread
+    +-> migration_iteration_run                       <-- thread里的逻辑
+      +-> qemu_savevm_state_pending_estimate
+      |   /*
+      |    * 对于ram，实际调用如下ram_state_pending_exact，对于kvm，最终调用到
+      |    * accel/kvm/kvm-all.c里的kvm_log_sync
+      |    *
+      |    * 第一次调用的时候，是否返回全是dirty page？
+      |    */
+      +-> qemu_savevm_state_pending_exact
+      | +-> migration_bitmap_sync_precopy
+      |   +-> migration_bitmap_sync_precopy
+      |     +-> migration_bitmap_sync
+      |       +-> memory_global_dirty_log_sync
+      |         +-> listener->log_sync
+      | 	  ...
+      | 	  +-> kvm_vm_ioctl(..., KVM_GET_DIRTY_LOG, ...)
+      |       +-> ramblock_sync_dirty_bitmap ?
+      |
+      +-> se->ops->save_live_iterate   ram_save_iterate
+         +-> ram_find_and_save_block
+           +-> ram_save_host_page
+             +-> migration_bitmap_clear_dirty    <-- clear脏页信息。同步问题怎么处理？
+             +-> ram_save_target_page            <-- 发送page？
+    
+
+
+
+
+1. 开启memory region标脏的点
+
+2. 每次脏页处理，获取脏页信息
+
+3. 迁移
+
+4. clear脏页信息
+
+```
+/* qemu/migration/ram.c */
+static SaveVMHandlers savevm_ram_handlers = {                                   
+    .save_setup = ram_save_setup,                                               
+    .save_live_iterate = ram_save_iterate,                                      
+    .save_live_complete_postcopy = ram_save_complete,                           
+    .save_live_complete_precopy = ram_save_complete,                            
+    .has_postcopy = ram_has_postcopy,                                           
+    .state_pending_exact = ram_state_pending_exact,                             
+    .state_pending_estimate = ram_state_pending_estimate,                       
+    .load_state = ram_load,                                                     
+    .save_cleanup = ram_save_cleanup,                                           
+    .load_setup = ram_load_setup,                                               
+    .load_cleanup = ram_load_cleanup,                                           
+    .resume_prepare = ram_resume_prepare,                                       
+    .save_postcopy_prepare = ram_save_postcopy_prepare,                         
+};                                                                              
+```

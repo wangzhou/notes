@@ -2,6 +2,7 @@
 -v0.2 2026.01.15 Sherlock ...
 -v0.3 2026.01.19 Sherlock ...
 -v0.4 2026.01.20 Sherlock ...
+-v0.5 2026.02.01 Sherlock ...
 
 简介: 本文收集整理ARM64中和HDBSS相关的硬件逻辑，顺带也记录下硬件access flag和dirtiy bit的逻辑。
 
@@ -48,6 +49,8 @@ KVM_CLEAR_DIRTY_LOG，一个基于map到用户态的dirty log ring，使用KVM_C
 标记这个功能。
 
 看下bitmap的逻辑。基本数据结构：struct kvm_memory_slot -> dirty_bitmap
+
+看下QEMU/KVM利用stage 2标脏的基本逻辑。
 
 KVM触发标脏的接口是ioctl KVM_SET_USER_MEMORY_REGION，其中flag要带KVM_MEM_LOG_DIRTY_PAGES
 参数，这个接口也是注册虚机内存的接口。这个接口做的主要工作是配置写保护和大页拆小
