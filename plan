@@ -150,7 +150,6 @@ ELF/PE启动			 continue(uboot EFI)
 unix编程艺术读书笔记		 todo
 csr寄存器整理		         todo
 qemu goto tb再分析		 c(制造tb清理) -- 自修改代码分析 5
-linux timer内核代码分析          todo
 qemu tlb分析			 c
 qemu 内存模拟			 to do
 riscv aia			 c
@@ -442,3 +441,5 @@ iommufd vsmmu                                    doing
 perf bench futex wake
 mpam分析					 doing
 hdbss                                            doing
+arm timer
+linux timer内核代码分析          todo
