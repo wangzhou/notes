@@ -1,0 +1,13 @@
+-v0.1 2026.2.1 Sherlock init
+
+Core的ACPI表：MADT/PPTT
+
+GICD/ITS/GICR的ACPI表：MADT
+
+NUMA: 
+
+SRAT(System Resource Affinity Table), core和内存属于哪个NUMA的定义。
+SLIT，定义NUMA距离。
+HMAT，core对异构内存属性的定义。
+
+CPPC，低功耗相关。

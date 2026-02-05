@@ -424,7 +424,6 @@ irqbalance分析/中断亲和性配置
 3. vfio
 
 NMI虚拟化逻辑补齐		   doing
-qemu arm启动逻辑
 
 内核启动打印，在什么时候有启动打印
 
@@ -443,3 +442,6 @@ mpam分析					 doing
 hdbss                                            doing
 arm timer
 linux timer内核代码分析          todo
+调度点
+qemu arm启动逻辑   再整理下
+qem_arm_kvm

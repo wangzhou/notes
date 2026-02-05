@@ -107,7 +107,7 @@ main
     |          */
     |     +-> acc->init_machine
     |       ...
-    |       +-> kvm_arch_init
+    |       +-> kvm_arch_init      <--- VM相关的cap探测和使能在这里
     |       +-> kvm_irqchip_create
     |       +-> kvm_memory_listener_register
     |
@@ -160,6 +160,8 @@ arm_cpu_realizefn
          +-> kvm_create_vcpu
            +-> kvm_vm_ioctl(s, KVM_CREATE_VCPU, vcpu_id)
          +-> kvm_arch_init_vcpu
+           +-> kvm_check_extension       <-- vCPU相关的特性的init，vCPU CAP的检测也可以放这里。
+           +-> kvm_arm_vcpu_init         <-- KVM_ARM_VCPU_INIT ioctl
                /* 拿到kvm里的寄存器信息，并更新到cpreg里 */
            +-> kvm_arm_init_cpreg_list
 
