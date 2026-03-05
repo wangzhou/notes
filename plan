@@ -394,7 +394,6 @@ twed/wfxt/软件延时 #
 qemu cmdline #
 steal time #
 虚拟化和调度/虚拟化关中断和关抢占                doing
-guest reboot 流程                                doing
 arm nmi watchdog/cppc
 
 kvmtool构架分析
@@ -445,3 +444,5 @@ linux timer内核代码分析          todo
 调度点
 qemu arm启动逻辑   再整理下
 qem_arm_kvm
+uncore pmu
+guest reboot 流程                                doing #
