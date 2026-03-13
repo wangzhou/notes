@@ -160,3 +160,4 @@ todo:
 3. PMU驱动会通过sysctl接口给管理员暴露权限控制接口，可以做event粒度的调节，驱动
    要做适配。一般调节的接口是/proc/sys/kernel/perf_event_paranoid
 4. ARM PMUv9容许EL0直接访问counter，对标X86的RDPMC功能。
+5. SPE驱动会把buffer map到用户态，perf spe用户态驱动解析得到的数据。
