@@ -5,6 +5,7 @@
 -v0.5 2026.01.06 Sherlock ...
 -v0.6 2026.01.07 Sherlock ...
 -v0.7 2026.01.15 Sherlock ...
+-v0.8 2026.03.13 Sherlock ...
 
 简介：使用本文持续整理ARM MPAM协议的相关内容，分析依据MPAM spec A.a。
 
@@ -148,6 +149,14 @@ SMMU MPAM
 ----------
 
 SMMU上只是配置partid，联合内存或者cache上的控制单元实现内存或者cache资源的控制。
+
+Partid Narrow
+--------------
+
+创建
+配置
+查询
+
 
 MPAM虚拟化
 -----------
