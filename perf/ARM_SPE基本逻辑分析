@@ -150,3 +150,13 @@ todo: SPU的中断和虚拟化的逻辑。
 todo: sample collisions.
 todo: 对CNTVCT_EL0的记录
 todo: 驱动怎么分配buffer内存?
+
+todo: 
+
+1. ARM spec上还在新加各种SPE的特性。比如，浮点、NEON指令的记录。
+2. SPE记录的微架构参数里，有数据源和一条指令可能经过的微架构阶段。
+   比如，对于load/store可以记录最终hit的cache层级，对于load/store，也可以记录
+   它在cache系统的轨迹，比如L1 miss->L2 miss->L3 hit这样的轨迹。
+3. PMU驱动会通过sysctl接口给管理员暴露权限控制接口，可以做event粒度的调节，驱动
+   要做适配。一般调节的接口是/proc/sys/kernel/perf_event_paranoid
+4. ARM PMUv9容许EL0直接访问counter，对标X86的RDPMC功能。
