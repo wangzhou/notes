@@ -109,6 +109,23 @@ todo: 怎么搞的优先级？
 resource monitor
 ------------------
 
+一个MSC上可能既有cache又有内存的monitor，相同种类里需要监控的partid和PMG又不一样，
+对于某个type，特定partid和PMG的监控，需要先配置对应的监控控制寄存器，然后从对应的
+counter里读监控得到的数据。
+
+每个MSC中，某种类型实际的monitor counter又可以有多个。这个配置可以在对应的ID寄存器
+里查到，比如memory的MPAMF_MBWUMON_IDR.NUM_NON定义这个MSC有多少个内部的counter，
+MPAM里叫做monitor instance。
+
+MPAM定义了一组控制寄存器和一个counter对外接口。所以，对于一个MSC，对于每个type，
+每个instance，软件要先通过这些控制寄存器选择要配置的具体type/instance/partid+PMG，
+再进行配置，或者读counter信息。
+
+比如，先配置MSMON_CFG_MON_SEL.RIS选择type，MSMON_CFG_MON_SEL.MON_SEL选择instance，
+MSMON_CFG_MBWU_FLT.PARTID/PMG选择partid+PMG。然后配置MSMON_CFG_MBWU_CTL启动对应
+的监控行为，读MSMON_MBWU得到监控数据。
+
+MSMON_CFG_MON_SEL
 MSMON_CAPT_EVENT
 MSMON_CFG_CSU/MBWU_CTL
 MSMON_CFG_CSU/MBWU_FLT
@@ -130,7 +147,7 @@ MSMON_OFLOW_MSI_SR
 SMMU MPAM
 ----------
 
-todo: ...
+SMMU上只是配置partid，联合内存或者cache上的控制单元实现内存或者cache资源的控制。
 
 MPAM虚拟化
 -----------
