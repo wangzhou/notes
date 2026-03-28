@@ -1,0 +1,23 @@
+-v0.1 2026.3.29 Sherlock init
+
+简介: 收集和ARM TLB硬件相关的知识。
+
+TLB在硬件内部一般有三种保存情况：
+
+1. stage1 TLB。
+
+2. combine TLB，也就是stage1和stage2最后综合得到的TLB。
+
+3. stage2 TLB，也就是保存IPA->PA的对应的TLB。
+
+   注意，在虚拟化的场景之下，如果只有combine TLB，TLB miss的成本会比较高，因为
+   为了地址翻译还需要做stage2的page table walk。有了stage2 TLB，可以立即得到IPA
+   对应的实际物理地址。
+
+从一条TLB覆盖范围看，又可以分为三种情况：
+
+1. 覆盖一个基础页的大小。
+
+2. 覆盖一个block页的大小。
+
+3. 覆盖一个CONT PTE的大小。
