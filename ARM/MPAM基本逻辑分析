@@ -120,24 +120,26 @@ MPAM定义了一组控制寄存器和一个counter对外接口。所以，对于
 MSMON_CFG_MBWU_FLT.PARTID/PMG选择partid+PMG。然后配置MSMON_CFG_MBWU_CTL启动对应
 的监控行为，读MSMON_MBWU得到监控数据。
 
-MSMON_CFG_MON_SEL
-MSMON_CAPT_EVENT
-MSMON_CFG_CSU/MBWU_CTL
-MSMON_CFG_CSU/MBWU_FLT
+MSMON_CFG_MON_SEL         monitor选择寄存器，[15:0]MON_SEL选择instance，[27:24]RIS选择type
+MSMON_CAPT_EVNT           capture事件触发寄存器，写[0]NOW触发立即capture保存到CAPTURE寄存器
 
-MSMON_CSU/MBWU
-MSMON_CSU/MBWU_CAPTURE
-MSMON_CSU/MBWU_OFSR
+MSMON_CFG_CSU_CTL         CSU控制寄存器，[7:0]TYPE=0x43，[16/17]PARTID/PMG过滤使能，[31]EN使能
+MSMON_CFG_CSU_FLT         CSU过滤寄存器，[15:0]PARTID，[23:16]PMG，[31]XCL排除clean cache line
+MSMON_CFG_MBWU_CTL        MBWU控制寄存器，[7:0]TYPE=0x42，[25]溢出中断，[26]溢出状态，[31]EN使能
+MSMON_CFG_MBWU_FLT        MBWU过滤寄存器，[15:0]PARTID，[23:16]PMG，[31:30]RWBW读/写/全选
 
-MSMON_MBWU_L
-MSMON_MBWU_L_CAPTURE
+MSMON_CSU                 CSU counter，[30:0]VALUE为cache使用量，[31]NRDY数据未就绪
+MSMON_CSU_CAPTURE         CSU capture值，上次capture事件保存的cache使用量
+MSMON_MBWU                MBWU counter(31位)，[30:0]VALUE为带宽使用量，[31]NRDY
+MSMON_MBWU_CAPTURE        MBWU capture值，上次capture事件保存的带宽使用量
+MSMON_MBWU_L              MBWU长counter(44/63位)，用于长时间监控减少溢出，[63]L_NRDY
+MSMON_MBWU_L_CAPTURE      MBWU长counter capture值
 
-MSMON_OFLOW_MSI_ADDR_L
-MSMON_OFLOW_MSI_ADDR_H
-MSMON_OFLOW_MSI_ATTR
-MSMON_OFLOW_MSI_DATA
-MSMON_OFLOW_MSI_MPAM
-MSMON_OFLOW_MSI_SR
+MSMON_OFLOW_MSI_ADDR_L/H  溢出中断MSI地址
+MSMON_OFLOW_MSI_ATTR      MSI属性配置
+MSMON_OFLOW_MSI_DATA      MSI数据
+MSMON_OFLOW_MSI_MPAM      MSI MPAM标识
+MSMON_OFLOW_MSI_SR        MSI状态寄存器
 
 SMMU MPAM
 ----------
