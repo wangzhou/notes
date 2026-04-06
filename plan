@@ -430,19 +430,20 @@ NMI虚拟化逻辑补齐		   doing
 内核IPI					         doing
 kvm self test				         doing
 gicv5						 doing
-kvm pmu模拟逻辑					 c   ### 5
 
 qemu vfio/pci
 cpuhp/pm notifier
 
-iommufd vsmmu                                    doing
 perf bench futex wake
-mpam分析					 doing
-hdbss                                            doing
 arm timer
 linux timer内核代码分析          todo
 调度点
 qemu arm启动逻辑   再整理下
 qem_arm_kvm
 uncore pmu
-guest reboot 流程                                doing #
+
+kvm pmu模拟逻辑					 c   ### 5
+mpam分析					 doing
+hdbss                                            doing
+iommufd vsmmu                                    doing
+linux timer内核代码分析                          todo
