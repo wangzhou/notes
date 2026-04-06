@@ -8,6 +8,8 @@
 guest linux reboot
 -------------------
 
+显然，linux的reboot流程在guest和host上是一致的，这里写成guest linux reboot只是为了
+突出下主题。
 ```
 /* kernel/reboot.c */
 reboot
@@ -34,7 +36,7 @@ handle_smc/handle_hvc -> kvm_smccc_call_handler -> kvm_psci_call:
   +-> kvm_psci_1_x_call
     +-> kvm_psci_system_reset2
           /*
-           * 把从kvm退出的原因和类型记录，后续会传给qemu。可见这时从kvm退出的原因
+           * 记录kvm退出的原因和类型，后续会传给qemu。可见这时从kvm退出的原因
            * 是退出系统，退出的类型是reset。最后从ioctl_run返回到qemu。
            */
       +-> kvm_prepare_system_event
@@ -95,18 +97,18 @@ main_loop_should_exit
               /* kvm的core寄存器信息读到qemu里来 */
           +-> kvm_cpu_synchronize_state
 
-      qemu_devices_reset / mc-> reset
+      qemu_devices_reset / mc->reset
         +-> resettable_reset
 
           +-> arm_cpu_reset_hold
             ...
-            +-> kvm_arm_reset_vcpu                              <--- core reset
+            +-> kvm_arm_reset_vcpu                         <--- core reset
                   /* 下发KVM_ARM_VCPU_INIT ioctl，KVM会初始化vCPU */
               +-> kvm_arm_vcpu_init
               +-> write_kvmstate_to_list
               +-> write_list_to_cpustate
 
-            +-> kvm_arm_gicv3_reset_hold                       <--- gicv3 reset
+            +-> kvm_arm_gicv3_reset_hold                   <--- gicv3 reset
                   /* reset qemu gicv3的状态 */
               +-> kgc->parent_phases.hold(obj, type) // arm_gicv3_common_reset_hold
                   /*
@@ -127,7 +129,7 @@ main_loop_should_exit
     +-> resume_all_vcpus
 ```
 
-下面列出上面各个设备reset_hold回调注册的地方。
+下面列出上面各个设备reset_hold回调注册的地方:
 ```
 /* target/arm/cpu.c */
 arm_cpu_class_init
