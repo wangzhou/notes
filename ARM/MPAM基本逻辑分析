@@ -77,31 +77,29 @@ MPAMF_PARTID_NRW_IDR          partition ID narrow相关信息
 resource partitioning control
 -------------------------------
 
-MPAMCFG_PART_SEL
+软件需要配置MSC上各种资源的配置，这些配置用partition ID和RIS做标记。一个MSC上可能
+同时支持多种不同类型的控制和监控，比如，同时支持memory和cache，RIS(resource instance
+selection)就是对支持类型的标记。
 
-软件需要配置MSC上各种资源的配置，这些配置用partition ID和RIS做标记，RIS(resource
-instance selection)里resource value是啥？软件需要用MPAMCFG_PART_SEL选择当前要配置
-的partition ID和RIS。
+软件需要用MPAMCFG_PART_SEL选择当前要配置的partition ID和RIS，然后配置对应的寄存，
+配置选中partition ID和RIS对应的资源限制。
 
-MPAMCFG_CASSOC,     Cache Maximum Associativity Partition
+MPAMCFG_PART_SEL    配置partition ID和RIS
 
-MPAMCFG_CMAX,       Cache Maximum Capacity Partition 配置cache使用的最大百分比
-
-MPAMCFG_CMIN,       Cache Minimum Capacity Partition 配置cache使用的最小百分比，
+MPAMCFG_CASSOC      Cache Maximum Associativity Partition
+MPAMCFG_CMAX        Cache Maximum Capacity Partition 配置cache使用的最大百分比
+MPAMCFG_CMIN        Cache Minimum Capacity Partition 配置cache使用的最小百分比，
                     小于这个百分比的partition ID的优先级被提高，优先分cache。
-
-MPAMCFG_CPBM<n>,    Cache Portion Bitmap Partition 按照portion的配置寄存器。配置的方式:
+MPAMCFG_CPBM<n>     Cache Portion Bitmap Partition 按照portion的配置寄存器。配置的方式:
                     1. 最大bit数，2. select出要配置的partition ID，3. 执行配置。
-		    这东西每个partition ID都配置一把，很难看到一个综合的结构啊？
-                    有接口到处目前配置的所有策略么?
 
-MPAMCFG_MBW_MAX,    Memory Bandwidth Maximum Partition
-MPAMCFG_MBW_MIN,    Memory Bandwidth Minimum Partition
-MPAMCFG_MBW_PBM<n>, Bandwidth Portion Bitmap Partition 
-MPAMCFG_MBW_PROP,   Memory Bandwidth Proportional Stride Partition
-MPAMCFG_MBW_WINWD,  Memory Bandwidth Partitioning Window Width 
+MPAMCFG_MBW_MAX     Memory Bandwidth Maximum Partition
+MPAMCFG_MBW_MIN     Memory Bandwidth Minimum Partition
+MPAMCFG_MBW_PBM<n>  Bandwidth Portion Bitmap Partition 
+MPAMCFG_MBW_PROP    Memory Bandwidth Proportional Stride Partition
+MPAMCFG_MBW_WINWD   Memory Bandwidth Partitioning Window Width 
 
-MPAMCFG_PRI,        Priority Partition  todo: 怎么搞的优先级？
+MPAMCFG_PRI         Priority Partition  todo: 怎么搞的优先级？
 
 resource monitor
 ------------------
@@ -161,13 +159,15 @@ MPAM虚拟化
 
 Linux软件接口
 --------------
-todo: 基本逻辑
+
+Intel最早实现了MPAM类似的功能(RDT)，软件上用一个独立的文件系统resctrl向外导出使用接口。
+文件系统层次结构如下：
 ```
 /sys/fs/resctrl/
-├── cpus                 # 整个resctrl系统的CPU列表
-├── cpus_list            # 人类可读的CPU列表格式
-├── mon_groups/          # 监控组目录
-├── info/                # 系统资源信息
+├── cpus                     # 整个resctrl系统的CPU列表
+├── cpus_list                # 人类可读的CPU列表格式
+├── mon_groups/              # 监控组目录
+├── info/                    # 系统资源信息
 │   ├── L3/
 │   │   ├── cbm_mask
 │   │   ├── min_cbm_bits
@@ -177,29 +177,36 @@ todo: 基本逻辑
 │   │   ├── bandwidth_gran
 │   │   ├── delay_linear
 │   │   └── min_bandwidth
-│   └── last_cmd_status  # 最后一次命令执行状态
-├── mon_data/            # 根控制组的监控数据
+│   └── last_cmd_status      # 最后一次命令执行状态
+├── mon_data/                # 根控制组的监控数据
 │   ├── mon_L3_00/
 │   │   ├── llc_occupancy
 │   │   ├── mbm_total_bytes
 │   │   └── mbm_local_bytes
 │   └── ...
-├── schemata             # 资源分配方案
-├── size                 # 根控制组的缓存大小
-├── tasks                # 根控制组的进程列表
-├── <用户创建的目录>/    # 用户自定义控制组
+├── schemata                 # 资源分配方案
+├── size                     # 根控制组的缓存大小
+├── tasks                    # 根控制组的进程列表
+├── <用户创建的目录>/        # 用户自定义控制组
 │   ├── cpus
 │   ├── cpus_list
 │   ├── schemata
 │   ├── size
-│   ├── mon_groups/      # 该控制组的监控组
-│   ├── mon_data/        # 该控制组的监控数据
+│   ├── mon_groups/          # 该控制组的监控组
+│   ├── mon_data/            # 该控制组的监控数据
 │   └── tasks
 └── <mon_groups创建的目录>/  # 监控组目录
-    ├── mon_data/        # 监控组的具体监控数据
+    ├── mon_data/            # 监控组的具体监控数据
     └── ...
 (AI生成)
 ```
+resctrl使用层次化的结构控制资源，resctrl的根目录是全局资源，用户通过在resctrl
+目录下创建目录，创建对应的控制组和监控组，可以看到在用户创建的目录下会新创建一整
+套resctrl相关的控制和监控目录和文件。可以看到，用户创建的目录和对应的partition ID
+对应起来，partition ID和CPU/线程的绑定关系通过配置cpus/cpus_list/tasks来实现。
+
+控制组创建后，会在控制组目录自动生成监控组控制目录(mon_groups)和监控组数据目录
+(mon_data)。需要手动在mon_group里创建自定义监控组，监控组监控的事件要如何配置?
 
 Linux内核实现
 --------------
