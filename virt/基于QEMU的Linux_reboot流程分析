@@ -1,5 +1,6 @@
 -v0.1 2025.5.21 init Sherlock
 -v0.2 2025.5.22 init ...
+-v0.3 2026.4.06 终于post了，笔记写作还是要坚持
 
 简介：本文总结Linux KVM环境下guest reboot的整个流程。Linux使用v6.14-rc5, qemu使用
       9.1.90。 
