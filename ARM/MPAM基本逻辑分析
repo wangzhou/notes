@@ -141,6 +141,8 @@ MSMON_OFLOW_MSI_DATA      MSI数据
 MSMON_OFLOW_MSI_MPAM      MSI MPAM标识
 MSMON_OFLOW_MSI_SR        MSI状态寄存器
 
+todo: PMG怎么配置？
+
 SMMU MPAM
 ----------
 
@@ -152,7 +154,7 @@ Partid Narrow
 所谓Partid Narrow是进入MSC的partid可以通过提前配置好的映射被映射成另外一个partid，
 后面的控制和检测都基于新的partid。
 
-创建/配置/查询
+todo: 创建/配置/查询，主要使用场景。
 
 MPAM虚拟化
 -----------
@@ -208,7 +210,7 @@ resctrl使用层次化的结构控制资源，resctrl的根目录是全局资源
 对应起来，partition ID和CPU/线程的绑定关系通过配置cpus/cpus_list/tasks来实现。
 
 控制组创建后，会在控制组目录自动生成监控组控制目录(mon_groups)和监控组数据目录
-(mon_data)。需要手动在mon_group里创建自定义监控组，监控组监控的事件要如何配置?
+(mon_data)。需要手动在mon_group里创建自定义监控组，监控组监控的事件要如何配置? todo
 
 Linux内核实现
 --------------
@@ -299,8 +301,4 @@ MPAM资源配置的一般逻辑是，用户已经知道整个系统的cache和me
 相关控制节点直接呈现在resctrl文件系统中。用户实际上通过resctrl把特性CPU或线程和
 partid绑定，用户通过在各个控制节点上配置partid对应的控制和监控信息达到控制和监控
 的功能。partid最终呈现对应的可能是一个个独立的目录。
-
-todo: PMG怎么配置？
-
-todo: partid narrow怎么配置？
 
