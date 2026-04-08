@@ -120,20 +120,27 @@ MPAM定义了一组控制寄存器和一个counter对外接口。所以，对于
 MSMON_CFG_MBWU_FLT.PARTID/PMG选择partid+PMG。然后配置MSMON_CFG_MBWU_CTL启动对应
 的监控行为，读MSMON_MBWU得到监控数据。
 
-MSMON_CFG_MON_SEL         monitor选择寄存器，[15:0]MON_SEL选择instance，[27:24]RIS选择type
-MSMON_CAPT_EVNT           capture事件触发寄存器，写[0]NOW触发立即capture保存到CAPTURE寄存器
+寄存器的具体定义如下：
 
-MSMON_CFG_CSU_CTL         CSU控制寄存器，[7:0]TYPE=0x43，[16/17]PARTID/PMG过滤使能，[31]EN使能
-MSMON_CFG_CSU_FLT         CSU过滤寄存器，[15:0]PARTID，[23:16]PMG，[31]XCL排除clean cache line
-MSMON_CFG_MBWU_CTL        MBWU控制寄存器，[7:0]TYPE=0x42，[25]溢出中断，[26]溢出状态，[31]EN使能
-MSMON_CFG_MBWU_FLT        MBWU过滤寄存器，[15:0]PARTID，[23:16]PMG，[31:30]RWBW读/写/全选
+MSMON_CFG_MON_SEL         monitor选择寄存器，MON_SEL选择instance，RIS选择type
 
-MSMON_CSU                 CSU counter，[30:0]VALUE为cache使用量，[31]NRDY数据未就绪
-MSMON_CSU_CAPTURE         CSU capture值，上次capture事件保存的cache使用量
-MSMON_MBWU                MBWU counter(31位)，[30:0]VALUE为带宽使用量，[31]NRDY
-MSMON_MBWU_CAPTURE        MBWU capture值，上次capture事件保存的带宽使用量
-MSMON_MBWU_L              MBWU长counter(44/63位)，用于长时间监控减少溢出，[63]L_NRDY
+MSMON_CAPT_EVNT           提供了一个软件控制接口把counter里的值保存到CAPTURE寄存
+                          器里，写NOW触发这个保存动作。通过如下CTL寄存器可以配置
+			  “capture”的附带行为，比如“capture”的同时reset counter
+			  为0。
+MSMON_CSU_CAPTURE         上次capture事件保存的cache使用量
+MSMON_MBWU_CAPTURE        上次capture事件保存的带宽使用量
 MSMON_MBWU_L_CAPTURE      MBWU长counter capture值
+
+MSMON_CFG_CSU_CTL         CSU控制寄存器，TYPE配置触发capture的源头，写如上NOW是其中一种
+                          PARTID/PMG过滤使能，EN使能monitor
+MSMON_CFG_CSU_FLT         CSU过滤寄存器，PARTID/PMG配置要过滤的参数，XCL配置是否只记录被修改的cache line
+MSMON_CFG_MBWU_CTL        MBWU控制寄存器，TYPE语义如上，各种overflow标记，EN使能monitor
+MSMON_CFG_MBWU_FLT        MBWU过滤寄存器，PARTID/PMG语义如上，RWBW配置过滤只读/只写/读写
+
+MSMON_CSU                 CSU counter，VALUE为cache使用量，NRDY指示数据是否就绪
+MSMON_MBWU                MBWU counter(31位)，VALUE为带宽使用量，NRDY语义如上
+MSMON_MBWU_L              MBWU长counter(44/63位)，用于长时间监控减少溢出，L_NRDY语义如上
 
 MSMON_OFLOW_MSI_ADDR_L/H  溢出中断MSI地址
 MSMON_OFLOW_MSI_ATTR      MSI属性配置
@@ -141,7 +148,8 @@ MSMON_OFLOW_MSI_DATA      MSI数据
 MSMON_OFLOW_MSI_MPAM      MSI MPAM标识
 MSMON_OFLOW_MSI_SR        MSI状态寄存器
 
-todo: PMG怎么配置？
+todo: PMG怎么配置？1. 硬件上是怎么过滤的partid和PMG都一样才能过滤。2. resctrl
+怎么配置过滤多个对象。
 
 SMMU MPAM
 ----------
