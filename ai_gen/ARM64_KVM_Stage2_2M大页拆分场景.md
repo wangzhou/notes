@@ -33,10 +33,39 @@
 ### 3. 写保护后的写缺页触发拆页
 
 - **函数**: `user_mem_abort()` 中 `force_pte = logging_active`
-- **文件**: `arch/arm64/kvm/mmu.c:1661`
+- **文件**: `arch/arm64/kvm/mmu.c:1661`, `arch/arm64/kvm/mmu.c:1917`
 - **触发**: 脏页跟踪开启期间，guest 对被 write-protect 的大页产生写缺页
 - **原理**: `logging_active` 为 true 时，`force_pte = true`，映射粒度被强制为
   `PAGE_SIZE`。已有的 PMD block 会通过 `stage2_map_walk_leaf()` 被拆分
+
+**详细时序**:
+
+```
+时刻 T1: 建立 2M PMD block mapping（RW）
+         stage2 页表: IPA → HPA, PMD block, 可读可写
+
+时刻 T2: 开启脏页跟踪
+         → kvm_stage2_wp_range() 把 PMD block 原地改为只读（清除 S2AP_W）
+         → 注意：此时没有拆页，仍然是 2M block，只是权限变了
+
+时刻 T3: Guest 写该区域
+         → ARM MMU 检测到写只读的 PMD block → permission fault
+         → 进入 user_mem_abort():
+           ┌─ logging_active = true
+           ├─ force_pte = true
+           ├─ vma_pagesize = PAGE_SIZE        ← 期望的映射粒度
+           ├─ fault_granule = PMD_SIZE        ← 已有映射的粒度
+           └─ vma_pagesize != fault_granule   ← 粒度不匹配!
+         → 不能走 kvm_pgtable_stage2_relax_perms() 原地改权限
+           （relax_perms 只能在粒度匹配时原地更新，不改变页表结构）
+         → 只能走 kvm_pgtable_stage2_map(PAGE_SIZE) 重新映射
+         → stage2_map_walk_leaf() 拆分 PMD block 为 4K PTE
+```
+
+**注意**: 不是 permission fault 本身导致粒度变小，而是脏页跟踪开启后
+`force_pte=true` 导致期望粒度变成了 PAGE_SIZE。Permission fault 只是触发
+重新进入 `user_mem_abort()` 的时机，在 `user_mem_abort()` 中发现期望粒度
+（PAGE_SIZE）与已有映射粒度（PMD_SIZE）不匹配，才走了拆页路径。
 
 ---
 
@@ -240,20 +269,11 @@ identify_page_state(pfn, p, page_flags)            [mm/memory-failure.c:2106]
 - **备注**: 使用 hugetlbfs 时，HVA 本身是 2M 对齐的。此场景主要出现在
   memslot IPA 配置不对齐的情况下，属于配置问题。
 
-### 9. Permission fault 时映射粒度不匹配
-
-- **函数**: `user_mem_abort()` 中的 `fault_is_perm && vma_pagesize != fault_granule` 分支
-- **文件**: `arch/arm64/kvm/mmu.c:1917`
-- **触发**: 已有 PMD block 的 permission fault，但此时需要的映射粒度变成了 PAGE_SIZE
-  （例如脏页跟踪刚开启）
-- **原理**: 无法走 `kvm_pgtable_stage2_relax_perms()` 原地更新权限，
-  只能走 `kvm_pgtable_stage2_map()` 重新映射，导致拆页
-
 ---
 
 ## 四、设备直通 / MMIO
 
-### 10. VFIO 设备直通 / MMIO 映射
+### 9. VFIO 设备直通 / MMIO 映射
 
 - **函数**: `kvm_phys_addr_ioremap()`
 - **文件**: `arch/arm64/kvm/mmu.c:1177`
@@ -266,7 +286,7 @@ identify_page_state(pfn, p, page_flags)            [mm/memory-failure.c:2106]
 
 ## 五、嵌套虚拟化（Nested Virtualization）
 
-### 11. 嵌套 guest 的 stage-2 映射粒度限制
+### 10. 嵌套 guest 的 stage-2 映射粒度限制
 
 - **函数**: `user_mem_abort()` 中 `force_pte = (max_map_size == PAGE_SIZE)`
 - **文件**: `arch/arm64/kvm/mmu.c:1752`
@@ -278,14 +298,14 @@ identify_page_state(pfn, p, page_flags)            [mm/memory-failure.c:2106]
 
 ## 六、pKVM（Protected KVM）特有场景
 
-### 12. pKVM 非默认权限的页面映射
+### 11. pKVM 非默认权限的页面映射
 
 - **函数**: `host_stage2_force_pte_cb()` -> `force_pte_cb` in `kvm_pgtable_stage2_map()`
 - **文件**: `arch/arm64/kvm/hyp/nvhe/mem_protect.c:565`, `arch/arm64/kvm/hyp/pgtable.c:1099`
 - **触发**: pKVM 模式下，mapping 的权限不是默认的 RWX（memory）或 RW（MMIO）
 - **原理**: pKVM 需要精细控制每个页面的权限和所有权，非默认权限不能用 block 映射
 
-### 13. pKVM 页面所有权标注
+### 12. pKVM 页面所有权标注
 
 - **函数**: `kvm_pgtable_stage2_set_owner()`
 - **文件**: `arch/arm64/kvm/hyp/pgtable.c:1121`
@@ -296,7 +316,7 @@ identify_page_state(pfn, p, page_flags)            [mm/memory-failure.c:2106]
 
 ## 七、Guest Memory (gmem / 机密计算)
 
-### 14. guest_memfd 缺页
+### 13. guest_memfd 缺页
 
 - **函数**: `gmem_abort()`
 - **文件**: `arch/arm64/kvm/mmu.c:1567`
