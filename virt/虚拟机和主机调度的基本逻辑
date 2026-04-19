@@ -1,6 +1,7 @@
 -v0.1 2025.6.14 Sherlock init
 -v0.2 2025.6.19 Sherlock ...
 -v0.3 2025.6.20 Sherlock ...
+-v0.4 2026.4.19 Sherlock ...
 
 简介：本文分析KVM虚拟化场景下vCPU上下线的基本逻辑，重点分析vCPU上下线的时间点。
 
@@ -23,7 +24,7 @@
 vCPU先退出到KVM，然后换上host的中断异常向量，开中断后，这个中断会再次被taken，
 处理完中断后，继续从KVM进入原来的vCPU。
 
-KVM里让出CPU的点都有: 1. WFI/WFE的模拟逻辑，具体逻辑可以参考[这里](todo: ...)。
+KVM里让出CPU的点都有: 1. WFI/WFE的模拟逻辑，具体逻辑可以参考[这里](https://wangzhou.github.io/KVM中WFI-WFE的基本逻辑/)。
 2. ioctl run里进入guest之前，KVM会查下vCPU线程的状态，如果需要调度也会显示进行
 调度。
 ```
@@ -71,8 +72,5 @@ kvm_vcpu_kick/kvm_vcpu_wake_up/kvm_kick_many_cpus
 vCPU关中断关抢占逻辑
 ---------------------
 
-
-观测手段
----------
-
+(todo: vCPU上下线代码有很多关中断和关强占的逻辑，分析下这里的一般逻辑)
 
