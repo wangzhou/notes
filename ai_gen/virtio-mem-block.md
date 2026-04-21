@@ -124,20 +124,6 @@
          ▼
 组件5(用户态API) ──────App──> 大页内存使用
 ```
-组件1(virtio-mem-block) ──内存──> hugetlbfs backend
-         │
-         ▼
-组件2(virt.c) ──────GPA────> 预留区域
-         │
-         ▼
-组件3(ACPI) ────ACPI表──> Guest OS可见但不管理
-         │
-         ▼
-组件4(Guest内核) ──app驱动──> 用户态接口
-         │
-         ▼
-组件5(用户态API) ──────App──> 大页内存使用
-```
 
 ```
 Guest VM:
