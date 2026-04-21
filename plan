@@ -436,14 +436,13 @@ cpuhp/pm notifier
 
 perf bench futex wake
 arm timer
-调度点
 qemu arm启动逻辑   再整理下
 qem_arm_kvm
 uncore pmu
 
 kvm pmu模拟逻辑					 c   ### 5
 mpam分析					 doing
-hdbss                                            doing
+hdbss/热迁移                                     doing
 iommufd vsmmu                                    doing
 linux timer内核代码分析                          todo
 host kvm各种异常向量分析			 doing

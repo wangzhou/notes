@@ -39,7 +39,87 @@ HDBSS在如上的基础上，硬件在页表上标记脏页的时候，可以自
 QEMU内存标脏
 -------------
 
-todo: ...
+QEMU中内存标脏的核心实现可分为几个部分：通过MemoryListener回调机制
+初始化标脏、通过KVM_SET_USER_MEMORY_REGION配置写保护、以及通过
+KVM_GET_DIRTY_LOG获取脏页。
+
+1. 初始化标脏流程
+
+当用户使用迁移功能时，QEMU会通过memory listener机制启动脏页追踪：
+
+```
+kvm_log_start (MemoryListener callback)
+  +-> kvm_section_update_flags
+        +-> kvm_slot_update_flags
+              +-> kvm_slot_init_dirty_bitmap    // 分配脏页位图
+              +-> kvm_set_user_memory_region   // 配置到KVM
+```
+
+关键数据结构KVMSlot包含：
+- dirty_bmap: 脏页位图指针
+- memory_size: 槽大小
+- flags: 包含KVM_MEM_LOG_DIRTY_PAGES标志
+
+kvm_slot_init_dirty_bitmap()会按页面对齐分配位图，大小为：
+memory_size / qemu_real_host_page_size / 8 字节。
+
+2. 写保护和大页拆分
+
+kvm_set_user_memory_region()调用KVM_SET_USER_MEMORY_REGION2
+ioctl将内存槽注册到KVM。flags中可以通过KVM_MEM_READONLY设置
+只读属性，配置写保护。
+
+当虚拟机写一个被保护的页时，会触发KVM_EXIT_MMIO退出，
+进入QEMU的page fault处理逻辑。
+
+3. 脏页标记
+
+KVM中触发标脏的接口是ioctl KVM_SET_USER_MEMORY_REGION，
+其中flag带KVM_MEM_LOG_DIRTY_PAGES参数。
+
+QEMU中使用软件标脏的逻辑是先配置S2写保护，写S2触发
+S2 page fault进入记录脏页。
+
+对于TCG模式，Physical memory的写操作会调用：
+```
+io_write (tlb flush)
+  +-> dirty_log_mask = memory_region_get_dirty_log_mask(mr)
+  +-> physical_memory_set_dirty_range()
+```
+
+physical_memory_set_dirty_range()会设置dirty flag到全局的
+dirty bitmemory中。
+
+4. 获取脏页
+
+QEMU中使用kvm_slot_get_dirty_log()获取脏页：
+
+```
+kvm_slot_get_dirty_log()
+  +-> kvm_vm_ioctl(s, KVM_GET_DIRTY_LOG, &d)
+        +-> d.dirty_bitmap = slot->dirty_bmap
+```
+
+这个调用会把内核中的脏页位图同步到QEMU的slot->dirty_bmap中。
+
+然后使用kvm_slot_sync_dirty_pages()同步：
+```
+kvm_slot_sync_dirty_pages()
+  +-> physical_memory_set_dirty_lebitmap(slot->dirty_bmap, start, pages)
+```
+
+physical_memory_set_dirty_lebitmap()会把位图复制到全局的dirty_memory
+blocks中，包含DIRTY_MEMORY_VGA和DIRTY_MEMORY_MIGRATION。
+
+5. KVM Dirty Ring
+
+新版本KVM支持dirty ring机制，提供更高效的脏页追踪：
+- kvm_dirty_ring_mark_page(): 在dirty ring中标记脏页
+- 通过KVM_DIRTY_GFN_F_DIRTY标志判断页是否脏
+
+ Dirty ring相关ioctl:
+- KVM_GET_DIRTY_RING_ROICES
+- KVM_EMULATE_DIRTY_RING
 
 KVM内存标脏逻辑
 ----------------
