@@ -80,16 +80,6 @@ KVM中触发标脏的接口是ioctl KVM_SET_USER_MEMORY_REGION，
 QEMU中使用软件标脏的逻辑是先配置S2写保护，写S2触发
 S2 page fault进入记录脏页。
 
-对于TCG模式，Physical memory的写操作会调用：
-```
-io_write (tlb flush)
-  +-> dirty_log_mask = memory_region_get_dirty_log_mask(mr)
-  +-> physical_memory_set_dirty_range()
-```
-
-physical_memory_set_dirty_range()会设置dirty flag到全局的
-dirty bitmemory中。
-
 4. 获取脏页
 
 QEMU中使用kvm_slot_get_dirty_log()获取脏页：
