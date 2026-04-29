@@ -2,25 +2,23 @@ blkring基本逻辑分析
 ====================
 
 v1.0 2026-04-10 Sherlock init
+v1.1 2026-05-01 Sherlock ...
+v1.2 2026-05-04 Sherlock ...
 
 简介：分析下blkring无锁队列的基本逻辑。
 
 ## 概述
 
-https://github.com/ARM-software/progress64.git
+block ring(blkring)是ARM开发的一个并发计算库里的一个软件无所队列的实现，这个库的地址在[这里](https://github.com/ARM-software/progress64.git)。
+对应代码在这个库的src/p64_blkring.c, 这个软件无锁队列的性能(并发吞吐量)目前看起来很高。
 
-blkring (blocking ring buffer) 是一个支持多生产者多消费者(MP/MC)的批量无锁环形队列。
-核心设计目标：以最少的共享原子操作完成批量入队/出队，极大提升并发吞吐量。
-
-## 0. 数据结构
-
+## 数据结构
+blkring的内存布局如下：
 ```
-内存布局:
-
 +---------------------------------------------------------+
 |                     p64_blkring_t                       |
 +----------------------------+----------------------------+
-|  cons (缓存行 0)           |  prod (缓存行 1)           |
+|  cons (cacheline0)         |  prod (cacheline1)         |
 |  +----------+----------+   |  +----------+----------+   |
 |  |  head    |  mask    |   |  |  tail    |  mask    |   |
 |  +----------+----------+   |  +----------+----------+   |
@@ -31,13 +29,12 @@ blkring (blocking ring buffer) 是一个支持多生产者多消费者(MP/MC)的
 |  | {sn, elem}    | {sn, elem}    | {sn, elem}    |      |
 |  +---------------+---------------+---------------+      |
 +---------------------------------------------------------+
-cons 和 prod 各自独占一个缓存行 -> 生产者只写 prod.tail,
-消费者只写 cons.head -> 零干扰。
+cons/prod是队列的头尾信息，cons/prod各自独占一个缓存行，生产者只写 prod.tail，
+消费者只写cons.head。ring是队列，slot是每个队列元素。
 ```
 
+slot内部结构如下：
 ```
-槽内部结构:
-
 +----------------------------+
 |  __int128 (128bit)         |
 |  +-----------+----------+  |
@@ -46,11 +43,9 @@ cons 和 prod 各自独占一个缓存行 -> 生产者只写 prod.tail,
 |  +-----------+----------+  |
 +----------------------------+
 ```
-sn 是序号(标记槽的代数)，elem 是元素指针(实际数据)。
+sn是slot的序号，sn可以一直增长(超过slot个数的sn。elem是元素指针，是队列元素的实际数据。
 
-
-## 1. 入队完整代码解析
-
+## 入队完整代码解析
 ```c
 void p64_blkring_enqueue(p64_blkring_t *rb, void *const elems[], uint32_t nelem)
 {
@@ -100,7 +95,7 @@ void p64_blkring_enqueue(p64_blkring_t *rb, void *const elems[], uint32_t nelem)
     CASP(&ring[8], {2,NULL}->{2,C}) 成功
 ```
 
-## 2. 出队完整代码解析
+## 出队完整代码解析
 
 ```c
 void p64_blkring_dequeue(p64_blkring_t *rb, void *elems[], uint32_t nelem, uint32_t *index)
