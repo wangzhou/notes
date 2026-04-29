@@ -228,7 +228,7 @@ qemu里内存模拟相关的基本数据结构有：AddressSpace/MemoryRegion/Me
 AddressSpace表示地址空间，收集归拢MemoryRegion和MemoryListener等。MemoryRegion表示
 地址空间上的一段子空间，比如一个外设的MMIO空间就可以是一个MemoryRegion，一段内存
 也可以是一个MemoryRegion。MemoryListener向AddressSpace注册一组回调函数，当AddressSpace
-发生变化的时候，
+发生变化的时候，调用对应的回调函数，完成相关操作。
 
 虚机的内存布局一般定义在虚拟机器平台里，比如，ARM上我们常用的virt就是一种虚拟机器
 平台(hw/arm/virt.c)。virt的物理地址空间可能是如下，一般定义在virt.c的base_memmap[]。
@@ -241,6 +241,10 @@ AddressSpace表示地址空间，收集归拢MemoryRegion和MemoryListener等。
 0x0c000000 - 0x0e000000  platform bus
 0x0e000000 - 0x10000000  secure memory
 0x10000000 - 0x40000000  PCIe (MMIO+IO+ECAM)
+/*
+ * 注意，这里定义的内存的起点。内存大小/NUMA/大页等需要根据qemu cmdline传入的参数
+ * 在如下xxx初始化。
+ */
 0x40000000+              RAM (1 GiB起)
 ```
 
@@ -254,7 +258,21 @@ memory_map_init // system/physmem.c
   +-> address_space_init(&address_space_io, system_io, "I/O")
 ```
 
-machvirt_init里内存相关操作(hw/arm/virt.c):
+KVM memslot的同步 — MemoryListener机制(accel/kvm/kvm-all.c):
+kvm_init阶段通过kvm_memory_listener_register注册一个KVMMemoryListener到address_space_memory上。
+该listener的回调函数将QEMU的内存变更转化为KVM ioctl。
+```
+kvm_init
+  [...]
+  +-> kvm_memory_listener_register
+    +-> 创建kvm lister，增加相关回调kvm_region_add/del/commit, kvm_log_start/stop/sync/clear/sync_global等
+    +-> memory_listener_register(&kml->listener, &address_space_memory)
+        /* 注册时立即同步当前已有的FlatView */
+      +-> listener_add_address_space -> kvm_region_add -> kvm_set_phys_mem
+```
+
+machvirt_init调用memory_region_add_subregion的逻辑，最后会调用到之前注册的kvm_region_commit，
+其中会调用kvm ioctl把这段内存注册给内核kvm。machvirt_init里内存相关操作(hw/arm/virt.c)如下：
 ```
 machvirt_init
       /*
@@ -272,21 +290,7 @@ machvirt_init
   +-> create_platform_bus
 ```
 
-KVM memslot的同步 — MemoryListener机制(accel/kvm/kvm-all.c):
-kvm_init阶段通过kvm_memory_listener_register注册一个KVMMemoryListener到address_space_memory上。
-该listener的回调函数将QEMU的内存变更转化为KVM ioctl。
-```
-kvm_init
-  [...]
-  +-> kvm_memory_listener_register
-    +-> 创建kvm lister，增加相关回调kvm_region_add/del/commit, kvm_log_start/stop/sync/clear/sync_global等
-    +-> memory_listener_register(&kml->listener, &address_space_memory)
-        /* 注册时立即同步当前已有的FlatView */
-      +-> listener_add_address_space -> kvm_region_add -> kvm_set_phys_mem
-```
-
-这里是machvirt_init调用memory_region_add_subregion的逻辑，最后会调用到之前注册的
-kvm_region_commit，其中会调用kvm ioctl把这段内存注册给内核kvm。
+memory_region_add_subregion逻辑展开如下：
 ```
 memory_region_add_subregion / sysbus_mmio_map
   [...]
