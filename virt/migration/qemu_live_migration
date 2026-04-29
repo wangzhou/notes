@@ -94,8 +94,6 @@ QEMU热迁移
      +-> write_list_to_cpustate(cpu)
 ```
 
-
-
 异构热迁移
 -----------
 

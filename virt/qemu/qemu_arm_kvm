@@ -5,6 +5,7 @@ qemu模拟ARM构架综合分析
 -v0.2 2024.11.2  Sherlock ...
 -v0.3 2024.11.3  Sherlock ...
 -v0.4 2025.03.15 Sherlock ...
+-v0.5 2026.05.05 Sherlock ...
 
 简介：本文分析qemu模拟ARM平台的方式，我们并不会深入分析相关的技术细节，只是大概
       看下整体构架，点出各个模拟的关键点，保证我们在随后的深入分析中可以迅速找见
@@ -81,9 +82,8 @@ struct VirtMachineState {
 }
 ```
 
-
-启动流程
----------
+初始化和启动流程
+-----------------
 
 todo: 分清实例创建和realize的点。
 
@@ -111,23 +111,28 @@ main
     |       +-> kvm_irqchip_create
     |       +-> kvm_memory_listener_register
     |
-    |
     +-> qmp_x_exit_preconfig
-    | +-> qemu_machine_creation_done
-    |   +-> qdev_machine_creation_done
-    |     +-> cpu_synchronize_all_post_init
-    |           /*
-    |            * 调用accel/kvm/kvm-accel-ops.c里的kvm_cpu_synchronize_post_init
-    |            * 的回调把kvm_arch_put_registers放到vcpu的work_list里。
-    |            */
-    |       +-> cpu_synchronize_post_init
-    |
-    | +-> if (incoming)    <--- 如果是热迁移的迁入端，做相应的准备工作
-    |       +-> qmp_migrate_incoming
-    |         +-> todo: ...
-    |           +-> vm_start
-    |
-    |     else             <--- 如上流程中拉起的vCPU线程中vCPU并没有投入于行，这里
+    | +-> qemu_init_board
+    |   +-> machine_run_board_init
+    |     +-> machine_class->init(machine)  <--- 函数指针，在hw/arm/virt.c virt_machine_class_init里
+    |       +-> machvirt_init               <--- 初始化虚机上的各个设备，包括如下调用arm_cpu_realizefn，拉起vCPU线程，
+    |                                            注意，vCPU这里没有实际投入运行，实际运行在下面，具体又分为热迁移迁入端和普通虚机启动两种情况。
+    |                                                                                    |
+    | +-> qemu_machine_creation_done                                                     |
+    |   +-> qdev_machine_creation_done                                                   |
+    |     +-> cpu_synchronize_all_post_init                                              |
+    |           /*                                                                       |
+    |            * 调用accel/kvm/kvm-accel-ops.c里的kvm_cpu_synchronize_post_init        |
+    |            * 的回调把kvm_arch_put_registers放到vcpu的work_list里。                 |
+    |            */                                                                      |
+    |       +-> cpu_synchronize_post_init                                                |
+    |                                                                                    |
+    | +-> if (incoming)    <--- 如果是热迁移的迁入端，做相应的准备工作             <-----|
+    |       +-> qmp_migrate_incoming                                                     |
+    |         +-> todo: ...                                                              |
+    |           +-> vm_start                                                             |
+    |                                                                                    |
+    |     else             <--- 如上流程中拉起的vCPU线程中vCPU并没有投入于行，这里 <------
     |       +-> qmp_cont        才实际上促使vCPU运行起来。
     |         +-> vm_start
     |           +-> resume_all_vcpus
@@ -140,13 +145,13 @@ main
     +-> main_loop_wait
 ```
 
-machvirt_init应该是在machine对象建立的时候调用。
+machvirt_init展开如下：
 ```
 /* hw/arm/virt.c */
 machvirt_init
   /* 创建虚机上的各个设备 */
   ....
-  +-> qdev_realize <-- 对于每个possible CPU调用CPU的realize函数。
+  +-> qdev_realize <-- 对于每个possible vCPU调用vCPU的realize函数。
 ```
 
 vCPU线程在vCPU的realize函数中创建，线程函数是accel/kvm/kvm-accel-ops.c里的
@@ -220,17 +225,191 @@ kvm_arch_put_registers
 内存模拟
 ---------
 
- todo: ...
+ 物理内存布局 (base_memmap[], hw/arm/virt.c:173):
+ ```
+ 0x00000000 - 0x08000000  flash/ROM
+ 0x08000000 - 0x0a000000  GIC(GICD, GICC, GICV2M, GICH, GICV, ITS, GICR)
+ 0x09000000 - 0x09060000  UART, RTC, fw_cfg, GPIO, SMMU
+ 0x0a000000 - 0x0c000000  virtio MMIO (每块512B, 共512个)
+ 0x0c000000 - 0x0e000000  platform bus
+ 0x0e000000 - 0x10000000  secure memory
+ 0x10000000 - 0x40000000  PCIe (MMIO+IO+ECAM)
+ 0x40000000+             RAM (1 GiB起)
+ ```
+ highmem区域(GIC redist2, PCIe high ECAM/MMIO, CXL)由virt_set_memmap()
+ 在RAM顶部之上动态计算。
+
+ 根MemoryRegion和AddressSpace的创建 (system/physmem.c:3107):
+ ```
+ memory_map_init
+   +-> system_memory = container, size=UINT64_MAX  <--- 所有内存树的根
+   +-> address_space_init(&address_space_memory, system_memory)
+   +-> system_io (I/O空间, 64K)
+ ```
+
+ machvirt_init里内存相关操作 (hw/arm/virt.c):
+ ```
+ machvirt_init
+       /* RAM已经在machine_run_board_init里由generic code分配好 */
+   +-> memory_region_add_subregion(sysmem, VIRT_MEM.base, machine->ram)
+       /* 每个设备通过sysbus_mmio_map把各自的MMIO region挂到sysmem下 */
+   +-> create_gic      -> sysbus_mmio_map -> memory_region_add_subregion
+   +-> create_uart     -> memory_region_add_subregion
+   +-> create_rtc      -> ...
+   +-> create_pcie     -> ...
+   +-> create_smmu     -> ...
+   +-> create_virtio_devices
+   +-> create_platform_bus
+       /* secure world: 新建一个覆盖UINT64_MAX的secure_sysmem */
+   +-> secure_sysmem = container, sysmem为子region(priority=-1)
+   +-> secure设备挂在secure_sysmem下(priority=0)，覆盖sysmem对应区域
+ ```
+
+ KVM memslot的同步 — MemoryListener机制 (accel/kvm/kvm-all.c):
+ kvm_init阶段通过kvm_memory_listener_register注册一个KVMMemoryListener到
+ address_space_memory上。该listener的回调函数将QEMU的内存变更转化为KVM ioctl。
+ ```
+ kvm_memory_listener_register                        <--- kvm-all.c:2090
+   +-> memory_listener_register(&kml->listener, &address_space_memory)
+         /* 注册时立即同步当前已有的FlatView */
+       +-> listener_add_address_space -> kvm_region_add -> kvm_set_phys_mem
+
+ memory_region_add_subregion / sysbus_mmio_map
+   +-> memory_region_transaction_commit             <--- 内存树变更完成时触发
+     +-> address_space_update_topology_pass
+           /* 遍历FlatView，对每个FlatRange调用MEMORY_LISTENER_UPDATE_REGION */
+       +-> kvm_region_add                           <--- 排队到transaction_add
+     +-> MEMORY_LISTENER_CALL_GLOBAL(commit)        <--- 全局commit
+       +-> kvm_region_commit
+             /* 先删后加，处理重叠区域 */
+           +-> kvm_set_phys_mem(mem, section, add)
+                 /* 关键过滤: 非RAM区域直接跳过, 不注册KVM memslot */
+               +-> if (!memory_region_is_ram(mr)) return
+                 /* RAM区域分配KVMSlot, 调用KVM_SET_USER_MEMORY_REGION ioctl */
+               +-> kvm_set_user_memory_region -> KVM_SET_USER_MEMORY_REGION
+ ```
+ 要点: MMIO region不会传给KVM，客户机访问MMIO时发生VM exit，由QEMU的
+ MemoryRegionOps->read/write处理；只有RAM通过KVM memslot映射到host的QEMU进程地址空间。
+
+ KVMSlot结构 (include/system/kvm_int.h:22):
+ ```
+ start_addr          <--- GPA起始地址
+ memory_size         <--- 区域大小
+ ram                 <--- host虚拟地址 (QEMU进程的mmap地址)
+ slot                <--- KVM slot编号
+ flags               <--- KVM_MEM_LOG_DIRTY_PAGES等
+ ram_start_offset    <--- 在RAMBlock里的偏移
+ guest_memfd         <--- KVM_SET_USER_MEMORY_REGION2专用
+ ```
 
 GIC模拟
 --------
 
- todo: ...
+ GIC版本选择 (finalize_gic_version, hw/arm/virt.c:2094):
+ ```
+ finalize_gic_version
+       /* KVM + in-kernel irqchip时, 通过ioctl探测host支持的GIC版本 */
+   +-> kvm_arm_vgic_probe            <--- KVM_DEV_ARM_VGIC_GRP_NR_IRQS
+         /* KVM不支持in-kernel irqchip时只支持GICv2 */
+       /* TCG下GICv2总是可用, GICv3需检查arm-gicv3模块 */
+ ```
+ 选出的版本决定了设备class:
+   - GICv2: kvm-arm-gic (KVM) 或 arm_gic (TCG)
+   - GICv3: kvm-arm-gicv3 (KVM) 或 arm-gicv3 (TCG)
+
+ GIC创建 (create_gic, hw/arm/virt.c:796):
+ ```
+ create_gic
+   +-> 选设备class名 (gic_class_name/gicv3_class_name)
+   +-> 设置属性 (revision, num-cpu, num-irq, redist-region-count...)
+   +-> sysbus_realize_and_unref
+   |     /* KVM路径: kvm_arm_gicv3_realize in arm_gicv3_kvm.c */
+   |   +-> kvm_create_device(KVM_DEV_TYPE_ARM_VGIC_V3)
+   |   +-> kvm_device_access(KVM_DEV_ARM_VGIC_GRP_CTRL, KVM_DEV_ARM_VGIC_CTRL_INIT)
+   |         /* 把GIC的MMIO region注册给KVM */
+   |   +-> kvm_arm_register_device(iomem_dist, KVM_VGIC_V3_ADDR_TYPE_DIST)
+   |   +-> kvm_arm_register_device(redist_iomem, KVM_VGIC_V3_ADDR_TYPE_REDIST)
+   |         /* 配置IRQ路由 */
+   |   +-> kvm_irqchip_add_irq_route (for each SPI)
+   +-> sysbus_mmio_map (GICD @ 0x08000000, GICR @ 0x080A0000)
+   +-> wiring: CPU timer PPI -> GIC -> CPU IRQ/FIQ
+ ```
+ 要点: KVM in-kernel GIC创建后，GICD/GICR的MMIO访问直接在KVM里处理，不需要
+ VM exit到QEMU。中断注入通过kvm_arm_gicv3_set_irq -> kvm_arm_set_irq -> KVM
+ ioctl实现。
+
+ KVM GICv3的寄存器访问 (热迁移/调试用):
+   KVM_DEV_ARM_VGIC_GRP_DIST_REGS   — distributor寄存器
+   KVM_DEV_ARM_VGIC_GRP_REDIST_REGS — redistributor寄存器(用MPIDR选CPU)
+   KVM_DEV_ARM_VGIC_GRP_CPU_SYSREGS — CPU interface系统寄存器
+   KVM_DEV_ARM_VGIC_GRP_LEVEL_INFO  — 中断线电平
+
+ ITS (arm_gicv3_its_kvm.c):
+   - KVM in-kernel ITS: kvm_create_device(KVM_DEV_TYPE_ARM_VGIC_ITS)
+   - MSI注入: kvm_its_send_msi -> KVM_SIGNAL_MSI ioctl (带device ID)
+   - 设置 kvm_msi_use_devid=true, kvm_gsi_direct_mapping=false
 
 SMMU模拟
 ---------
 
- todo: ...
+ SMMU创建 (create_smmu, hw/arm/virt.c:1523):
+   - 条件: -machine iommu=smmuv3 时 vms->iommu == VIRT_IOMMU_SMMUV3
+   - MMIO位于 0x09050000 (VIRT_SMMU), 4个SPI中断 (irq 74-77)
+   - 默认stage="nested", 挂到PCIe primary bus
+
+ SMMU类继承:
+   TYPE_ARM_SMMUV3 <- TYPE_ARM_SMMU <- TYPE_SYS_BUS_DEVICE
+   SMMUv3State包含SMMUState作为首个字段(C继承), SMMUState包含:
+     configs (STE/CD缓存), iotlb (TLB缓存), smmu_pcibus_by_busptr,
+     iommu_ops (PCIIOMMUOps)
+
+ SMMU与PCIe的IOMMU挂钩 (smmu_base_realize, smmu-common.c:933):
+ ```
+ smmu_base_realize
+   +-> pci_setup_iommu(primary_bus, &smmu_ops, s)
+         /* smmu_ops = { .get_address_space = smmu_find_add_as } */
+         /*
+          * PCI设备DMA时调用pci_device_iommu_address_space()
+          * 沿PCI总线树向上找到iommu_ops -> get_address_space()
+          * 返回SMMUDevice->as, 这个AddressSpace的后端是IOMMUMemoryRegion
+          */
+
+ smmu_find_add_as                                   <--- smmu-common.c:879
+   +-> smmu_init_sdev -> memory_region_init_iommu   <--- 创建IOMMUMemoryRegion
+       /* IOMMUMemoryRegion的translate回调 = smmuv3_translate */
+ ```
+
+ SMMU翻译流程 (smmu_translate, smmu-common.c:772):
+ ```
+ smmuv3_translate                                   <--- smmuv3.c:1059
+       /* 检查CR0.SMMUEN, 如果禁用则检查GBPA.ABORT */
+   +-> smmuv3_get_config                            <--- 从缓存或客户机内存解码STE/CD
+   +-> smmuv3_do_translate
+     +-> smmu_translate                             <--- smmu-common.c:772
+           /* 先在模拟IOTLB里找 */
+       +-> smmu_iotlb_lookup
+           /* 未命中则做PTW(页表遍历) */
+       +-> smmu_ptw
+         +-> smmu_ptw_64_s1 (VMSAv8-64 stage-1)
+         +-> smmu_ptw_64_s2 (stage-2)
+         +-> combine_tlb (nested: 组合S1+S2结果)
+       +-> smmu_iotlb_insert
+       /* 故障记入event queue, 触发SMMU_IRQ_EVTQ */
+   +-> smmuv3_record_event
+ ```
+
+ 命令队列(CmdQ, 客户机->SMMU)和事件队列(EvtQ, SMMU->客户机):
+   - 客户机通过CMDQ_BASE/CMDQ_PROD提交命令, SMMU处理并更新CMDQ_CONS
+   - 翻译故障时SMMU写入EVENTQ_BASE处的循环缓冲区, 触发事件中断
+   - 命令16字节, 事件32字节
+
+ StreamID: SMMU用PCI BDF (bus:dev.fn) 作为StreamID, 每个PCI设备有独立的SMMUDevice
+
+ 硬件加速 (accel=on, smmuv3-accel.c):
+   - 需要iommufd支持的KVM
+   - 将真实SMMUv3硬件配置为nested模式，VFIO直通设备直接使用硬件SMMU
+   - 嵌套: KVM模拟S1翻译, 硬件处理S2翻译
+   - 此模式下热迁移被禁止
 
  SMMU的qemu模拟逻辑可以参考[这里](https://wangzhou.github.io/qemu-iommu模拟思路分析/)。
 
@@ -267,4 +446,3 @@ ACPI表构建
      +-> write_list_to_kvmstate(cpu, KVM_PUT_FULL_STATE)
      +-> write_list_to_cpustate(cpu)
 ```
-

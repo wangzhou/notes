@@ -443,8 +443,8 @@ kvm pmu模拟逻辑					 c   ### 5
 iommufd vsmmu                                    doing
 linux timer内核代码分析                          todo
 host kvm各种异常向量分析			 doing
-
 mpam分析					 doing
-hdbss/热迁移                                     doing
 qemu内存管理
 qemu stage2 walk
+
+hdbss/热迁移                                     doing
