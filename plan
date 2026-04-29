@@ -444,7 +444,8 @@ iommufd vsmmu                                    doing
 linux timer内核代码分析                          todo
 host kvm各种异常向量分析			 doing
 mpam分析					 doing
-qemu内存管理
 qemu stage2 walk
 
+qemu内存管理
 hdbss/热迁移                                     doing
+qemu模拟ARM构架综合分析                          doing
