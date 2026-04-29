@@ -243,6 +243,163 @@ listener_add_address_space()           -- system/memory.c:2983
 
 ---
 
+## Guest 物理内存的分配路径（ARM KVM）
+
+上一节讲了 MemoryRegion 如何通过事务机制通知各个 AS 和 listener，但还没有回答一个更根本的问题：**guest 的 RAM 对应的 host 内存是从哪来的？** 这一节以 ARM KVM 为例，追踪从 `memory_region_init_ram()` 到 KVM 内核建立 stage-2 映射的完整链路。
+
+### 第一段：创建 MemoryRegion
+
+ARM virt 机器启动时，由 machine 层创建 `machine->ram`：
+
+```
+machine_run_board_init()                           [hw/core/machine.c:1592]
+  │
+  ├─ 有 -object memory-backend-* : machine_consume_memdev() 直接用已有 MR
+  │
+  └─ 无 (默认): create_default_memdev()                     [hw/core/machine.c:1005]
+       └─ object_new("memory-backend-ram")
+          └─ user_creatable_complete() → 触发 realize
+             └─ memory_region_init_ram(mr, ...)             [system/memory.c:3659]
+```
+
+### 第二段：分配 host 内存
+
+```
+memory_region_init_ram()
+  └─ memory_region_init_ram_flags_nomigrate()              [system/memory.c:1592]
+       ├─ memory_region_init(mr, "virt.ram", size)          // 初始化 MR 字段
+       ├─ qemu_ram_alloc(size, ...)                         // ← 真正分配
+       │    └─ qemu_ram_alloc_internal()
+       │         ├─ 分配 RAMBlock 结构体 (g_malloc0)
+       │         └─ ram_block_add()
+       │              ├─ qemu_anon_ram_alloc(size)          [util/oslib-posix.c:208]
+       │              │    └─ qemu_ram_mmap(-1, size, ...)  [util/mmap-alloc.c:247]
+       │              │         ├─ mmap(PROT_NONE, MAP_ANON)  // 预留虚地址
+       │              │         └─ mmap(MAP_FIXED, MAP_ANON)  // 提交物理页
+       │              │              └─ rb->host = 返回的 HVA
+       │              │
+       │              ├─ madvise(MADV_HUGEPAGE)              // 尝试 THP 大页
+       │              ├─ madvise(MADV_DONTFORK)              // 禁止 fork 复制
+       │              └─ 插入全局 ram_list.blocks (RCU 链表)
+       │
+       └─ memory_region_set_ram_block(mr, rb)              // mr->ram_block = rb
+```
+
+如果传了 `-mem-path /dev/hugepages`：走 `file_ram_alloc() → qemu_ram_mmap(fd, ...)`，从 hugetlbfs 文件 mmap，页大小由 fd 决定（2M/1G）。如果没传：普通匿名 mmap，4K 页，靠 `madvise(MADV_HUGEPAGE)` 让内核 THP 尝试合并。
+
+### 第三段：映射到 AddressSpace
+
+```c
+// hw/arm/virt.c:2508
+memory_region_add_subregion(sysmem, base, machine->ram);
+```
+
+这里 `board` 把 `machine->ram` 插入到 `system_memory` 树，然后触发 `memory_region_transaction_commit()`，重建全局 FlatView。此时 `system_memory` 的 FlatView 里多了一条 `[base, base+ram_size) → machine->ram`。
+
+### 第四段：KVM 收知 —— 建立 GPA→HVA 映射
+
+FlatView 更新后，commmit 阶段触发 KVM listener：
+
+```
+kvm_region_commit()                                     [accel/kvm/kvm-all.c:1888]
+  └─ kvm_set_phys_mem(kml, section, true)               [accel/kvm/kvm-all.c:1633]
+       ├─ ram  = memory_region_get_ram_ptr(mr)          // = RAMBlock.host + offset
+       ├─ mem = kvm_alloc_slot(kml)                     // 从 slots[] 取一个空位
+       ├─ mem->ram         = ram                        // HVA (host 侧指针)
+       ├─ mem->start_addr  = section 的 GPA 起址
+       ├─ mem->memory_size = section 大小
+       └─ kvm_set_user_memory_region(kml, mem, true)
+            └─ kvm_vm_ioctl(KVM_SET_USER_MEMORY_REGION, &mem)
+                 │   mem.slot             = slot 编号（ARM 只有一个 AS，slot 从 0 开始）
+                 │   mem.guest_phys_addr  = GPA
+                 │   mem.userspace_addr   = HVA
+                 │   mem.memory_size      = 大小
+                 │   mem.flags            = 属性
+                 ▼
+              内核 KVM: 把这个 GPA 范围写进 stage-2 页表，
+              映射到 userspace_addr 对应的 host 物理页
+```
+
+### 关键数据结构的关系
+
+```
+MemoryRegion (mr)
+  │  name = "virt.ram"
+  │
+  └─ ram_block
+       │
+       ▼
+     RAMBlock
+       ├─ host      = mmap 返回的 HVA（比如 0xffff12340000）
+       ├─ offset    = 在 ram_addr_t 地址空间中的偏移
+       ├─ fd        = -1 (匿名 mmap) 或 hugetlbfs fd
+       ├─ page_size = 4K / 2M / 1G
+       └─ mr        = 回指 MemoryRegion
+
+KVM 内核:
+  KVMSlot (kvm-all.c 中的 kml->slots[])
+       ├─ slot         = KVM slot 编号
+       ├─ start_addr   = GPA（guest 物理地址起址）
+       ├─ ram          = HVA（直接 == RAMBlock.host + 偏移）
+       ├─ memory_size  = 大小
+       └─ flags        = 读写属性 / dirty log
+```
+
+**`KVMSlot.ram` 直接等于 `RAMBlock.host + 偏移`，就是那块 mmap 内存的同一个指针。内核 KVM 用 GPA→HVA 的映射执行 stage-2 翻译：guest 访问 GPA → CPU 硬件查 stage-2 页表 → 找到 HPA（即 HVA 对应的 host 物理页）。**
+
+### 完整链路（一张图）
+
+```
+QEMU userspace                          KVM kernel
+─────────────                          ──────────
+memory_region_init_ram()
+  qemu_ram_alloc()
+    mmap(匿名)
+    → HVA = 0xffff12340000
+       (host 虚地址)
+       │
+  mr->ram_block->host = HVA
+       │
+  memory_region_add_subregion()
+    → FlatView 更新
+       │
+  kvm_region_commit()                   KVM_SET_USER_MEMORY_REGION
+    kvm_set_user_memory_region()          slot.guest_phys_addr = GPA
+       │                                  slot.userspace_addr  = HVA
+       │                                        │
+       │                                        ▼
+       │                                 内核建立 stage-2 映射:
+       │                                   GPA → HPA
+       │                                   (HPA 是 HVA 对应的物理页)
+       │
+       │                                 Guest 访问 GPA:
+       │                                  CPU 硬件走 stage-2 页表
+       │                                  GPA → HPA
+       │                                  → QEMU mmap 的那块物理内存
+```
+
+### ARM 特有的 VM 创建
+
+ARM 的 IPA（Intermediate Physical Address）位宽在创建 VM 时就确定了：
+
+```
+kvm_init()                                           [kvm-all.c:2890]
+  └─ find_kvm_machine_type()
+       └─ virt_kvm_type()                            [hw/arm/virt.c:3359]
+            ├─ kvm_arm_get_max_vm_ipa_size()         [target/arm/kvm.c:573]
+            │    └─ KVM_CAP_ARM_VM_IPA_SIZE → 返回支持的 bit 数（如 40/48）
+            ├─ 根据 vms->highest_gpa 计算需要的 bit 数
+            └─ 返回 IPA bit count
+                 │
+                 ▼
+  └─ do_kvm_create_vm(s, type)
+       └─ kvm_ioctl(KVM_CREATE_VM, ipa_bits)        // type 参数就是 IPA bits
+```
+
+IPA 位宽决定了 stage-2 页表能寻址的最大物理地址范围，但这不改变 host 侧的 mmap 分配逻辑——host 内存的分配永远走 `qemu_ram_mmap()`。
+
+---
+
 ## MemoryListener 的具体例子
 
 ### 最简单的例子：Virtio
@@ -331,6 +488,14 @@ MemoryListener 同时存在两个链表中：
 
 同一个 listener 的 `begin` 和 `commit` 只会被调用一次（通过全局链），但 `region_add` 只在它所属的那个 AddressSpace 的链中被调用。
 
+### 6. RAMBlock vs KVMSlot vs MemoryRegion
+
+- **MemoryRegion** 是 guest 可见的抽象（"有一块从 GPA x 到 y 的 RAM"）
+- **RAMBlock** 是 host 侧的实际内存（`rb->host` 指向 mmap 返回的 HVA），一个 MR 对应一个 RAMBlock
+- **KVMSlot** 是 KVM 内核中的"内存槽"（告诉内核 "GPA 范围→HVA"），一个大 MR 可能被拆成多个 slot（受 `max_slot_size` 限制）
+
+当 `memory_region_add_subregion()` 把 MR 连接到 AS 之后，KVM listener 创建 KVMSlot，让 `KVMSlot.ram` 直接指向 `RAMBlock.host` 内的地址。GPA→HVA→HPA 的完整链条由此建立。
+
 ### 5. 新 listener 注册时的 replay
 
 当你调用 `memory_listener_register()` 时，QEMU 会立即**重放**当前 FlatView 的全部内容给这个 listener（调用 begin → 遍历所有 range 调 region_add → 调用 commit）。这样 listener 不用自己扫描初始状态，直接通过 region_add 拿到当前全貌。
@@ -343,8 +508,16 @@ MemoryListener 同时存在两个链表中：
 |------|------|
 | `include/system/memory.h` | MemoryListener 结构体定义（line 889）、MemoryRegionSection（line 105）、AddressSpace（line 1157）、FlatView（line 1194）、FlatRange typedef（line 1189）、priority 常量（line 879） |
 | `system/memory.c` | 所有核心逻辑：全局链表（line 48-52）、MEMORY_LISTENER_CALL 宏（line 109-163）、FlatRange 结构体（line 222）、listener_add/del_address_space（line 2983/3048）、memory_listener_register/unregister（line 3099/3138）、address_space_set_flatview（line 1081）、address_space_update_topology_pass（line 970）、memory_region_transaction_commit（line 1143）、全局 dirty log 函数（line 2846+） |
-| `hw/vfio/listener.c` | 最完整的实际例子：实现了所有主要回调用于 IOMMU 映射 + dirty tracking |
-| `hw/virtio/virtio.c` | 最简单的实际例子：只实现 commit 回调来刷新 virtqueue ring 地址缓存 |
+| `system/physmem.c` | 物理内存管理：`qemu_ram_alloc_internal()`（line 2466）、`ram_block_add()`（line 2155）、`cpu_address_space_init()`（line 754） |
+| `util/mmap-alloc.c` | `qemu_ram_mmap()`（line 247），底层 mmap 封装：reserve + activate 两阶段映射 |
+| `util/oslib-posix.c` | `qemu_anon_ram_alloc()`（line 208），匿名内存分配入口 |
+| `accel/kvm/kvm-all.c` | `kvm_region_commit()`（line 1888）、`kvm_set_phys_mem()`（line 1633）、`kvm_set_user_memory_region()`（line 371），KVM 内存槽管理 |
+| `include/system/kvm_int.h` | `KVMSlot` 结构体（line 22） |
+| `include/system/ramblock.h` | `RAMBlock` 结构体（line 25） |
+| `hw/arm/virt.c` | ARM virt 机器：`virt_kvm_type()`（line 3359）确定 IPA 位宽，`memory_region_add_subregion(sysmem, base, machine->ram)`（line 2508）映射 RAM |
+| `target/arm/kvm.c` | `kvm_arm_get_max_vm_ipa_size()`（line 573）查询 KVM 支持的 IPA 大小 |
+| `hw/vfio/listener.c` | 最完整的 MemoryListener 实际例子：实现了所有主要回调用于 IOMMU 映射 + dirty tracking |
+| `hw/virtio/virtio.c` | 最简单的 MemoryListener 实际例子：只实现 commit 回调来刷新 virtqueue ring 地址缓存 |
 
 ---
 
