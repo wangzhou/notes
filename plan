@@ -446,6 +446,5 @@ host kvm各种异常向量分析			 doing
 
 mpam分析					 doing
 hdbss/热迁移                                     doing
-blkring						 doing
 qemu内存管理
 qemu stage2 walk

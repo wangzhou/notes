@@ -9,7 +9,7 @@ v1.2 2026-05-04 Sherlock ...
 
 ## 概述
 
-block ring(blkring)是ARM开发的一个并发计算库里的一个软件无所队列的实现，这个库的地址在[这里](https://github.com/ARM-software/progress64.git)。
+block ring(blkring)是ARM开发的一个并发计算库里的一个软件无锁队列的实现，这个库的地址在[这里](https://github.com/ARM-software/progress64.git)。
 对应代码在这个库的src/p64_blkring.c, 这个软件无锁队列的性能(并发吞吐量)目前看起来很高。
 
 ## 数据结构
@@ -43,7 +43,7 @@ slot内部结构如下：
 |  +-----------+----------+  |
 +----------------------------+
 ```
-sn是slot的序号，sn可以一直增长(超过slot个数的sn。elem是元素指针，是队列元素的实际数据。
+sn是slot的序号，sn可以一直增长(超过slot个数的sn)。elem是元素指针，是队列元素的实际数据。
 
 ## 入队完整代码解析
 ```c
@@ -70,7 +70,7 @@ void p64_blkring_enqueue(p64_blkring_t *rb, void *const elems[], uint32_t nelem)
         uint32_t idx = swizzle(sn) & mask;
 
 #ifdef __ARM_FEATURE_ATOMICS
-        // LSE 分支: CASP 原子写入。slot.elem是NULL，表示改slot没有保存元素。
+        // LSE 分支: CASP 原子写入。slot.elem是NULL，表示该slot没有保存元素。
         struct ringslot cmp = {sn, NULL};
         struct ringslot swp = {sn, elems[i]};
         /* 如果写入位置是sn和NULL，才写入。队列初始化的时候slot.sn要给对应的初值。
