@@ -1,7 +1,7 @@
-QEMU 热迁移流程分析
+QEMU热迁移流程分析
 =====================
 
--v0.2 2026.04.29 Sherlock update: 基于最新 QEMU 源码重新分析，修正状态机和完善细节
+-v0.3 2026.04.30 Sherlock update: 新增迭代收敛与速率控制详细分析（bandwidth估算、threshold计算、sleep/interval机制）
 
 本文档分析 QEMU 热迁移 (live migration) 的完整流程，包括迁移状态机、各阶段实现、核心数据结构及源端/目的端交互。基于 QEMU 源码 (`/home/wz/qemu/migration/`) 分析。
 
@@ -219,56 +219,71 @@ MIGRATION_STATUS_WAIT_UNPLUG       (16) — 等待 virtio-net 设备热拔
 #### 源端主流程
 
 ```
-                                     ┌──────────────────────┐
-                                     │         NONE         │
-                                     └──────────┬───────────┘
-                                                │ migrate_init()
-                                          ┌─────▼──────┐
-                                   ┌──────│   SETUP    │──────────► FAILING (setup 失败)
-                                   │      └──┬───┬─────┘
-                                   │         │   │  有热拔设备
-                                   │         │   └──────────────► WAIT_UNPLUG
-                                   │         │                         │
-                                   │         │          设备拔出完成    │
-                                   │         ▼◄────────────────────────┘
-                                   │    ┌─────────┐
-                                   │    │  ACTIVE  │ (迭代传输脏页)
-                                   │    └──┬───┬───┘
-                                   │       │   │
-                                   │       │   └──► PRE_SWITCHOVER (如果 pause_before_switchover)
-                                   │       │              │
-                                   │       │              ▼
-                                   │       │         ┌─────────┐
-                                   │       │         │  DEVICE │ (设备序列化)
-                                   │       │         └──┬──┬───┘
-                                   │       │            │  │
-                         切换到    │       │  postcopy   │  │ precopy
-                         postcopy  │       │◄───────────┘  │ 完成
-                                   │       │               │
-                              ┌────▼─┐  ┌──▼──────┐  ┌────▼────────┐
-                              │POSTCPY│  │POSTCOPY │  │  COMPLETED  │
-                              │_DEVICE│  │_ACTIVE  │  └─────────────┘
-                              └──┬────┘ └──┬──┬───┘
-                                 │         │  │
-                       事件触发  │         │  │ pending_size==0
-                                 ▼         │  │
-                              POSTCOPY_ACTIVE └──► COMPLETED
+                              +-------+
+                              | SETUP |
+                              +-+-+-+-+
+                               /  |  \
+                              /   |   \
+                    +--------+    |    +-------------+
+                    | FAILING|    |    | WAIT_UNPLUG |
+                    +--------+    |    +------+------+
+                                  |           |
+                                  |    unplug done (returns to ACTIVE)
+                           +------v------+
+                           |    ACTIVE    |
+                           +--+---+---+--+
+                             /    |    \
+                            /     |     \
+               +-----------+      |      +----------------+
+               |POSTCOPY   |      |      |PRE_SWITCHOVER  |
+               |_ACTIVE    |      |      +-------+--------+
+               |(no RP)    |      |              |
+               +-----+-----+      |              |
+                     |            |              |
+                     v            |              |
+               +-----------+      |              |
+               | COMPLETED |      |              |
+               +-----------+      |              |
+                                  v              v
+                             +----+--------------+----+
+                             |         DEVICE         |
+                             +--------+---+-----------+
+                                     /     \
+                                    /       \
+                          +-----------+   +-----------------+
+                          | COMPLETED |   | POSTCOPY_DEVICE |
+                          | (precopy) |   +--------+--------+
+                          +-----------+            |
+                                            event triggered
+                                                   |
+                                          +--------v--------+
+                                          | POSTCOPY_ACTIVE |
+                                          +--------+--------+
+                                                   |
+                                                   v
+                                             +-----------+
+                                             | COMPLETED |
+                                             +-----------+
 ```
 
-#### 失败路径
+Note: The NONE -> SETUP transition (via `migrate_init()`) is not shown in the tree above to keep the diagram focused. NONE is the initial state before any migration; `migrate_init()` transitions to SETUP.
+
+#### Failure Paths
 
 ```
-任何状态 ──► FAILING ──► FAILED
-CANCELLING ──► CANCELLED
-POSTCOPY_ACTIVE ──► POSTCOPY_PAUSED ──► POSTCOPY_RECOVER_SETUP ──► POSTCOPY_RECOVER ──► POSTCOPY_ACTIVE
+Any state --> FAILING --> FAILED
+CANCELLING --> CANCELLED
+POSTCOPY_ACTIVE --> POSTCOPY_PAUSED --> POSTCOPY_RECOVER_SETUP --> POSTCOPY_RECOVER --> POSTCOPY_ACTIVE
 ```
 
-#### 目的端状态转换
+#### Destination State Transitions
 
 ```
-SETUP ──► ACTIVE (协程加载 VM 状态)
-  ├──► [预拷贝] ACTIVE ──► COMPLETED
-  └──► [postcopy] POSTCOPY_DEVICE ──► POSTCOPY_ACTIVE ──► COMPLETED
+SETUP --> ACTIVE (coroutine loads VM state)
+  |
+  +--> [precopy]  ACTIVE --> COMPLETED
+  |
+  +--> [postcopy] POSTCOPY_DEVICE --> POSTCOPY_ACTIVE --> COMPLETED
 ```
 
 
@@ -293,7 +308,7 @@ migrate_init()
 
 ```
 migration_start_outgoing()
-  ├─► s->expected_downtime = migrate_downtime_limit()  // 设置预期停机时间
+  ├─► s->expected_downtime = migrate_downtime_limit()   // 设置预期停机时间
   ├─► migration_rate_set(rate_limit)                    // 设置带宽限制
   ├─► qemu_file_set_blocking(to_dst_file, true)         // 切换到阻塞模式
   ├─► open_return_path_on_source()                      // 打开返回路径 (如果启用)
@@ -838,38 +853,46 @@ process_incoming_migration_co()   // 协程
 ## 流程总览
 
 ```
-┌──────────────────────────────────────────────────────────────────────┐
-│                          源端 (Source)                                │
-│                                                                      │
-│  ┌──────┐   ┌──────┐   ┌──────────────┐   ┌──────┐   ┌───────────┐  │
-│  │ INIT │──►│SETUP │──►│ ACTIVE (迭代) │──►│DEVICE│──►│ COMPLETED │  │
-│  └──────┘   └──────┘   └──────┬───────┘   └──────┘   └───────────┘  │
-│                               │                                       │
-│              ┌────────────────┼────────────────┐                     │
-│              ▼                ▼                ▼                     │
-│       [Postcopy]      [Pre_Switchover]     [Failed]                   │
-│              │                │                                       │
-│     ┌────────▼────────┐  ┌───▼───┐                                   │
-│     │ POSTCOPY_ACTIVE │  │ DEVICE│                                   │
-│     └────────┬────────┘  └───┬───┘                                   │
-│              │               │                                        │
-│              └──► COMPLETED ◄┘                                        │
-└──────────────────────────────────────────────────────────────────────┘
-                               │
-                               ▼ 网络传输 (QEMUFile)
-┌──────────────────────────────────────────────────────────────────────┐
-│                         目的端 (Destination)                          │
-│                                                                      │
-│  接收Header ──► 设备Setup ──► 主加载循环 ──► vm_start() ──► COMPLETED│
-│                                   │                                   │
-│                          [Postcopy]                                   │
-│                                   ▼                                   │
-│                    POSTCOPY_LISTEN → 启动监听线程                     │
-│                                   │                                   │
-│                    POSTCOPY_RUN → vm_start()                         │
-│                                   │                                   │
-│                    缺页处理 ←→ 返回路径请求页面                        │
-└──────────────────────────────────────────────────────────────────────┘
++-----------------------------------------------+
+|                  SOURCE                       |
+|                                               |
+|  NONE -> SETUP -> ACTIVE -> DEVICE            |
+|              |        |  ^     |  ^           |
+|              v        |  |     |  |           |
+|           FAILING     |  +-----+  +-postcopy  |
+|                       |  WAIT_     |          |
+|                       |  UNPLUG    v          |
+|                       |       POSTCOPY_DEVICE |
+|                       +-postcopy     |        |
+|                       |  (no RP)     v        |
+|                       v       POSTCOPY_ACTIVE |
+|                  POSTCOPY        |            |
+|                  _ACTIVE         v            |
+|                     |        COMPLETED        |
+|                     v                         |
+|                 COMPLETED                     |
+|                                               |
+|  precopy path:  ACTIVE -> DEVICE -> COMPLETED |
++-----------------------------------------------+
+                        |
+                        | QEMUFile
+                        v
++----------------------------------------------+
+|                DESTINATION                   |
+|                                              |
+|  recv_header -> device_setup                 |
+|                     |                        |
+|                     v                        |
+|               main_load_loop                 |
+|                     |                        |
+|                     v                        |
+|                vm_start() -> COMPLETED       |
+|                                              |
+|  [Postcopy]:                                 |
+|  POSTCOPY_LISTEN -> listen_thread            |
+|  POSTCOPY_RUN -> vm_start()                  |
+|  page_fault <--> return_path                 |
++----------------------------------------------+
 ```
 
 
