@@ -1,6 +1,7 @@
 # arm64 KVM Stage2页表映射流程分析
 
--v0.1 2026.5.8 Sherlock init
+-v0.1 2026.05.08  Sherlock init
+-v0.2 2026.05.10 Sherlock init
 
 简介：分析下ARM64 KVM stage2页表page table walk的逻辑。
 
@@ -10,42 +11,55 @@ Stage2页表使用一个通用walker框架+回调机制，通过kvm_pgtable_walk
 页表，在不同的访问点调用回调函数完成映射。kvm_pgtable_stage2_map是入口，它复用
 stage2_map_walker作为回调。
 
+我们这里重点分析页表映射的流程，其中核心就是使用page table walker，一定要注意哪里
+是框架逻辑，哪里是stage2页表map的具体业务逻辑。ARM KVM里还有很多使用walker的业务
+逻辑，比如，stage2页表unmap、改页表属性、配置页表young属性、stage2 flush、stage2 split、
+stage2 destroy range，dump stage页表等，所有这些都是对给定IPA/size操作对应stage2
+页表的行为。
+
 ## 关键数据结构
 
 ```c
+// 虚机stage2 page table的全局参数。
 struct kvm_pgtable {
-    u32   ia_bits;       // IPA 地址宽度
-    s8    start_level;   // 起始级数（负数，如 -1 表示从 2 级开始）
-    kvm_pteref_t pgd;    // 指向 PGD 页
-    struct kvm_pgtable_mm_ops *mm_ops;  // 物理/虚拟地址转换、分配/释放回调
+    u32   ia_bits;       // IPA地址宽度
+    s8    start_level;   // 起始级数
+    kvm_pteref_t pgd;    // 指向PGD页
+    struct kvm_pgtable_mm_ops *mm_ops;  // 物理/虚拟地址转换、页表内存分配/释放回调等
     enum kvm_pgtable_stage2_flags flags;
     kvm_pgtable_force_pte_cb_t force_pte_cb;
     struct kvm_s2_mmu *mmu;
 };
 
+/*
+ * walker框架的核心数据结构，注意，cb/arg是针对具体walker业务的回调函数和回调函数参数。
+ * 比如，map的walker和split的walker，使用同一个walker框架，但是处理的业务不一样。
+ */
 struct kvm_pgtable_walker {
-    const kvm_pgtable_visitor_fn_t cb;    // 回调函数
-    void * const                   arg;   // 回调参数
-    const enum kvm_pgtable_walk_flags flags; // 触发回调的访问点
+    const kvm_pgtable_visitor_fn_t cb;
+    void * const                   arg;
+    const enum kvm_pgtable_walk_flags flags;
 };
 
+// walker框架，visit这一层的核心数据结构。
 struct kvm_pgtable_visit_ctx {
-    kvm_pte_t *ptep;   // 当前 PTE 指针
-    kvm_pte_t old;     // 当前 PTE 旧值
+    kvm_pte_t *ptep;   // 当前PTE指针
+    kvm_pte_t old;     // 当前PTE旧值
     void      *arg;    // walker->arg
     struct kvm_pgtable_mm_ops *mm_ops;
-    u64 start, addr, end;  // 本次映射的起止地址 / 当前 walk 到的地址
+    u64 start, addr, end;  // 本次映射的起止地址、当前walk到的地址
     s8  level;             // 当前页表层数
     enum kvm_pgtable_walk_flags flags;
 };
 
+// 这个是stage2 map walker的私有参数。注意，这个不是框架的一部分。
 struct stage2_map_data {
     const u64 phys;     // 起始物理地址
     kvm_pte_t attr;     // 预计算的 PTE 属性
     u8  owner_id;
     struct kvm_s2_mmu *mmu;
     void *memcache;     // 页表页分配缓存
-    bool force_pte;     // 强制页级映射（禁止 block）
+    bool force_pte;     // 强制页级映射(禁止 block)
     bool annotation;    // 仅更新 owner_id
 };
 ```
@@ -78,7 +92,7 @@ block是指中间的页表项，但是block已经没有再下一级，所以bloc
 
 | 位域  | 宏  | 含义 |
 |-------|-----|------|
-| bit[0] | `KVM_PTE_VALID` | PTE 有效位 |
+| bit[0] | `KVM_PTE_VALID` | PTE有效位 |
 | bit[1] | `KVM_PTE_TYPE` | 0=BLOCK, 1=PAGE/TABLE |
 | bit[5:2] | `KVM_PTE_LEAF_ATTR_LO_S2_MEMATTR` | 内存属性 (Device/NC/Normal) |
 | bit[6] | `KVM_PTE_LEAF_ATTR_LO_S2_S2AP_R` | 读权限 |
@@ -87,8 +101,8 @@ block是指中间的页表项，但是block已经没有再下一级，所以bloc
 | bit[10] | `KVM_PTE_LEAF_ATTR_LO_S2_AF` | Access Flag |
 | bit[52] | `KVM_PTE_LEAF_ATTR_CONT` | 连续 PTE 提示 |
 | bit[54:53] | `KVM_PTE_LEAF_ATTR_HI_S2_XN` | 执行权限 |
-| bit[58:55] | `KVM_PTE_LEAF_ATTR_HI_SW` | 软件位（保存 prot 信息） |
-| bit[10] | `KVM_INVALID_PTE_LOCKED` | BBM 锁标记（仅在 valid=0 时有效） |
+| bit[58:55] | `KVM_PTE_LEAF_ATTR_HI_SW` | 软件位(保存prot信息) |
+| bit[10] | `KVM_INVALID_PTE_LOCKED` | BBM 锁标记(仅在valid=0时有效) |
 
 ## 完整调用链分析
 
@@ -115,7 +129,7 @@ kvm_pgtable_stage2_map(struct kvm_pgtable *pgt, ...)
                  * PGD页表项所在页的指针, start_level是0。一般，可以认为这里是
                  * walk的起点。
                  */
-            +-> __kvm_pgtable_walk(date, pgt->mm_ops, pteref, pgt->start_level)
+            +-> __kvm_pgtable_walk(data, pgt->mm_ops, pteref, pgt->start_level)
 ```
 
 分析walk核心函数__kvm_pgtable_walk。
@@ -158,7 +172,7 @@ __kvm_pgtable_walk
                 +-> ret = kvm_pgtable_visitor_cb(data, &ctx, KVM_PGTABLE_WALK_LEAF)
                         ...
                     +-> stage2_map_walk_leaf
-                            // 如果可以做page映射，就在这里做。
+                            // 如果可以做page映射，就在这里做，做完walk_leaf结束了。
                         +-> stage2_map_walker_try_leaf
                             /* 
                              * 如果上面做不了page map，可以走到这里说明也不是table，
@@ -166,7 +180,7 @@ __kvm_pgtable_walk
                              * 做映射。所以，这里分配下一级页表的内存，更新当前页表项
                              * 指向下一级页表。
                              *
-                             * 这里其实是创建可以一个table。
+                             * 这里其实是创建一个table。
                              */
                         +-> childp = mm_ops->zalloc_page(data->memcache)
                             stage2_try_break_pte(ctx, data->mmu)
@@ -178,7 +192,7 @@ __kvm_pgtable_walk
                     
                     // 根据之前的ret值，决定是否需要继续walk。这似乎有点bug。
                 +-> if (!kvm_pgtable_walk_continue(data->walker, ret))
-                        goto out;                                                       
+                        goto out;
 
                     /*
                      * 不是table，说明上面做了page或block map。不需要继续walk，
@@ -206,33 +220,24 @@ __kvm_pgtable_walk
 
 ARM架构要求修改PTE映射时遵守BBM序列。也就是改pte的顺序应该是：
 锁页表-> invalid页表 -> TLBI -> 更新页表 -> 解锁页表。上面stage2_map_walker_try_leaf
-以及stage2_map_walk_leaf涉及PTE修改的地方都需要遵守这个流程。
+以及stage2_map_walk_leaf涉及PTE修改的地方都需要遵守这个流程，下面具体看下：
 ```
 // 原子写入KVM_INVALID_PTE_LOCKED(BIT(10)置1)替换旧PTE，实际上是一起做了前两步。
 stage2_try_set_pte(ctx, KVM_INVALID_PTE_LOCKED)
 
-/*
- * todo
- */
-if (!kvm_pgtable_walk_skip_bbm_tlbi(ctx)) {                             
-        /*                                                              
-         * Perform the appropriate TLB invalidation based on the        
-         * evicted pte value (if any).                                  
-         */                                                             
-        if (kvm_pte_table(ctx->old, ctx->level)) {                      
-                u64 size = kvm_granule_size(ctx->level);                
-                u64 addr = ALIGN_DOWN(ctx->addr, size);                 
-                                                                        
-                kvm_tlb_flush_vmid_range(mmu, addr, size);              
-        } else if (kvm_pte_valid(ctx->old)) {                           
-                kvm_call_hyp(__kvm_tlb_flush_vmid_ipa, mmu,             
-                             ctx->addr, ctx->level);                    
-        }                                                               
-}                                                                       
+// 有些场景是可以跳过BBM的。
+if (!kvm_pgtable_walk_skip_bbm_tlbi(ctx))
+    // 如有修改的是一个table，那么这个table覆盖的IPA都要做TLBI。
+    if (kvm_pte_table(ctx->old, ctx->level))
+            kvm_tlb_flush_vmid_range(mmu, addr, size);
+    // 如果修改的是page/block，只有对应的page/block做TLBI就好。
+    else if (kvm_pte_valid(ctx->old))
+            kvm_call_hyp(__kvm_tlb_flush_vmid_ipa, mmu, ctx->addr, ctx->level); 
 
-// 如果旧PTE是可计数的，释放引用计数?
+// 释放page的引用计数。
 put_page()
 
+// 构建新页表项。
 new = kvm_init_table_pte(childp, mm_ops)
 // 实际上一起做了后面两步。
 stage2_make_pte(ctx, new)
@@ -242,8 +247,8 @@ stage2_make_pte(ctx, new)
 
 当KVM_PGTABLE_PROT_CONT被设置时，stage2_contig_supported()检查：
 - attr 或ctx->old有CONT位
-- ctx->level == KVM_PGTABLE_LAST_LEVEL（仅page级别支持）
-- addr 对齐到CONT_PTE_SIZE（通常是16 × 4K = 64K）
+- ctx->level == KVM_PGTABLE_LAST_LEVEL(仅page级别支持)
+- addr 对齐到CONT_PTE_SIZE(通常是16 × 4K = 64K)
 - 范围至少CONT_PTE_SIZE
 
 触发stage2_map_contig_leaf()：
