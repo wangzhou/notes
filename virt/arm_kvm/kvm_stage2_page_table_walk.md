@@ -1,4 +1,4 @@
-# arm64 KVM Stage-2 页表映射流程分析
+# arm64 KVM Stage2页表映射流程分析
 
 -v0.1 2026.5.8 Sherlock init
 
@@ -6,9 +6,9 @@
 
 ## 基本逻辑
 
-Stage-2 页表使用一个**通用 walker 框架** + **回调机制**，通过 `kvm_pgtable_walk()` 
-递归遍历每一级页表，在不同的访问点调用回调函数完成映射。`kvm_pgtable_stage2_map` 
-是入口，它复用 `stage2_map_walker` 作为回调。
+Stage2页表使用一个通用walker框架+回调机制，通过kvm_pgtable_walk()递归遍历每一级
+页表，在不同的访问点调用回调函数完成映射。kvm_pgtable_stage2_map是入口，它复用
+stage2_map_walker作为回调。
 
 ## 关键数据结构
 

@@ -47,7 +47,6 @@ SCR_EL3
 │        │ 1 = IRQ routed to EL3                              │
 └────────┴────────────────────────────────────────────────────┘
 ```
-
 注意，整个硬件系统分很多部件，比如很多L3/内存相关的部件OS里是看不见的，而core上
 报SEA/SEI是core和这些OS看不见部件综合作用的结果，这些部件可以有私有的配置，这些
 私有的配置甚至可以决定给core是否返回可以触发core SEA/SEI的信号，这些私有配置有些
@@ -64,7 +63,7 @@ HCR_EL2
 │        │ 1 = Traps exceptions to EL2                        │
 ├────────┼────────────────────────────────────────────────────┤
 │ Bit 5  │ AMO (Asynchronous Mask Override)                   │
-│        │ 1 = SError routed to EL2 (覆盖SCR_EL3配置)         │
+│        │ 1 = SError routed to EL2 (override SCR_EL3)        │
 ├────────┼────────────────────────────────────────────────────┤
 │ Bit 4  │ IMO (Interrupt Mask Override)                      │
 │        │ 1 = IRQ routed to EL2                              │
