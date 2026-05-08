@@ -234,3 +234,43 @@ if (!table) {
 注意：该patch的commit message标注"This is a hack patch，should think how
 to do this formally"，说明walker地址跳过方式可能是临时方案，后续需更正式的
 集成方式。
+
+## 对其他KVM特性的影响
+
+`pgtable.c`被编译两次：一次用于host内核(EL1)，一次用于EL2 nVHE hyp代码
+(`nvhe/Makefile`中`hyp-obj-y += ../pgtable.o`，带`-D__KVM_NVHE_HYPERVISOR__`)。
+两者的页表操作逻辑完全相同，仅tracepoint在EL2侧被替换为空操作。
+
+### nVHE
+
+无影响。contig修改对VHE/nVHE透明，纯粹的页表格式优化不涉及EL切换逻辑。
+
+### pKVM
+
+pKVM的EL2代码在`mem_protect.c`中使用以下stage2 API:
+
+| API | contig处理 |
+|-----|-----------|
+| `kvm_pgtable_stage2_map()` | 已处理 |
+| `kvm_pgtable_stage2_unmap()` | 已处理 |
+| `kvm_pgtable_stage2_set_owner()` | 复用map路径，已处理 |
+| `kvm_pgtable_stage2_relax_perms()` | 已处理 |
+| `kvm_pgtable_stage2_wrprotect()` | 已处理 |
+| `kvm_pgtable_stage2_mkyoung()` | 已处理 |
+| `kvm_pgtable_stage2_test_clear_young()` | **未处理**，`stage2_age_walker`直接改单个PTE的AF位 |
+
+`test_clear_young`的缺口在pKVM场景同样存在(`mem_protect.c:1178`)，如果
+protected VM的stage2使用了contig PTE，`stage2_age_walker`会破坏contig block
+的属性一致性。不过pKVM的host stage2通常使用`force_pte`做小粒度映射，实际触
+发概率较低。
+
+### 安全虚机(Realm/CCA)
+
+无影响。Realm的stage2由RMM(Realm Management Monitor)在R-EL2管理，完全独立
+于KVM的`pgtable.c`，二者无交集。
+
+### ARM嵌套虚拟化(NV)
+
+无影响。NV代码(`nested.c`/`at.c`)已通过`contiguous_bit_shift()`处理guest页表
+中的contig bit，用于AT指令模拟等场景。当前contig修改针对的是KVM自身的stage2
+(L0→L1)，与NV的guest页表读取逻辑正交，不存在冲突。
