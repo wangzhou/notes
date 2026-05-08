@@ -76,7 +76,7 @@ block是指中间的页表项，但是block已经没有再下一级，所以bloc
 
 ### PTE属性位(stage-2)
 
-| 位域 | 宏 | 含义 |
+| 位域  | 宏  | 含义 |
 |-------|-----|------|
 | bit[0] | `KVM_PTE_VALID` | PTE 有效位 |
 | bit[1] | `KVM_PTE_TYPE` | 0=BLOCK, 1=PAGE/TABLE |
