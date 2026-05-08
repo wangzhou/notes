@@ -242,21 +242,3 @@ new = kvm_init_table_pte(childp, mm_ops)
 // 实际上一起做了后面两步。
 stage2_make_pte(ctx, new)
 ```
-
-## 连续PTE(Contiguous PTE)路径
-
-当KVM_PGTABLE_PROT_CONT被设置时，stage2_contig_supported()检查：
-- attr 或ctx->old有CONT位
-- ctx->level == KVM_PGTABLE_LAST_LEVEL(仅page级别支持)
-- addr 对齐到CONT_PTE_SIZE(通常是16 × 4K = 64K)
-- 范围至少CONT_PTE_SIZE
-
-触发stage2_map_contig_leaf()：
-- 锁定第一个PTE(LOCKED)
-- 清除其余CONT_PTES - 1个PTE 并释放引用
-- 范围TLBI(CONT_PTE_SIZE)
-- 从第2个PTE开始写入新映射
-- 最后写入第1个PTE
-- 批量增加引用计数
-
-(todo)
