@@ -229,7 +229,36 @@ fpsimd_save()
     |
     v
 fpsimd_restore_current_state()
+    |   ...
+    |    
+    +-> get_cpu_fpsimd_context()
+    |     禁止内核NEON抢占, 保护后续操作
     |
+    +-> if (test_and_clear_thread_flag(TIF_FOREIGN_FPSTATE)) {
+    |       |
+    |       |  TIF_FOREIGN_FPSTATE == 1 -> 硬件FP不属于current, 需要恢复
+    |       |  TIF_FOREIGN_FPSTATE == 0 -> 硬件FP已属于current, 跳过(快速路径)
+    |       |
+    |       +-> task_fpsimd_load()
+    |       |
+    |       +-> fpsimd_bind_task_to_cpu()
+    |       |     重新绑定per-CPU的fpsimd_last_state(last指针)到current:
+    |       |       last->st       = &current->thread.uw.fpsimd_state
+    |       |       last->sve_state = current->thread.sve_state
+    |       |       last->fp_type   = &current->thread.fp_type
+    |       |       current->thread.fpsimd_cpu = smp_processor_id()
+    |       |     配置EL0 trap: TIF_SVE/SME -> user_enable, 否则disable
+    |       |
+    |       \-> 此时: last指向current, 硬件FP=current, FOREGIN已清除
+    |                用户态FP/SIMD直通硬件
+    |   }
+    |
+    \-> put_cpu_fpsimd_context()
+
+**时序说明**: host抢FP时(kernel_neon_begin)只做save+flush(清空硬件,设FOREIGN), 
+不恢复current。因为host抢FP后直接在硬件上操作NEON, 等返回用户态前(ret_to_user)
+才检查TIF_FOREIGN_FPSTATE, 按需调用fpsimd_restore_current_state恢复current的FP。
+如果host没抢过(current一路持有FP硬件), FOREGIN为0, 什么都不做, 零开销。
 
 ```
 host用FP和vCPU下线都会调用fpsimd_save()，但触发路径不同。前者是host主动用FP时通过
@@ -255,7 +284,7 @@ kvm_arch_vcpu_ctxsync_fp()
     |
     |       // 绑定last -> guest, 但不读硬件
     |       fpsimd_bind_state_to_cpu(&fp_state)
-    |       clear_thread_flag(TIF_FOREIGN_FPSTATE)
+    |       clear_thread_flag(TIF_FOREIGN_FPSTATE)  <-- 绑定但没有保存，清标记
     |   }
     |
     \-> 如果guest很快又回来, fp_owner还是GUEST, FP直通零开销
@@ -273,7 +302,10 @@ kvm_arch_vcpu_put_fp()
     |         +-> fpsimd_save()
     |         |     通过last指针把硬件FP+FPMR写回vcpu内存
     |         |
-    |         +-> 清空硬件寄存器(防止泄露给下一个host任务)
+    |         +-> fpsimd_flush_cpu_state()
+    |         |     清空硬件寄存器(防止泄露给下一个host任务)
+    |         |
+    |         +-> set_thread_flag(TIF_FOREIGN_FPSTATE) <-- 保存寄存器，加标记
     |         |
     |         \-> fp_owner = FP_STATE_FREE
     |   }
@@ -331,5 +363,3 @@ CPU-A (旧核)                              CPU-B (新核)
 ```
 这是惰性切换的另一个好处——vcpu_load时不需要无条件恢复FP寄存器(guest在新核上可能
 根本不用FP)，等guest真用了再恢复。
-
-todo: 补所有TIF_FOREIGN_FPSTATE
