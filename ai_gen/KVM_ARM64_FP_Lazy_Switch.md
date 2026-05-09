@@ -197,15 +197,6 @@ kvm_hyp_handle_fpsimd()
 Host可能在任意时刻使用FP/SIMD(比如内核crypto中的NEON指令)。此时如果guest持有FP
 硬件(fp_owner == GUEST_OWNED)，必须先保存guest的值再换上host的寄存器：
 ```
-todo: 列出这里所有的可能情况
-Host需要FP的场景分三种情况:
-1. host用FP, guest持有硬件(fp_owner==GUEST): 先fpsimd_save通过last把guest FP
-   写回vcpu, 再fpsimd_restore_current_state恢复host FP。最常见。
-2. host用FP, host持有硬件(fp_owner==HOST): last已指向当前host线程, FP已在硬件,
-   直接使用, 零开销。
-3. host用FP, 硬件空闲(fp_owner==FREE): fpsimd_restore_current_state从task->
-   thread恢复host FP到硬件。发生在host首次用FP或vcpu_load过后。
-
 Host需要FP (kernel_neon_begin / 中断处理 / 上下文切换)
     |
     v
@@ -216,7 +207,16 @@ fpsimd_save()
     |
     +-> if (test_thread_flag(TIF_FOREIGN_FPSTATE)) return
     |     TIF_FOREIGN_FPSTATE表示当前硬件里的信息不是本线程的。所以，如果这样，
-    |     不是应该保存下寄存器？(todo)
+    |     不是应该保存下寄存器？
+    |     (答: TIF_FOREIGN_FPSTATE是per-task标志, 描述的是"current与硬件是否
+    |      一致", 不是"硬件里有未保存的有效数据"。"硬件里是谁的、该存到哪"
+    |      由per-CPU的fpsimd_last_state(即last指针)单独跟踪。
+    |      该标志被置上的前提是: 前一个owner在让出硬件时已经先通过last把值
+    |      存回去, 再set TIF_FOREIGN_FPSTATE (见fpsimd_thread_switch /
+    |      vcpu_put_fp / kernel_neon_begin / fpsimd_save_and_flush_cpu_state)。
+    |      所以标志置位 ⇔ 已经存过或硬件数据stale, 此时再写last指向的内存
+    |      反而会用错误数据覆盖正确备份, 正确做法就是直接return。
+    |      参考fpsimd.c:78-119的整体不变式描述。)
     |
     +-> if (last->to_save == FP_STATE_SVE)
     |       sve_save_state(last->sve_state, last->st)
@@ -337,3 +337,5 @@ CPU-A (旧核)                              CPU-B (新核)
 ```
 这是惰性切换的另一个好处——vcpu_load时不需要无条件恢复FP寄存器(guest在新核上可能
 根本不用FP)，等guest真用了再恢复。
+
+todo: 补所有TIF_FOREIGN_FPSTATE
