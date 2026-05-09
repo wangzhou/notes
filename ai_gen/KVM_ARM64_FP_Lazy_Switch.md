@@ -163,20 +163,25 @@ Guest首次执行FP指令 -> trap (ESR_EL2.EC = 0x07)
     v
 kvm_hyp_handle_fpsimd()
     |
-    +-> step 1: 验证陷阱类型 (FP_ASIMD / SVE / SYS64)
+    +-> step 1: 验证trap类型 (FP_ASIMD / SVE)
     |
-    +-> step 2: 临时禁用CPTR陷阱 (允许EL2操作FP寄存器)
+    +-> step 2: 临时禁用trap陷阱 (允许EL2操作FP寄存器)
     |     isb()
     |
     +-> step 3: [条件] 保存host FP
-    |     if (fp_owner == HOST_OWNED) {
+    |     if (fp_owner == HOST_OWNED) { 
     |         __fpsimd_save_state(host_fpsimd)
     |         *host_data_ptr(fpmr) = read_sysreg_s(SYS_FPMR)
     |     }
-    |     (openEuler eager flush下此分支通常不触发)
+    |     todo: 这里为什么把guest FPMR保存到kvm_host_data->fpmr，不应该保存到host
+    |           对应的数据结构中么？
     |
     +-> step 4: 恢复guest FP到硬件
+    |
+    |     todo: 展开这里的实现
     |     __fpsimd_restore_state(&vcpu->arch.ctxt.fp_regs)
+    |
+    |     todo: 展开这里的实现
     |     write_sysreg_s(__vcpu_sys_reg(vcpu, FPMR), SYS_FPMR)
     |
     +-> step 5: fp_owner = FP_STATE_GUEST_OWNED
@@ -187,10 +192,10 @@ kvm_hyp_handle_fpsimd()
 
 ### Host使用FP/SIMD的逻辑
 
-Host可能在任意时刻使用FP/SIMD(比如内核crypto中的NEON指令)。此时如果guest
-持有FP硬件(fp_owner == GUEST_OWNED)，必须先保存guest的值再换上host的：
-
+Host可能在任意时刻使用FP/SIMD(比如内核crypto中的NEON指令)。此时如果guest持有FP
+硬件(fp_owner == GUEST_OWNED)，必须先保存guest的值再换上host的寄存器：
 ```
+todo: 列出这里所有的可能情况
 Host需要FP (kernel_neon_begin / 中断处理 / 上下文切换)
     |
     v
@@ -199,12 +204,16 @@ fpsimd_save()
     +-> last = __this_cpu_read(last)
     |     (VM exit时ctxsync_fp已经把last指向guest的fp_state)
     |
+    |   todo: 当前的代码里有这个检测，为真时直接返回了，为什么?
+    +-> test_thread_flag(TIF_FOREIGN_FPSTATE)
+    |
     +-> if (last->to_save == FP_STATE_SVE)
     |       sve_save_state(last->sve_state, last->st)
     |   else
-    |       __fpsimd_save_state(last->st)
+    |       fpsimd_save_state(last->st)
     |     把硬件Q0-Q31,FPSR,FPCR写回last->st (指向vcpu或task)
     |
+    |   todo: 当前的的openEuler 6.6代码有这个代码么？
     +-> if (system_supports_fpmr())
     |       *(last->fpmr) = read_sysreg_s(SYS_FPMR)
     |     把硬件FPMR写回last->fpmr (指向vcpu或task)
@@ -215,6 +224,7 @@ fpsimd_save()
     \-> fp_owner = FP_STATE_FREE (硬件已清空)
     |
     v
+todo: 重新看当前代码改下这里，这里和代码对不上。
 fpsimd_restore_current_state()
     |
     +-> last = &host_fp_state (指向current->thread)
@@ -227,18 +237,15 @@ fpsimd_restore_current_state()
     |
     \-> fp_owner = FP_STATE_HOST_OWNED
 ```
-
-关键点：host用FP和vCPU下线都会调用fpsimd_save()，但触发路径不同。
-前者是host主动用FP时通过last指针惰性回写，后者是put_fp()强制调用
-fpsimd_save_and_flush_cpu_state()。两种路径最终都通过同一个last指针
-把硬件值写回正确位置。
+host用FP和vCPU下线都会调用fpsimd_save()，但触发路径不同。前者是host主动用FP时通过
+last指针惰性回写，后者是put_fp()强制调用fpsimd_save_and_flush_cpu_state()。两种
+路径最终都通过同一个last指针把硬件值写回正确位置。
 
 ### vCPU下线和exit的逻辑
 
-vCPU exit 和 vCPU下线(put)是两种不同的路径，处理方式也不同：
+vCPU exit和vCPU下线(put)是两种不同的路径，处理方式也不同：
 
-**vCPU exit** (VM Exit, 但vCPU线程还在当前核上)：
-
+**vCPU exit**(VM Exit, 但vCPU线程还在当前核上)：
 ```
 kvm_arch_vcpu_ctxsync_fp()
     |
@@ -261,13 +268,13 @@ kvm_arch_vcpu_ctxsync_fp()
 ```
 
 **vCPU下线** (vCPU线程被调度出当前核)：
-
 ```
 kvm_arch_vcpu_put_fp()
     |
     +-> if (fp_owner == GUEST_OWNED) {
-    |
+    |       ...
     |       fpsimd_save_and_flush_cpu_state()
+    |         |   todo: fpsimd_save有如上一样的问题
     |         +-> fpsimd_save()
     |         |     通过last指针把硬件FP+FPMR写回vcpu内存
     |         |
@@ -283,12 +290,12 @@ kvm_arch_vcpu_put_fp()
 
 ### vCPU迁移到新物理核上的逻辑
 
-fp_owner是per-CPU变量，每个物理核各自一份。vCPU从CPU-A迁移到CPU-B时，
-CPU-B的fp_owner初始为FREE，FPEN被清除，首次FP必然trap。
+fp_owner是per-CPU变量，每个物理核各自一份。vCPU从CPU-A迁移到CPU-B时，CPU-B的fp_owner
+初始为FREE，FPEN被清除，首次FP必然trap。
 
 ```
 CPU-A (旧核)                              CPU-B (新核)
-----------                                ----------
+------------                              ------------
 [1] vCPU持有FP运行
     fp_owner = GUEST
     FPEN置位, guest直通
@@ -312,7 +319,7 @@ CPU-A (旧核)                              CPU-B (新核)
                                               v
                                          __activate_traps()
                                            guest_owns_fp_regs() == false
-                                           -> 清除FPEN, 设陷阱
+                                           -> 清除FPEN, 设trap
                                               |
                                               v
                                          [4] guest首次FP -> trap!
@@ -327,6 +334,10 @@ CPU-A (旧核)                              CPU-B (新核)
                                               v
                                          后续guest FP直通硬件
 ```
+这是惰性切换的另一个好处——vcpu_load时不需要无条件恢复FP寄存器(guest在新核上可能
+根本不用FP)，等guest真用了再恢复。
 
-这是惰性切换的另一个好处——vcpu_load时不需要无条件恢复FP寄存器(guest
-在新核上可能根本不用FP)，等guest真用了再恢复。
+todo: vCPU下线，host或者其他vCPU没有用FP, vCPU再上线，还的加载寄存器。这里是这样么？
+
+
+
