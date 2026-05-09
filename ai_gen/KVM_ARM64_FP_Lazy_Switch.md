@@ -1,7 +1,7 @@
 KVM ARM64 FP/SIMD Lazy Switch机制原理
 ======================================
 
--v0.1 2026.05.09 Sherlock init
+-v0.1 2026.05.13 Sherlock init
 
 简介：分析KVM/ARM64虚拟化中浮点寄存器惰性切换(Lazy Switch)的设计原理与实现细节，
       基于openEuler v6.6内核。
@@ -172,14 +172,8 @@ kvm_hyp_handle_fpsimd()
     +-> step 3: [条件] 保存host FP
     |     if (fp_owner == HOST_OWNED) { 
     |         __fpsimd_save_state(host_fpsimd)
-    |         *host_data_ptr(fpmr) = read_sysreg_s(SYS_FPMR)
+    |         *host_data_ptr(fpmr) = read_sysreg_s(SYS_FPMR) <-- KVM是多余的(这里针对pKVM)？
     |     }
-    |     todo: 这里为什么把guest FPMR保存到kvm_host_data->fpmr，不应该保存到host
-    |           对应的数据结构中么？
-    |     (答: step 3保存的是**host**的FPMR, 不是guest的。条件fp_owner==HOST_OWNED
-    |      说明硬件里是host的值。kvm_host_data.fpmr是per-CPU的暂存槽位,
-    |      hyp上下文里无法安全访问current->thread, 所以暂存在这里。
-    |      openEuler eager flush下此分支几乎不触发, 主要给pKVM用。)
     |
     +-> step 4: 恢复guest FP到硬件
     |
@@ -206,17 +200,17 @@ fpsimd_save()
     |     (VM exit时ctxsync_fp已经把last指向guest的fp_state)
     |
     +-> if (test_thread_flag(TIF_FOREIGN_FPSTATE)) return
-    |     TIF_FOREIGN_FPSTATE表示当前硬件里的信息不是本线程的。所以，如果这样，
-    |     不是应该保存下寄存器？
-    |     (答: TIF_FOREIGN_FPSTATE是per-task标志, 描述的是"current与硬件是否
-    |      一致", 不是"硬件里有未保存的有效数据"。"硬件里是谁的、该存到哪"
-    |      由per-CPU的fpsimd_last_state(即last指针)单独跟踪。
-    |      该标志被置上的前提是: 前一个owner在让出硬件时已经先通过last把值
-    |      存回去, 再set TIF_FOREIGN_FPSTATE (见fpsimd_thread_switch /
-    |      vcpu_put_fp / kernel_neon_begin / fpsimd_save_and_flush_cpu_state)。
-    |      所以标志置位 ⇔ 已经存过或硬件数据stale, 此时再写last指向的内存
-    |      反而会用错误数据覆盖正确备份, 正确做法就是直接return。
-    |      参考fpsimd.c:78-119的整体不变式描述。)
+    |      TIF_FOREIGN_FPSTATE是per-task标志, 描述的是"current与硬件是否一致", 
+    |      不是"硬件里有未保存的有效数据"。"硬件里是谁的、该存到哪"由per-CPU的
+    |      fpsimd_last_state(即last指针)单独跟踪。
+    |
+    |      该标志被置上的前提是: 前一个owner在让出硬件时已经先通过last把值存回去, 
+    |      再set TIF_FOREIGN_FPSTATE (见fpsimd_thread_switch / vcpu_put_fp / 
+    |      kernel_neon_begin / fpsimd_save_and_flush_cpu_state)。
+    |
+    |      所以这个flag的语义是：**已经存过或硬件数据stale** 此时再写last指向的内存
+    |      反而会用错误数据覆盖正确备份, 正确做法就是直接return。参考fpsimd.c:78-119
+    |      的整体不变式描述。
     |
     +-> if (last->to_save == FP_STATE_SVE)
     |       sve_save_state(last->sve_state, last->st)
