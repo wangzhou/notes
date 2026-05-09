@@ -430,126 +430,149 @@ CONT_PTE_SIZE`，则所有 fault 都请求 contig，map walker 都会进
 `ctx->old & CONT` 检查，如果 CONT 还在就走 contig 路径；如果 CONT 不在了
 （被 T1 清了），`!kvm_pte_valid(ctx->old)` 也直接 `-EAGAIN`。
 
-### 修复思路：Break 阶段写 LOCKED 替代写 0
+### walker 触发源分类
 
-**核心改动**：contig BBM 的 Break 阶段，PTE[1..N-1] 写成 `KVM_INVALID_PTE_LOCKED`
-而非 0。改一行：`kvm_clear_pte(ptep)` → `WRITE_ONCE(*ptep, KVM_INVALID_PTE_LOCKED)`。
+所有走 leaf 的 SHARED walker 都是 fault handler 触发（`user_mem_abort` /
+`gmem_abort`），持 `read_lock(&kvm->mmu_lock)`。但存在非 SHARED 但同样
+持读锁的路径——**系统调用触发的 wrprotect**。它不走 cmpxchg，用 WRITE_ONCE
+直写，同样会与 contig BBM 并发。
 
-**三处修改位置**（均在 `pgtable.c`）：
+汇总：
 
-**位置 1：`stage2_attr_contig_aligned`（line ~1461）**
+| 入口 | 触发源 | SHARED | 持锁 |
+|------|--------|--------|------|
+| `stage2_map_walker`（map） | fault（`user_mem_abort`） | ✅ | `read_lock` |
+| `stage2_map_walker`（set_owner） | pKVM EL2 | ❌ | exclusive |
+| `stage2_attr_walker`（relax_perms） | fault（`user_mem_abort` 写故障） | ✅ | `read_lock` |
+| `stage2_attr_walker`（mkyoung） | fault（`user_mem_abort` AF 故障） | ✅ | `read_lock` |
+| `stage2_attr_walker`（**wrprotect**） | **系统调用**（dirty logging） | ❌ | `read_lock` |
+| `stage2_attr_walker`（pKVM） | pKVM EL2 | ❌ | exclusive |
+| `stage2_age_walker`（test_clear_young） | **系统调用**（MMU notifier） | ❌ | `read_lock` |
+| `stage2_unmap_walker` | 系统调用 / pKVM | ❌ | `write_lock` |
+
+**wrprotect 调用链**（系统调用触发，持读锁但无 SHARED flag）：
+
+```
+QEMU ioctl(KVM_SET_USER_MEMORY_REGION2)  // 开启 dirty logging
+  → kvm_vm_ioctl_set_memory_region()
+    → kvm_mmu_wp_memory_region()
+      → read_lock(&kvm->mmu_lock)
+      → stage2_apply_range_resched(..., kvm_pgtable_stage2_wrprotect)
+        → kvm_pgtable_stage2_wrprotect()  // flags = IGNORE_EAGAIN, 无 SHARED
+          → stage2_update_leaf_attrs()
+            → stage2_attr_walker()        // 非 SHARED
+              → stage2_try_set_pte()      // WRITE_ONCE, 非 cmpxchg
+      → read_unlock(&kvm->mmu_lock)
+```
+
+**test_clear_young 调用链**（MMU notifier 触发）：
+
+```
+ksm / khugepaged / madvise (LRU scanning)
+  → mmu_notifier_clear_young()
+    → kvm_mmu_notifier_clear_young()
+      → read_lock(&kvm->mmu_lock)
+      → kvm_pgtable_stage2_test_clear_young()  // flags = LEAF, 无 SHARED
+        → stage2_age_walker()                  // 直接改单 PTE 的 AF
+      → read_unlock(&kvm->mmu_lock)
+```
+
+**wrprotect 为何需要 PTE[0] 检查**：非 SHARED 意味着 `stage2_try_set_pte` 用
+WRITE_ONCE 直写，不做 cmpxchg。如果 contig BBM 同时持有 PTE[0]=LOCKED，
+wrprotect 可以盲写 PTE[k]——contig Make 阶段会把它覆盖掉，丢失 wrprotect
+的写保护。因此 attr_walker 的 PTE[0] 检查**不能**加 `kvm_pgtable_walk_shared`
+门——必须对所有读锁调用生效。map 路径不需要放宽：非 SHARED map 只有 pKVM
+set_owner，跑 exclusive 锁。
+
+### 修复思路：PTE[0] 作为 block 级互斥点
+
+**核心思想**：contig BBM 已经在 PTE[0] 上持有 LOCKED。让**单页路径也通过 PTE[0]
+判断和加锁**，两个路径争同一个 PTE——PTE[0]——天然串行化，不需要改 contig 侧。
+
+**单页 map 路径入口修改**（`stage2_map_walker_try_leaf` 进入 leaf 之前）：
 
 ```c
-// 修改前：
-for (i = 1, ptep = first_ptep + 1; i < CONT_PTES; i++, ptep++)
-    kvm_clear_pte(ptep);
+kvm_pte_t *first_ptep = PTR_ALIGN_DOWN(ctx->ptep, sizeof(kvm_pte_t) * CONT_PTES);
+kvm_pte_t pte0 = READ_ONCE(*first_ptep);
 
-// 修改后：
-for (i = 1, ptep = first_ptep + 1; i < CONT_PTES; i++, ptep++)
-    WRITE_ONCE(*ptep, KVM_INVALID_PTE_LOCKED);
-```
+if (stage2_pte_is_locked(pte0))
+    return -EAGAIN;                         // contig BBM 正在进行，退让
 
-**位置 2：`stage2_attr_contig_unaligned`（line ~1415）**
+if (pte0 & KVM_PTE_LEAF_ATTR_CONT)   todo: 这里和代码不一样
+    return stage2_map_contig_leaf(ctx, data); // 已有 contig block，走 contig 路径
 
-```c
-// 修改前：
-for (i = 1, ptep = first_ptep + 1; i < CONT_PTES; i++, ptep++)
-    kvm_clear_pte(ptep);
-
-// 修改后：
-for (i = 1, ptep = first_ptep + 1; i < CONT_PTES; i++, ptep++)
-    WRITE_ONCE(*ptep, KVM_INVALID_PTE_LOCKED);
-```
-
-**位置 3：`stage2_map_contig_leaf`（line ~1090）**
-
-```c
-// 修改前：
-for (i = 1; i < CONT_PTES; i++, ptep++) {
-    if (kvm_pte_valid(*ptep)) {
-        if (stage2_pte_is_counted(*ptep))
-            mm_ops->put_page(ptep);
-        kvm_clear_pte(ptep);
-    }
+if (!kvm_pte_valid(pte0)) {                 // PTE[0] 空闲
+    if (cmpxchg(first_ptep, 0, KVM_INVALID_PTE_LOCKED) != 0)
+        return -EAGAIN;                     // 抢锁失败，退让
+    /* ---- 持有 PTE[0] 锁 ---- */
+    ... 正常单页 BBM 操作 ctx->ptep（可能是 PTE[k]）...
+    WRITE_ONCE(*first_ptep, 0);             // 释放 PTE[0]，无需 TLBI
+    return 0;
 }
 
-// 修改后：
-for (i = 1; i < CONT_PTES; i++, ptep++) {
-    if (kvm_pte_valid(*ptep)) {
-        if (stage2_pte_is_counted(*ptep))
-            mm_ops->put_page(ptep);
-    }
-    WRITE_ONCE(*ptep, KVM_INVALID_PTE_LOCKED);
-}
+/* PTE[0] 是 valid 非 CONT：contig 不可能在此建 block，正常单页 BBM */
 ```
 
-位置 3 多了 put_page 处理：先把旧有效映射的 refcount 释放，再写 LOCKED。
-put_page 对象是旧 contig PTE 指向的物理页，与 LOCKED 不冲突。
+**设计要点**：
 
-**修改后的 BBM 序列**（以 attr_aligned 为例）：
+- `PTE[0] = INVALID` 时单页 op 锁住 PTE[0]，阻止任何 contig map 在这个 block 开始。
+  操作完释放为 0（全程 0→LOCKED→0，不经过 valid，无需 TLBI）
+- `PTE[0] = LOCKED` 时直接 `-EAGAIN`，contig BBM 期间单页不进
+- `PTE[0] = valid + CONT` 时转 contig 路径（串行化在 PTE[0]）
+- `PTE[0] = valid 非 CONT` 时 PTE[0] 被独立 4K 占用，contig 不可能在此 block 建
+  起来 → 正常单页 BBM
 
+**contig 侧无需改动**——PTE[0] 从 cmpxchg 锁住到 Make 最后释放全程 LOCKED，单页
+看见就退，不再需要 contig 侧对 PTE[1..N-1] 做任何特殊处理。
+
+**场景验证**：
+
+**场景 1：contig 锁住 PTE[0]，单页进入 PTE[k]**
 ```
-Step 1: cmpxchg(PTE[0], old0, KVM_INVALID_PTE_LOCKED)
-          ├─ FAIL  → return -EAGAIN       // PTE[0] 被别人改了
-          └─ OK    → continue
-
-Step 2: for i = 1 .. CONT_PTES-1:
-            WRITE_ONCE(PTE[i], KVM_INVALID_PTE_LOCKED)   // 不是 0！
-
-Step 3: TLBI range [block_start, block_start + CONT_PTE_SIZE)
-
-Step 4: for i = 1 .. CONT_PTES-1:
-            new = kvm_init_valid_leaf_pte(phys[i], attrs, level)
-            smp_store_release(&PTE[i], new)               // LOCKED → valid，原子切换
-
-Step 5: smp_store_release(&PTE[0], new)                   // 最后释放 PTE[0]
+T2: READ_ONCE(PTE[0]) → LOCKED → -EAGAIN
 ```
+T2 瞬间退，不碰 PTE[k]。✓ PTE[k] 为 0 也无妨。
 
-**并发安全分析**：
-
-T2 并行走 `stage2_try_break_pte`（单页 BBM）进入 PTE[k]：
-
+**场景 2：fresh-install（全 INVALID，T1 contig map vs T2 单页 map）**
 ```
-stage2_try_break_pte(ctx) {
-    // Case A: T2 在 T1 写 LOCKED 之前读 ctx->old
-    if (stage2_pte_is_locked(ctx->old))   // ctx->old = 原 contig PTE，非 LOCKED → 过
-        return false;
-    cmpxchg(ctx->ptep, ctx->old, LOCKED);
-    // ctx->old = 原 contig PTE，但 *ptep 已被 T1 改成 LOCKED → 失败！
-    // cmpxchg 返回 LOCKED != ctx->old → return false → -EAGAIN 重试
-
-    // Case B: T2 在 T1 写 LOCKED 之后读 ctx->old
-    if (stage2_pte_is_locked(ctx->old))   // ctx->old = LOCKED → true
-        return false;                      // 直接返回，不尝试 cmpxchg → -EAGAIN 重试
-}
+T2: READ_ONCE(PTE[0]) → 0 → 决定 cmpxchg PTE[0]
+T1: cmpxchg(PTE[0], 0, LOCKED) → 成功（抢先）
+T2: cmpxchg(PTE[0], 0, LOCKED) → 失败（PTE[0] 已变为 LOCKED ≠ 0）→ -EAGAIN
 ```
+cmpxchg 只有双方都期望 0 时才可能赢，硬件保证只有一方成功。✓
 
-两种时序都安全：T2 要么 cmpxchg 失败，要么提前被 LOCKED 检查拦截。
+**场景 3：PTE[0] valid 非 CONT，单页进入 PTE[k]**
+```
+T2: READ_ONCE(PTE[0]) → valid 非 CONT → 正常单页 BBM，锁 ctx->ptep 自身
+```
+contig 不会进入（PTE[0] 有非 CONT 映射，walker 不当 contig leaf）。✓
 
-**为什么 Make 阶段可以直接 `smp_store_release` 覆盖 LOCKED**：
+**场景 4：contig attr unaligned（walker 从 PTE[k] 进入，k>0）**
+```
+T1: stage2_attr_contig_leaf → PTR_ALIGN_DOWN(ctx->ptep) = first_ptep
+    → cmpxchg(PTE[0], old0, LOCKED) → 成功
+T2: READ_ONCE(PTE[0]) → LOCKED → -EAGAIN
+```
+contig attr 无论从 block 内何处进入，锁始终是 PTE[0]。✓
 
-`KVM_INVALID_PTE_LOCKED` 编码为 `BIT(62)` +
-`KVM_PTE_LEAF_ATTR_HI_S2_XN`，`kvm_pte_valid(LOCKED) == false`，硬件页表
-walker 将其视为 invalid 项。`smp_store_release` 原子地把 LOCKED 替换成 valid
-新 PTE，对硬件是一次性的 invalid→valid 转换，不会触发 CONT 位在 valid PTE
-上修改的违例。
+**场景 5：单页 op 自身落在 PTE[0]，且 PTE[0]=INVALID**
+```
+T2: READ_ONCE(PTE[0]) → 0 → cmpxchg(PTE[0], 0, LOCKED) → 成功
+    → 正常 BBM PTE[0] → WRITE_ONCE(PTE[0], 0) 释放
+```
+PTE[0] 从 LOCKED 被正常的 `smp_store_release` 覆盖为新 PTE（Make 阶段），和
+单页 BBM 已有的 `stage2_make_pte` 调用一致。✓
 
-与单页 BBM 的 `stage2_make_pte` 逻辑一致：该函数内部也是
-`smp_store_release(ctx->ptep, new)`，因为 Make 阶段 PTE 一定是 LOCKED 状态，
-直接 release store 即可，不需要 cmpxchg。
+**非 contig 系统影响**：无 contig 时 PTE[0] 永不设 LOCKED 或 CONT。
 
-**refcount 不变**：LOCKED 不是 valid PTE，`stage2_pte_is_counted(LOCKED)`
-为 false，后续 Make 阶段 `stage2_pte_is_counted(new)` 按新 PTE 内容正常
-get_page。attr 路径没有 refcount 变化（只改属性不改映射），map 路径的
-put_page 在 Break 前已完成（位置 3 的 if 块）。
+- `PTE[0] = valid`：多一次 `READ_ONCE(PTE[0])`，直接走 else 分支，O(1) 不可测
+- `PTE[0] = INVALID`：单页 op 会锁 PTE[0]。同 64K block 内多 vcpu 并发 fault
+  时会产生微弱串行化（cmpxchg 抢同一 PTE[0]），但只发生在该 64K 区域的初始填充
+  窗口。一旦 PTE[0] 建立映射，同 block 内后续 fault 走 valid 分支无影响。
 
-**已知限制**：fresh-install 变体尚未覆盖。当 contig block 还**不存在**时
-（PTE[0..N-1] 全是 INVALID 或独立 4K），T1 的 `stage2_map_contig_leaf`
-在 Break 阶段先读 `*ptep` 判断 valid/counted 再做 put_page/LOCKED，
-read-then-write 之间有 TOCTOU 窗口：T2 可能在读之后、写 LOCKED 之前在
-PTE[k] 上安装独立映射。不过此变体触发需要 vma_pagesize 在两个 vcpu 间不一致
-（madvise/mprotect 过渡窗口），概率远低于 attr 路径。先记录，后续视需要跟
-进。
+**attr/mkyoung/relax_perms/wrprotect 单页路径**：入口已有 `ctx->old & CONT`
+检查，CONT 时已走 contig 路径。非 CONT 时加 PTE[0] LOCKED 检查——**不加
+`kvm_pgtable_walk_shared` 门**，因为 wrprotect 持读锁但不设 SHARED flag。
 
 ### 页表遍历地址跳过修复
 

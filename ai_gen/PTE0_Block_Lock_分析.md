@@ -1,0 +1,314 @@
+# PTE[0]-as-Block-Lock 并发正确性分析
+
+本文分析 `stage2_map_walker_try_leaf` 中单页路径通过 PTE[0] 加锁的并发正确性，
+按 PTE[0] 的可能状态分类讨论所有竞态场景。
+
+## 背景
+
+### 关键变量
+
+- `ctx->old`：walker 在调用 callback **之前**通过 `READ_ONCE(*ctx->ptep)` 读到的值，
+  可能与当前 PTE 实际值不同（TOCTOU）
+- `pte0`：callback 内**此刻** `READ_ONCE(*first_ptep)` 读到的值
+- `first_ptep`：`PTR_ALIGN_DOWN(ctx->ptep, sizeof(kvm_pte_t) * CONT_PTES)`
+- `locked_pte0`：本线程是否成功 cmpxchg PTE[0] 为 LOCKED
+
+### 关键函数行为
+
+- `stage2_try_break_pte(ctx, mmu)`：
+  1. 检查 ctx->old 不是 LOCKED
+  2. `cmpxchg(ctx->ptep, ctx->old, LOCKED)`——依赖 ctx->old 匹配当前值
+  3. 若 old 是 valid：TLBI + put_page
+- `stage2_make_pte(ctx, new)`：
+  1. `WARN_ON(!stage2_pte_is_locked(*ctx->ptep))`
+  2. `smp_store_release(ctx->ptep, new)`
+- `stage2_contig_supported(ctx, attr)`：检查 `attr & PROT_CONT` 且 level == LAST_LEVEL
+
+### 前提
+
+进入 PTE[0] 检查代码块（line 1188）意味着：
+
+1. `stage2_contig_supported()` 已返回 false（否则前面已跳转 `stage2_map_contig_leaf`）
+2. `stage2_pte_needs_update()` 已返回 true（不是重复映射）
+3. 不是纯软件位修改快速路径
+4. `kvm_pgtable_walk_shared(ctx)` 为 true（非 SHARED 路径不进入此块）
+
+---
+
+## 状态 1：PTE[0] = LOCKED
+
+```
+if (stage2_pte_is_locked(pte0))
+    return -EAGAIN;
+```
+
+### 谁设置了 LOCKED？
+
+| 设置者 | 场景 |
+|--------|------|
+| `stage2_map_contig_leaf` | contig BBM 持有 PTE[0] |
+| `stage2_attr_contig_aligned` | attr contig BBM 持有 PTE[0] |
+| `stage2_attr_contig_unaligned` | attr unfold BBM 持有 PTE[0] |
+| 本函数（另一线程，PTE[0] 自身） | 单页 BBM 在 PTE[0] 上（子情况 4a） |
+| 本函数（另一线程，PTE[k]） | 单页 BBM 在 PTE[k] 上，用 PTE[0] 做 block 锁（子情况 4b） |
+
+### 分析
+
+无论哪种情况，PTE[0]=LOCKED 表示有线程正在操作该 contig block 候选区域。
+退让后 walker 重试，届时 PTE[0] 要么已释放为 0，要么已成为 valid 映射。
+
+**ctx->ptep 位置无关**——LOCKED 时一律退让。
+
+**正确性**：✓ 无问题。
+
+---
+
+## 状态 2：PTE[0] = Valid + CONT 位
+
+```
+if (pte0 & KVM_PTE_LEAF_ATTR_CONT)
+    return -EAGAIN;
+```
+
+### 为什么会进入此分支？
+
+前提是 `stage2_contig_supported()` 已返回 false，即当前 fault 不带 PROT_CONT。
+但 PTE[0] 却有 CONT 位——说明存在一个完整的 contig block。单页操作不能破坏它。
+
+### 触发场景
+
+1. **同一 VMA 的两 vCPU 竞态（不触发）**：vCPU1 先到安装 contig block。vCPU2 也有
+   PROT_CONT，`stage2_contig_supported` 返回 true → 走 `stage2_map_contig_leaf`，
+   不走这里。
+
+2. **force_pte 场景（理论上可触发，实际极少）**：dirty logging 期间 force_pte=true，
+   fault 不带 PROT_CONT。如果 contig block 还没被 wrprotect unfold，PTE[0] 仍带 CONT。
+   但实际上写保护后的写故障走 `relax_perms`（attr_walker，不是 map walker），
+   所以 map walker 碰不到此状态。**此检查是防御性的。**
+
+### 返回 -EAGAIN 会不会死循环？
+
+不会。只要 PTE[0] 的 CONT 最终被清除（由 wrprotect 或 relax_perms 的 attr 路径完成），
+walker 重试后就能继续。如果死循环了，说明 attr 路径有 bug，应该修 attr 路径而非此处。
+
+**正确性**：✓ 防御性检查，不会死循环。
+
+---
+
+## 状态 3：PTE[0] = Valid + 无 CONT 位
+
+不命中任何 if，`locked_pte0` 保持 false。走正常的单页 BBM 流程。
+
+### 核心逻辑
+
+PTE[0] 被一个普通 4K 映射占用，contig block 不可能在此区域建立（PTE[0] 不空闲）。
+不需要特殊处理。
+
+### 子情况 3a：ctx->ptep == first_ptep（就是 PTE[0] 本身）
+
+正常单页 BBM：
+1. `stage2_try_break_pte(ctx, mmu)`：cmpxchg(PTE[0], valid_non_CONT, LOCKED)
+2. TLBI + put_page（若 old valid）
+3. `stage2_make_pte(ctx, new)`：smp_store_release(PTE[0], new)
+
+**竞态**：若 T1 想做 contig map，它的 cmpxchg(PTE[0], 0, LOCKED) 因 PTE[0]≠0 而失败。
+两者通过 cmpxchg 在 PTE[0] 上串行化。
+
+**正确性**：✓ 标准单页 BBM，与 contig 路径在 PTE[0] 上 cmpxchg 串行化。
+
+### 子情况 3b：ctx->ptep != first_ptep（PTE[k], k>0）
+
+正常单页 BBM 在 PTE[k] 上：
+1. `stage2_try_break_pte(ctx, mmu)`：cmpxchg(PTE[k], ctx->old, LOCKED)
+2. TLBI on ctx->addr（PTE[k] 覆盖的 IPA）
+3. `stage2_make_pte`：smp_store_release(PTE[k], new)
+
+**竞态分析——T1 想做 contig map**：T1 在 PTE[0] 上 cmpxchg(PTE[0], 0, LOCKED)。
+PTE[0]=valid_non_CONT ≠ 0 → 失败 → -EAGAIN。
+
+**竞态分析——ctx->old 过时**：
+```
+T2 walker:     ctx->old = valid_non_CONT  (PTE[k] 有旧映射)
+T1 contig BBM: 锁 PTE[0], 清 PTE[k], TLBI, 装 PTE[k]=valid+CONT, 放 PTE[0]
+T2 此刻:       stage2_try_break_pte: cmpxchg(PTE[k], ctx->old, LOCKED)
+               → PTE[k] 现在是 valid+CONT ≠ ctx->old → 失败 → -EAGAIN
+```
+重试后 walker 重新读 ctx->old=valid+CONT，最终走状态 2（CONT→退让）或 contig 路径。
+
+**不会丢更新，只是多一次重试。**
+
+**正确性**：✓ 无问题。
+
+---
+
+## 状态 4：PTE[0] = INVALID (0)
+
+最复杂的情况。做 cmpxchg(PTE[0], 0, LOCKED) 抢锁。成功则 `locked_pte0 = true`。
+失败则返回 -EAGAIN（另一线程抢先改了 PTE[0]）。
+
+### 子情况 4a：ctx->ptep == first_ptep（要修改的就是 PTE[0] 自己）
+
+```
+locked_pte0 = true
+→ if (locked_pte0 && ctx->ptep == first_ptep) { /* 跳过 BBM */ }
+→ CMO
+→ stage2_make_pte(ctx, new)           // smp_store_release 将 LOCKED 覆盖为 new
+→ 不触发 line 1229-1230 的释放        // ctx->ptep == first_ptep，不满足条件
+```
+
+**为什么跳过 BBM？** 三层分析：
+
+**第一层——ctx->old = 0，无过时（常见情况）**：
+- PTE[0] 在 walker 读时是 0，现在也是 0（cmpxchg 验证）
+- 没有 valid 映射存在过 → TLBI 是 no-op
+- `stage2_pte_is_counted(0)` = false → 不需要 put_page
+- BBM 完全是 no-op，跳过无影响
+
+**第二层——ctx->old 过时（ctx->old = valid，但 PTE[0] 现在 = 0）**：
+- 有人在 walker 读和我们 cmpxchg 之间把 PTE[0] 从 valid 改成了 0
+- 那个线程在清除 valid 映射时**已经做了 TLBI + put_page**
+- 我们再做一次 TLBI + put_page 就是 double-flush + double-put（错误）
+- 跳过 BBM 正确避免了 double-put_page
+
+**第三层——为什么不能走正常 BBM**：
+- 正常 BBM 第一步：`cmpxchg(PTE[0], ctx->old, LOCKED)`
+- PTE[0] 现在是 LOCKED（我们自己设的）≠ ctx->old
+- cmpxchg 必然失败 → -EAGAIN → 释放 PTE[0] → 重试 → 又锁 PTE[0] → cmpxchg 又失败 → **死循环**
+- 跳过 BBM 是**必要的**，不是优化
+
+**TLBI 是否缺失？** 不缺失。PTE[0] 被锁时值为 0，不存在需要 flush 的 TLB entry。
+过时 ctx->old 的情况下，清除者已做 TLBI。
+
+**释放路径**：
+- 成功路径：`stage2_make_pte` 用 smp_store_release 将 LOCKED 覆盖为新 valid PTE
+- 失败路径：此分支无失败点（BBM 被跳过，CMO 不失败，make_pte 不失败）
+
+**正确性**：✓ 跳过 BBM 正确且必要。
+
+### 子情况 4b：ctx->ptep != first_ptep（修改 PTE[k], k>0，PTE[0] 做 block 级锁）
+
+```
+locked_pte0 = true                     // PTE[0] = LOCKED
+→ 不命中 "ctx->ptep == first_ptep"
+→ stage2_try_break_pte(ctx, mmu)       // 在 PTE[k] 上做正常 BBM
+  → 若失败: WRITE_ONCE(PTE[0], 0); return -EAGAIN
+→ CMO
+→ stage2_make_pte(ctx, new)            // PTE[k] = new valid
+→ WRITE_ONCE(PTE[0], 0)               // 释放 block 锁
+```
+
+**两条锁链同时存在**：
+- **Block 级锁**：PTE[0] = LOCKED，阻止任何 contig map/attr 在此 block 开始
+- **PTE 级锁**：PTE[k] = LOCKED（由 stage2_try_break_pte 设置），阻止其他单页 op 碰 PTE[k]
+
+#### 竞态：vs 并发 contig BBM（T1）
+
+```
+T2（我们）:  READ_ONCE(PTE[0]) → 0 → cmpxchg(PTE[0], 0, LOCKED) → 成功
+T1（contig）: cmpxchg(PTE[0], 0, LOCKED)
+             → PTE[0] = LOCKED ≠ 0 → 失败 → -EAGAIN
+T2:          BBM on PTE[k] → Make PTE[k] → WRITE_ONCE(PTE[0], 0)
+T1 重试:     READ_ONCE(PTE[0]) → 0 → cmpxchg 成功 → 正常 contig BBM
+```
+
+T1 在 T2 持有 PTE[0] 期间被阻塞在 cmpxchg 上。T2 释放后 T1 正常继续。✓
+
+#### 竞态：vs 另一单页 op 在 PTE[j]（j≠k, j≠0）
+
+```
+T2: PTE[0] = LOCKED
+T3: READ_ONCE(PTE[0]) → LOCKED → -EAGAIN（状态 1 退让）
+T2: 完成 → WRITE_ONCE(PTE[0], 0)
+T3 重试: PTE[0] = 0 → 正常进行
+```
+
+T3 被 PTE[0]=LOCKED 挡在门外，不会与 T2 在 PTE[k] 上冲突。✓
+
+#### 竞态：vs 另一单页 op 在 PTE[0] 自身
+
+```
+T2: cmpxchg(PTE[0], 0, LOCKED) → 成功
+T3: READ_ONCE(PTE[0]) → LOCKED → -EAGAIN
+T2: 完成 → WRITE_ONCE(PTE[0], 0)
+T3 重试: PTE[0] = 0 → 正常（走子情况 4a）
+```
+
+T3 退让，T2 完成释放后 T3 正常进行。✓
+
+#### 竞态：ctx->old 过时——T1 的 contig BBM 抢先完成
+
+```
+T2 walker:  ctx->old = V (valid, PTE[k] 有旧映射)
+T1 contig:  锁 PTE[0], 清 PTE[1..N-1], TLBI, 装 PTE[1..N-1]=valid+CONT,
+            装 PTE[0]=valid+CONT
+T2 此刻:    READ_ONCE(PTE[0]) → valid+CONT
+            → pte0 & CONT → -EAGAIN（状态 2 退让）
+T2 重试:    walker 重读 ctx->old = valid+CONT
+            → 走 contig 路径（若 PROT_CONT）或再次退让
+```
+
+如果 T1 还在 BBM 中（PTE[0]=LOCKED）：
+```
+T2 此刻: READ_ONCE(PTE[0]) → LOCKED → -EAGAIN（状态 1 退让）
+```
+
+无论哪种，T2 安全退让。✓
+
+#### 竞态：ctx->old 过时——T3 的单页 op 在 PTE[k] 抢先
+
+```
+T2 walker:  ctx->old = 0 (PTE[k] 空闲)
+T3 单页:    BBM on PTE[k], 安装 valid 映射（PTE[k] 现在 = valid）
+T2 此刻:    cmpxchg(PTE[0], 0, LOCKED) → 成功, locked_pte0 = true
+            stage2_try_break_pte: cmpxchg(PTE[k], 0, LOCKED)
+            → PTE[k] = valid ≠ 0 → 失败
+            → WRITE_ONCE(PTE[0], 0) // 释放 block 锁
+            → return -EAGAIN
+T2 重试:    walker 重读 ctx->old = valid
+            → needs_update 比较新旧值 → 若相同映射 return -EAGAIN
+            → 若不同则继续，PTE[0]=valid 非 CONT（状态 3）→ 正常单页 BBM ✓
+```
+
+**正确性**：✓ T2 重试后正确处理。
+
+---
+
+## 完整竞态矩阵
+
+| T1 操作 | T2（我们，单页） | PTE[0] 状态 | 结果 |
+|---------|-----------------|-------------|------|
+| contig BBM 中 | PTE[k] 进入 | LOCKED | T2 → -EAGAIN |
+| contig 准备开始 | PTE[0] 进入，cmpxchg | 0 | 只有一方赢 cmpxchg |
+| contig 准备开始 | PTE[k] 进入，cmpxchg PTE[0] | 0 | T2 锁 PTE[0] 成功 → T1 contig cmpxchg 失败 |
+| contig 已完成 | PTE[k] 进入 | valid+CONT | T2 → -EAGAIN（防御性） |
+| 单页 on PTE[0] BBM 中 | PTE[k] 进入 | LOCKED | T2 → -EAGAIN |
+| 单页 on PTE[j] (j≠0,k) | PTE[k] 进入 | LOCKED（PTE[0] 被 T2 锁） | T1 → -EAGAIN（在状态 1 退让） |
+| 无并发操作 | PTE[k] 进入，ctx->old 过时 | valid+CONT（T1 刚装完） | T2 → -EAGAIN 后重试 |
+| 无并发操作 | PTE[0] 进入 | 0 | T2 锁 PTE[0] → 跳过 BBM → make |
+
+---
+
+## 总结
+
+| PTE[0] 状态 | 行为 | 正确性 |
+|------------|------|--------|
+| LOCKED | -EAGAIN 退让 | ✓ |
+| Valid + CONT | -EAGAIN 退让 | ✓ 防御性，不会死循环 |
+| Valid 非 CONT | 正常单页 BBM | ✓ PTE[0] 不空闲，contig 不可能启动 |
+| INVALID, ctx->ptep==PTE[0] | 锁 PTE[0] + 跳过 BBM | ✓ 跳过 BBM 正确且必要 |
+| INVALID, ctx->ptep!=PTE[0] | 锁 PTE[0] + BBM PTE[k] + 释放 | ✓ 双重锁串行化所有并发操作 |
+
+### 三个具体问题的回答
+
+1. **`if (pte0 & CONT) return -EAGAIN` 为什么需要？**
+   防御性检查。正常路径（有 PROT_CONT）已被 `stage2_contig_supported` 拦截；
+   force_pte 路径依赖 attr 路径 unfold。返回 -EAGAIN 给那些路径时间完成，不会死循环。
+
+2. **valid PTE 怎么处理？**
+   Valid 非 CONT → 不需要特殊处理，contig block 不可能在此启动，正常单页 BBM 即可。
+   Valid + CONT → 退让（状态 2）。
+
+3. **跳过 BBM 导致 TLBI 缺失？**
+   不缺失。PTE[0] 被锁时值为 0（INVALID），不存在需要 flush 的 TLB entry。
+   过时 ctx->old 的情况下，清除者已做 TLBI。而且**不能**走正常 BBM——PTE[0] 已经是
+   LOCKED，cmpxchg(ctx->ptep, ctx->old, LOCKED) 必然失败导致死循环。
