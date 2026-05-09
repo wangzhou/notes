@@ -13,6 +13,14 @@
 - `first_ptep`：`PTR_ALIGN_DOWN(ctx->ptep, sizeof(kvm_pte_t) * CONT_PTES)`
 - `locked_pte0`：本线程是否成功 cmpxchg PTE[0] 为 LOCKED
 
+### 线程命名约定
+
+所有竞态分析使用以下命名：
+
+- **T2**：本线程，即正在执行 `stage2_map_walker_try_leaf` 单页路径的线程（被分析的代码）
+- **T1**：并发竞争者，可能是做 contig BBM 的线程、另一个做单页操作的线程等
+- **T3**：第三个并发线程，仅在需要三个线程的竞态场景出现
+
 ### 关键函数行为
 
 - `stage2_try_break_pte(ctx, mmu)`：
@@ -73,25 +81,73 @@ if (pte0 & KVM_PTE_LEAF_ATTR_CONT)
 ### 为什么会进入此分支？
 
 前提是 `stage2_contig_supported()` 已返回 false，即当前 fault 不带 PROT_CONT。
-但 PTE[0] 却有 CONT 位——说明存在一个完整的 contig block。单页操作不能破坏它。
+但 PTE[0] 却有 CONT 位——说明存在一个完整的 contig block。
 
-### 触发场景
+**如果没有此检查，单页路径会修改 contig block 内的一个 PTE，破坏 CONT 一致性**
+（`contig block 内 N 个 PTE 的属性必须完全一致` 是硬件约束）。
 
-1. **同一 VMA 的两 vCPU 竞态（不触发）**：vCPU1 先到安装 contig block。vCPU2 也有
-   PROT_CONT，`stage2_contig_supported` 返回 true → 走 `stage2_map_contig_leaf`，
-   不走这里。
+### 核心问题：T2 自己走不出来
 
-2. **force_pte 场景（理论上可触发，实际极少）**：dirty logging 期间 force_pte=true，
-   fault 不带 PROT_CONT。如果 contig block 还没被 wrprotect unfold，PTE[0] 仍带 CONT。
-   但实际上写保护后的写故障走 `relax_perms`（attr_walker，不是 map walker），
-   所以 map walker 碰不到此状态。**此检查是防御性的。**
+T2 返回 -EAGAIN 后，walker 重试。但 `data->attr` 来自 `user_mem_abort` 的 `prot`，
+重试不会变——上轮没有 PROT_CONT，重试还是没有。所以：
 
-### 返回 -EAGAIN 会不会死循环？
+```
+T2: pte0 = valid+CONT → -EAGAIN → retry
+T2: pte0 = valid+CONT → -EAGAIN → retry
+...（T2 自己永远解不开）
+```
 
-不会。只要 PTE[0] 的 CONT 最终被清除（由 wrprotect 或 relax_perms 的 attr 路径完成），
-walker 重试后就能继续。如果死循环了，说明 attr 路径有 bug，应该修 attr 路径而非此处。
+**解除状态 2 依赖另一个线程通过其他路径修改 PTE[0]**（attr 路径 unfold，或 unmap 路径清空）。
 
-**正确性**：✓ 防御性检查，不会死循环。
+### 何时触发：VMA 与 stage-2 的短暂不一致
+
+状态 2 的实质是：**VMA 认为这块地址应该是单页（vma_pagesize=PAGE_SIZE，不含 PROT_CONT），但 stage-2 里还残留着之前的 contig block。**
+
+不一致的根源在于 VMA 变更和 stage-2 更新之间存在 MMU notifier 窗口：
+
+```
+1. 初始状态：VMA 是 hugetlb，vma_pagesize=CONT_PTE_SIZE
+   vCPU 已 fault，stage-2 有 contig block（PTE[0..7] 全 valid+CONT）
+
+2. 用户态 madvise(MADV_DONTNEED) 部分范围：
+   → mmu_notifier_invalidate_range_start()    // KVM 做轻量处理（可能不 unmap）
+   → 修改 VMA（切分 / 缩小，vma_pagesize → PAGE_SIZE）
+   --- 窗口：VMA 已变，但 stage-2 未完 ---
+   → mmu_notifier_invalidate_range_end()       // KVM 做实际 unmap，清 contig block
+
+3. vCPU 在窗口内发生缺页 fault：
+   - user_mem_abort: 看 VMA → vma_pagesize=PAGE_SIZE，prot 不带 PROT_CONT
+   - stage-2 页表: contig block 还在
+   - map walker: pte0 & CONT → 命中状态 2，-EAGAIN
+```
+
+类似触发源：
+
+| 触发源 | VMA 变化 | stage-2 解除者 |
+|--------|----------|---------------|
+| `madvise(MADV_DONTNEED)` 部分范围 | VMA 切分 | notifier end → unmap |
+| `mprotect` 部分范围改权限 | VMA 切分 | notifier end → unmap/wrprotect |
+| THP split（khugepaged） | 大页退化为 4K | notifier end → unmap |
+| dirty logging 开启 + 过度窗口 | VMA 不变但 force_pte=true | wrprotect → attr unfold |
+
+### 为什么不是死循环？
+
+T2 之外的路径（MMU notifier 回调、wrprotect）最终会清理 contig block：
+
+```
+T2 fault:         pte0=valid+CONT → -EAGAIN（退让）
+notifier end:     unmap 清空整个 contig block（持 write_lock，排他）
+T2 再次 retry:    pte0=0 → cmpxchg PTE[0] → 正常安装单页映射
+```
+
+T2 需要等待那几条路径完成。窗口是 MMU notifier 回调的延迟，极窄（微秒量级）。
+
+### 极端情况
+
+如果 MMU notifier 回调永远不来（内核 bug），T2 会无限 -EAGAIN。但这不是这段代
+码能解决的——notifier 不来意味着 stage-2 页表本身就是脏的，任何方案都无解。
+
+**正确性**：✓ 防御性安全网。正常流程不触发；触发了由其他路径解除，不会死循环。
 
 ---
 
