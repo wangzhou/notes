@@ -123,6 +123,21 @@ struct stage2_attr_data {
 
 ## 具体逻辑设计
 
+需要考虑如上列出的所有stage2 map行为和contig bit一起工作的时候是否会有问题。
+
+kvm_pgtable_stage2_map：
+
+user_mem_abort的逻辑中会把fault的地址对齐到指定地址，walker的时候一次处理一批PTE，
+然后把处理地址跳过这一批PTE对应的地址。
+
+kvm_pgtable_stage2_unmap / kvm_pgtable_stage2_wrprotect / kvm_pgtable_stage2_mkyoung /
+kvm_pgtable_stage2_relax_perms:
+
+传入的地址没有做对齐处理，现在的问题在于：1. 这些场景下关于contig bit的支持不对，
+2. 如果初始地址没有对齐，后面跳过的地址会不对。
+
+(todo: 讨论下如何修改)
+
 ### 基础逻辑修改
 
 `user_mem_abort()`中`CONT_PTE_SHIFT`分支(`arch/arm64/kvm/mmu.c`):
