@@ -64,7 +64,7 @@ KVM Stage-2页表负责IPA(Intermediate Physical Address) → PA(PhysicalAddress
 
 3. BBM逻辑。
 
-4. 一次修改一批PTE的加锁逻辑。
+4. 锁页表逻辑。
 
 ### 基础逻辑修改
 
@@ -88,19 +88,23 @@ stage2页表操作通过walker机制遍历页表，主要入口:
 | `kvm_pgtable_stage2_destroy_range()` | `stage2_destroy_walker` | 销毁范围 | 无修改 |
 | `kvm_pgtable_stage2_split()` | `stage2_split_walker` | 拆分block | 不涉及leaf contig |
 
-其中前7个入口涉及PTE修改，`test_clear_young`使用的`stage2_age_walker`
-未处理contig PTE，直接在单个PTE上修改AF位，是当前实现的缺口。所有入口最终
-汇聚到`__kvm_pgtable_visit()`，contig block的地址跳过修复即在此处生效。
+基本的逻辑是修改页表的时候要满足如上硬件的约束。具体看就是：
+
+1. map的时候一次修改所有contig的PTE。
+2. 对于已经有contig bit的PTE，修改其中一个PTE时要把全部contig bit去掉。
+3. BBM约束。
 
 ### BBM逻辑
 
 ARM架构要求修改PTE映射时遵守BBM序列。也就是改pte的顺序应该是：
 锁页表-> invalid页表 -> TLBI -> 更新页表 -> 解锁页表。
 
-### 一次修改一批PTE的加锁逻辑
+### 锁页表逻辑
 
-注意，如上BBM流程里需要锁页表，之前的逻辑都是更新单个页表，现在要更新一批页表。
-所以，这里的逻辑是用这一批页表的第一个页表项来锁页表。
+BBM改页表要先加锁，之前都是一次修改一个PTE。现在需要对这一批PTE加锁，而且修改PTE
+的流程可能contig PTE修改和单个PTE修改流程并发，需要考虑怎么加锁互斥这些并发行为。
+
+基本的考虑是，都使用contig PTE0(多个contig PTE中的第一个PTE)
 
 ## 数据结构与常量定义
 
@@ -279,75 +283,77 @@ if (!table) {
 
 ### 总体并发建模
 
-KVM stage-2 的并发隔离不靠 PTE 嵌入锁，靠 `kvm->mmu_lock` (rwlock)。
-`KVM_PGTABLE_WALK_SHARED` 只是 walker 内部行为开关（RCU 解引用、lockless
-cmpxchg），**并不实际加锁**。
+KVM stage-2 的并发隔离靠两样东西：**`kvm->mmu_lock`（rwlock）** 保证软件 walker
+之间不冲突，**per-PTE cmpxchg（`KVM_INVALID_PTE_LOCKED`）** 保证同一条读锁路径内的
+walker 在对同一个 PTE 进行 BBM 时串行化。`KVM_PGTABLE_WALK_SHARED` 只是 walker
+内部行为开关（RCU 解引用、cmpxchg vs WRITE_ONCE），**本身不加锁**。
 
-caller 持锁分类：
+综合入口 API、触发源、持锁、SHARED 语义和 contig 并发策略的完整视图：
 
-| 持锁 | walker （部分列举） | SHARED |
-|------|---------------------|--------|
-| `read_lock` | fault handler (map / mkyoung / relax_perms) | ✅ |
-| `read_lock` | dirty log wrprotect | ✅ |
-| `read_lock` | MMU notifier (test_clear_young) | - |
-| `write_lock` | unmap / split / destroy | ❌ |
+| 入口 API | 操作 | 触发源 | walker | 持锁 | SHARED | set_pte | 并发 reader | contig 策略 |
+|----------|------|--------|--------|------|--------|---------|------------|-------------|
+| `stage2_map` | 缺页映射 | fault (`user_mem_abort`) | map_walker | `read_lock` | ✅ | cmpxchg | ✅ | contig_leaf / PTE[0]检查 |
+| `stage2_set_owner` | pKVM owner 标记 | pKVM EL2 | map_walker | exclusive | ❌ | WRITE_ONCE | ❌ | 不冲突 |
+| `stage2_relax_perms` | 放宽权限 | fault（写故障） | attr_walker | `read_lock` | ✅ | cmpxchg | ✅ | contig_leaf / PTE[0]检查 |
+| `stage2_mkyoung` | 设 AF | fault（AF 故障） | attr_walker | `read_lock` | ✅ | cmpxchg | ✅ | contig_leaf / PTE[0]检查 |
+| `stage2_wrprotect` | 写保护 | 系统调用（dirty log） | attr_walker | `read_lock` | ❌ | WRITE_ONCE | ✅¹ | contig_leaf / PTE[0]检查 |
+| `stage2_test_clear_young` | 清 AF + 老化 | 系统调用（MMU notifier） | age_walker | `read_lock` | ❌ | WRITE_ONCE | ✅¹ | **未处理**² |
+| `stage2_unmap` | 取消映射 | 系统调用 / pKVM | unmap_walker | `write_lock` | ❌ | WRITE_ONCE | ❌³ | contig unmap |
 
-SHARED walker 可以互相并发，所以任何一条 SHARED 路径对 contig block 的修改
-都必须考虑其他 SHARED walker 同时进入同一 block 内的任一 PTE。
+> ¹ wrprotect 和 test_clear_young 持有 `read_lock` 但无 SHARED flag，使用
+> WRITE_ONCE 直写而非 cmpxchg，因此不受 per-PTE LOCKED 保护。wrprotect 通过
+> attr_walker 的 PTE[0] 检查解决此问题；test_clear_young **未适配** contig（见下注 ²）。
+>
+> ² `stage2_age_walker` 直接修改单个 PTE 的 AF 位，不检查 CONT，会破坏 contig block
+> 的属性一致性，是当前实现的缺口。
+>
+> ³ `write_lock` 是排他锁，持有期间不存在任何其他软件 walker，无需 cmpxchg 或
+> PTE[0] 检查。
 
-walker 触发源分类:
-
-所有走 leaf 的 SHARED walker 都是 fault handler 触发（`user_mem_abort` /
-`gmem_abort`），持 `read_lock(&kvm->mmu_lock)`。但存在非 SHARED 但同样
-持读锁的路径——**系统调用触发的 wrprotect**。它不走 cmpxchg，用 WRITE_ONCE
-直写，同样会与 contig BBM 并发。
-
-汇总：
-
-| 入口 | 触发源 | SHARED | 持锁 |
-|------|--------|--------|------|
-| `stage2_map_walker`（map） | fault（`user_mem_abort`） | ✅ | `read_lock` |
-| `stage2_map_walker`（set_owner） | pKVM EL2 | ❌ | exclusive |
-| `stage2_attr_walker`（relax_perms） | fault（`user_mem_abort` 写故障） | ✅ | `read_lock` |
-| `stage2_attr_walker`（mkyoung） | fault（`user_mem_abort` AF 故障） | ✅ | `read_lock` |
-| `stage2_attr_walker`（**wrprotect**） | **系统调用**（dirty logging） | ❌ | `read_lock` |
-| `stage2_attr_walker`（pKVM） | pKVM EL2 | ❌ | exclusive |
-| `stage2_age_walker`（test_clear_young） | **系统调用**（MMU notifier） | ❌ | `read_lock` |
-| `stage2_unmap_walker` | 系统调用 / pKVM | ❌ | `write_lock` |
-
-**wrprotect 调用链**（系统调用触发，持读锁但无 SHARED flag）：
+读锁下三类并发的实际含义：
 
 ```
-QEMU ioctl(KVM_SET_USER_MEMORY_REGION2)  // 开启 dirty logging
+read_lock(&kvm->mmu_lock)
+  ├─ fault (map/relax_perms/mkyoung):  SHARED, cmpxchg  → 互相并发，走 PTE[0] 互斥
+  ├─ wrprotect:                       非SHARED, WRITE_ONCE → 与 fault 并发，走 PTE[0] 互斥
+  └─ test_clear_young:                非SHARED, WRITE_ONCE → 与上两类并发，未处理 contig
+
+write_lock(&kvm->mmu_lock)
+  └─ unmap:                           非SHARED, WRITE_ONCE → 排他，无并发
+```
+
+**wrprotect 调用链**：
+
+```
+QEMU ioctl(KVM_SET_USER_MEMORY_REGION2)
   → kvm_vm_ioctl_set_memory_region()
     → kvm_mmu_wp_memory_region()
       → read_lock(&kvm->mmu_lock)
       → stage2_apply_range_resched(..., kvm_pgtable_stage2_wrprotect)
-        → kvm_pgtable_stage2_wrprotect()  // flags = IGNORE_EAGAIN, 无 SHARED
+        → kvm_pgtable_stage2_wrprotect()  // IGNORE_EAGAIN, 无 SHARED
           → stage2_update_leaf_attrs()
             → stage2_attr_walker()        // 非 SHARED
-              → stage2_try_set_pte()      // WRITE_ONCE, 非 cmpxchg
+              → stage2_try_set_pte()      // WRITE_ONCE
       → read_unlock(&kvm->mmu_lock)
 ```
 
-**test_clear_young 调用链**（MMU notifier 触发）：
+**test_clear_young 调用链**：
 
 ```
-ksm / khugepaged / madvise (LRU scanning)
+ksm / khugepaged / madvise
   → mmu_notifier_clear_young()
     → kvm_mmu_notifier_clear_young()
       → read_lock(&kvm->mmu_lock)
-      → kvm_pgtable_stage2_test_clear_young()  // flags = LEAF, 无 SHARED
+      → kvm_pgtable_stage2_test_clear_young()  // LEAF, 无 SHARED
         → stage2_age_walker()                  // 直接改单 PTE 的 AF
       → read_unlock(&kvm->mmu_lock)
 ```
 
-**wrprotect 为何需要 PTE[0] 检查**：非 SHARED 意味着 `stage2_try_set_pte` 用
-WRITE_ONCE 直写，不做 cmpxchg。如果 contig BBM 同时持有 PTE[0]=LOCKED，
-wrprotect 可以盲写 PTE[k]——contig Make 阶段会把它覆盖掉，丢失 wrprotect
-的写保护。因此 attr_walker 的 PTE[0] 检查**不能**加 `kvm_pgtable_walk_shared`
-门——必须对所有读锁调用生效。map 路径不需要放宽：非 SHARED map 只有 pKVM
-set_owner，跑 exclusive 锁。
+**为什么 attr_walker 的 PTE[0] 检查不加 `walk_shared` 门**：wrprotect 持有
+`read_lock` 但不设 SHARED，`stage2_try_set_pte` 用 WRITE_ONCE 直写，不做 cmpxchg。
+如果 contig BBM 同时持有 PTE[0]=LOCKED，wrprotect 可以盲写 PTE[k]——contig Make
+阶段会把它覆盖掉。因此 PTE[0] 检查必须对所有读锁调用生效，不能限定 SHARED。
+map 路径不需要放宽：非 SHARED map 只有 pKVM set_owner，跑 exclusive 锁。
 
 
 ### unmap路径无并发问题
@@ -355,26 +361,12 @@ set_owner，跑 exclusive 锁。
 contig BBM在unmap路径上不会与其他walker race，原因是unmap的调用方必须持有
 `kvm->mmu_lock`写锁，rwlock语义保证写锁排他。
 
-**SHARED flag的本质**：`KVM_PGTABLE_WALK_SHARED`只是walker内部行为开关（决定
-是否走RCU解引用、lockless cmpxchg等），**并不实际加锁**。真正的并发隔离靠
-caller持有的`kvm->mmu_lock`（rwlock）。
-
 **unmap caller的锁约束**：
 
 - `__unmap_stage2_range`显式`lockdep_assert_held_write(&kvm->mmu_lock)`
 - 所有进入路径（`kvm_arch_flush_shadow_range`、`stage2_unmap_vm`、
   `kvm_mmu_wp_memory_region`关联调用等）都在`write_lock(&kvm->mmu_lock)`下
 - pKVM EL2路径走`host_lock_component`，同样exclusive
-
-**互斥矩阵**：
-
-| 其他caller | 持锁 | 与unmap并发 |
-|-----------|------|------------|
-| fault handler (map/mkyoung/relax_perms) | `read_lock` + WALK_SHARED | ❌ 被写锁阻塞 |
-| dirty log wp (`stage2_wrprotect`) | `read_lock` + WALK_SHARED | ❌ |
-| 另一个unmap | `write_lock` | ❌ rwlock串行 |
-| split / destroy | `write_lock` | ❌ |
-| MMU notifier (age / test_clear_young) | `read_lock` | ❌ |
 
 写锁持有期间任何reader拿不到锁，因此**同一pgt上不会有第二个软件walker**与
 unmap并发，与SHARED flag无关。
