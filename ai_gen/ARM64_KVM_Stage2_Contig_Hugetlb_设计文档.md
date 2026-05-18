@@ -410,97 +410,59 @@ T1 固定为 contig 块级操作（`stage2_map_contig_leaf` / `stage2_attr_conti
 T2 走 `stage2_map_walker_try_leaf`（read_lock, SHARED），在 PTE[k] 上做完整 BBM
 （`stage2_try_break_pte` → cmpxchg → TLBI → `stage2_make_pte`）。
 
-触发条件：vma_pagesize 不一致——T1 contig（PROT_CONT），T2 单页（无 PROT_CONT）。
-这发生在 VMA 变更的过渡窗口，具体子场景：
+触发条件：T1 和 T2 同为 `user_mem_abort` 触发的 map 路径，但对同一 contig block
+候选区域得出不同的 `vma_pagesize`——T1 = CONT_PTE_SIZE（走 contig），T2 = PAGE_SIZE
+（走单页）。
 
-**子场景 1a：dirty logging 结束过渡**
+**实际上此场景极难触发**。`vma_pagesize` 由 `user_mem_abort` 中的
+`force_pte ? PAGE_SHIFT : get_vma_page_shift(vma, hva)` 决定（`mmu.c:1698-1701`）。
+其中 `force_pte = memslot_is_logging(memslot)`，memslot 在 SRCU 保护下稳定，
+同一 memslot 的 logging 标志对所有 vCPU 一致。`get_vma_page_shift` 基于 VMA 属性，
+同一 VMA 内通过 `mmap_read_lock` 读到的值也一致。VMA 变更走 MMU notifier +
+`mmu_invalidate_seq` 机制，fault 路径要么看到旧 VMA（走 contig），要么在
+`mmu_invalidate_retry` 后重试。因此正常 fault 路径下，同一 contig block 范围内
+所有 vCPU 的 `vma_pagesize` 一致，场景 1 **难以触发**。
 
-```
-背景：dirty logging 期间 force_pte=true，所有 fault 走单页 4K 映射。dirty logging
-结束后 force_pte → false，CONT_PTE_SIZE 映射恢复。但 force_pte 的变更在 vCPU 之间
-存在传播窗口，部分 vCPU 可能仍读到 force_pte=true。
+以下在各个子场景中分别分析其可触发性。
 
-初始状态：dirty logging 刚关闭。contig block 候选区域 [A, A+CONT_PTE_SIZE) 内有
-N 个独立 4K 映射（wrprotect unfold 残留：PTE[0..N-1] = valid 非 CONT, RO）。
-
-vCPU0（已感知新状态）                        vCPU1（仍感知旧状态）
-force_pte = false                           force_pte = true
-vma_pagesize = CONT_PTE_SIZE                vma_pagesize = PAGE_SIZE
-prot 带 PROT_CONT                           prot 无 PROT_CONT
-read_lock(&kvm->mmu_lock)                    read_lock(&kvm->mmu_lock)  ← 共享
-
-→ stage2_map_contig_leaf():                  → stage2_map_walker_try_leaf():
-  ctx->old = READ_ONCE(PTE[0])                 检查 PTE[0]: valid 非 CONT
-    = valid 非 CONT                              → locked_pte0 = false
-  cmpxchg(PTE[0], old, LOCKED) → OK
-  PTE[0] = LOCKED                                 stage2_try_break_pte(PTE[k]):
-                                                     cmpxchg(PTE[k], Vk, LOCKED)
-  kvm_clear_pte(PTE[1..N-1])              ←──────── 竞态！
-    for i = 1; i < CONT_PTES; i++:
-      WRITE_ONCE(PTE[i], 0)
-```
-
-两个子情况：
-
-**1a-1：T1 的 kvm_clear_pte(PTE[k]) 先到**
-```
-T1: WRITE_ONCE(PTE[k], 0)            // PTE[k] = 0
-T2: cmpxchg(PTE[k], Vk, LOCKED)      // *PTE[k]=0 ≠ Vk → 失败 → -EAGAIN ✓
-```
-T2 退让，安全。
-
-**1a-2：T2 的 cmpxchg(PTE[k]) 先到（才是问题）**
-```
-T2: cmpxchg(PTE[k], Vk, LOCKED)      // OK，PTE[k] = LOCKED
-T1: WRITE_ONCE(PTE[k], 0)            // 覆盖 LOCKED！PTE[k] = 0
-T1: TLBI block
-T1: smp_store_release(PTE[k], contig_new)    // PTE[k] = contig_new
-T2: smp_store_release(PTE[k], single_new)    // PTE[k] = single_new（覆盖！）
-```
-
-双向丢失更新：T1 的 contig PTE 被 T2 的单页映射覆盖（硬件 sees 不一致），T2 的
-get_page refcount 泄漏。这是当前代码**已知的未修复竞态**（状态 3b）。
-
-**子场景 1b：madvise/mprotect 导致的 VMA 切分**
+**子场景 1a：dirty logging 结束过渡——不可触发**
 
 ```
-初始：hugetlb VMA 覆盖 [A, A+2M)，contig block 完整。
+背景：dirty logging 期间 force_pte=true，所有 fault 走单页。dirty logging 关闭后
+force_pte → false，contig 映射恢复。
 
-用户态：madvise(MADV_DONTNEED) / mprotect 部分范围
-  → mmu_notifier_invalidate_range_start()
-    → write_lock → kvm_mmu_invalidate_begin()  // 递增 mmu_invalidate_seq
-    → write_unlock
-  → 内核切分 VMA，vma_pagesize 可能变
+关键：force_pte = memslot_is_logging(memslot)。memslot 的 logging 标志受
+slots_lock 保护，变更后对所有 vCPU 立即可见。不存在"vCPU0 看到新值、vCPU1 看到
+旧值"的传播窗口。
 
-    ┌── 窗口 ──────────────────────────────────────┐
-    │ vCPU fault 地址位于切分区域                     │
-    │   新 VMA → vma_pagesize != CONT_PTE_SIZE      │
-    │   但 stage-2 中 contig block 还在               │
-    │                                               │
-    │   → map_walker: ctx->old = valid+CONT         │
-    │   → stage2_contig_supported() = false          │
-    │     检查 PTE[0]: valid + CONT                  │
-    │     → -EAGAIN（PTE[0] 检查拦截）               │
-    │   不会进入单页 BBM                             │
-    └───────────────────────────────────────────────┘
+初始：dirty logging 关闭后，PTE[0..N-1] 是独立 4K 映射（wrprotect unfold 残留）。
 
-  → mmu_notifier_invalidate_range_end()
-    → write_lock → unmap/wrprotect → write_unlock
-      递增 mmu_invalidate_seq
-```
+vCPU0 和 vCPU1 同时 fault：force_pte 均为 false，vma_pagesize 均为 CONT_PTE_SIZE，
+prot 均带 PROT_CONT → 两者都走 stage2_map_contig_leaf → PTE[0] cmpxchg 串行化。
+不会出现一个 contig 一个单页。
 
-此窗口内，vCPU fault 在到达 PTE[k] 操作之前就被 PTE[0]=valid+CONT 拦截。即使
-PTE[0] 检查不存在，后续 mmu_invalidate_seq 重试也能兜底（end 之后 seq 变了，
-fault path 重试）。
+结论：场景 1a 在当前代码中不可触发。force_pte 没有传播窗口。^
 
-但如果 **PTE[0] 不是 CONT**（例如之前已被 partial unfold 过），则 PTE[0] =
-valid 非 CONT，T2 在 PTE[k] 上不会退让——回到子场景 1a 的竞态模式。
+^ 注：即使考虑 memslot 变更的 RCU/SRCU 保护，`memslot_is_logging` 读取的值在
+`user_mem_abort` 调用期间对调用者是一致的。
 
-**子场景 1c：THP split（khugepaged）**
+**子场景 1b：VMA 切分窗口（madvise/mprotect/THP split）**
 
-khugepaged 将大页拆分为 4K 页时，通过 MMU notifier 通知 KVM。时序与 1b 相同：
-notifier start（标记）→ 修改页表元数据（vma_pagesize 可能变）→ notifier end
-（实际 unmap/wrprotect）。窗口内的 vCPU fault 分析与 1b 相同。
+madvise/mprotect/khugepaged 切分 VMA 走 MMU notifier：
+`start → VMA 切分 → end（unmap/wrprotect）`。
+
+窗口内有两层防御：
+1. **PTE[0] 检查**：若 contig block 还在 → `PTE[0]=valid+CONT` → T2 在 PTE[0]
+   检查处 `-EAGAIN` 退让
+2. **mmu_invalidate_seq**：notifier end 后 seq 变化 → fault path 在
+   `mmu_invalidate_retry` 后重试，重新读 VMA
+
+如果 PTE[0] 已被 unfold 为 valid 非 CONT，PTE[0] 检查不拦截。但此时 contig block
+已不存在——所有 PTE 都是独立 4K 映射。T1 的 contig 升级需要 PROT_CONT，T2 的单页
+map 不需要——这要求 vma_pagesize 不一致。而 vma_pagesize 不一致只能来自 VMA 切分
+窗口，但该窗口内 mmu_invalidate_seq 已变，fault path 必然重试。
+
+结论：场景 1b/1c 在 PTE[0] 检查 + mmu_invalidate_seq 双重保护下，竞态窗口不可达。
 
 **（四）场景 2：contig BBM vs attr mkyoung / relax_perms**
 
@@ -600,25 +562,22 @@ PTE[0] 自身的 per-PTE 锁天然串行化两个 contig 操作。
 
 **（七）竞态汇总**
 
-| 场景 | T1 | T2 路径 | 会否冲突 | 后果 |
-|------|----|---------|---------|------|
-| 1a-1 | contig BBM | map 单页（clear 先） | ❌ T2 cmpxchg 失败 | — |
-| 1a-2 | contig BBM | map 单页（cmpxchg 先） | ✅ **残留竞态** | 双向丢失更新 |
-| 1b | contig BBM | map 单页（CONT 还在） | ❌ PTE[0] CONT 拦截 | — |
-| 2a-1 | contig BBM | mkyoung（clear 先） | ❌ T2 cmpxchg 失败 | — |
-| 2a-2 | contig BBM | mkyoung（cmpxchg 先） | ✅ AF 丢失 | 多一次 fault，可自愈 |
-| 2b-1 | contig BBM | relax_perms（clear 先） | ❌ T2 cmpxchg 失败 | — |
-| 2b-2 | contig BBM | relax_perms（cmpxchg 先） | ✅ 权限丢失 | 多一次 fault，可自愈 |
-| 3 | contig BBM | age_walker lockless | ✅ 硬件约束破坏 | test_clear_young 未适配 |
-| 4 | contig BBM | contig BBM | ❌ PTE[0] 串行化 | — |
-| — | contig BBM | wrprotect / unmap | ❌ write_lock 排他 | — |
+| 场景 | T1 | T2 路径 | 可触发？ | 冲突？ | 后果 |
+|------|----|---------|---------|-------|------|
+| 1a | contig BBM | map 单页（force_pte 窗口） | **否** | — | force_pte 无传播窗口 |
+| 1b | contig BBM | map 单页（VMA 切分） | **否** | — | PTE[0] 检查 + seq 双重防御 |
+| 2a | contig BBM | mkyoung | **是** | cmpxchg 竞态 | AF 丢失，多一次 fault，可自愈 |
+| 2b | contig BBM | relax_perms | **是** | cmpxchg 竞态 | 权限丢失，多一次 fault，可自愈 |
+| 3 | contig BBM | age_walker lockless | **是** | WRITE_ONCE 竞态 | 硬件约束破坏，独立问题 |
+| 4 | contig BBM | contig BBM | **是** | ❌ PTE[0] 串行化 | — |
+| — | contig BBM | wrprotect / unmap | — | ❌ write_lock 排他 | — |
 
-**核心问题**：场景 1a-2（状态 3b）是唯一可导致功能性错误的残留竞态——双向丢失更新，
-破坏映射一致性。场景 2a-2/2b-2 的 AF/权限丢失可自愈。场景 3 属于 age_walker
-未适配 contig 的独立问题，不是 per-PTE 锁缺口导致的。
-
-**核心思想**：contig BBM 已经在 PTE[0] 上持有 LOCKED。让**单页路径也通过 PTE[0]
-判断和加锁**，两个路径争同一个 PTE——PTE[0]——天然串行化。
+**结论**：
+- 真正可触发的竞态是场景 2（contig BBM vs mkyoung/relax_perms）和场景 3（age_walker）。
+- 场景 2 的后果可自愈（AF/权限丢失触发额外 fault 即可恢复），不影响正确性。
+- 场景 3 是 age_walker 未适配 contig 的独立问题。
+- 场景 1（map vs map）在当前同步机制下不可触发——vma_pagesize 在同一 contig block
+  范围内对所有 vCPU 一致。状态 3b 的竞态时序虽然存在，但触发条件在当前代码中不可达。
 
 涉及四处修改，均在 `arch/arm64/kvm/hyp/pgtable.c`。
 
