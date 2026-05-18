@@ -344,8 +344,7 @@ T2: 同时在 PTE[k] 上做单页操作（map，走 SHARED walk）
     // T2 以为拿到了 PTE[k] 的 BBM 锁，install 新映射
 ```
 
-T1 的 Make 阶段会把 T2 刚装的映射覆盖掉，**丢失更新**。这个 race 在原 contig
-实现里就存在，不是 partial range 修复引入的。
+T1 的 Make 阶段会把 T2 刚装的映射覆盖掉，**丢失更新**。
 
 race 的双向破坏：
 
@@ -368,7 +367,7 @@ race 的双向破坏：
 T2 在什么情况下会走单页路径而不走 contig 路径？
 
 正常情况下，同一 VMA 内所有 vcpu 的 fault 都会算出相同的 `vma_pagesize`（在
-`user_mem_abort` 中基于 VMA 属性决定，不依赖 vcpu）。如果 `vma_pagesize==
+`user_mem_abort` 中基于 VMA 属性决定，不依赖 vcpu）。如果 `vma_pagesize ==
 CONT_PTE_SIZE`，则所有 fault 都请求 contig，map walker 都会进
 `stage2_map_contig_leaf`，两个 contig walker 在 PTE[0] 上 cmpxchg 串行化，
 不会在 PTE[k] 上抢。同样，attr 路径上 attr_walker 看到 CONT 位也走 contig
