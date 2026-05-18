@@ -338,24 +338,6 @@ map 路径不需要放宽：非 SHARED map 只有 pKVM set_owner，跑 exclusive
 contig BBM在unmap路径上不会与其他walker race，原因是unmap的调用方必须持有
 `kvm->mmu_lock`写锁，rwlock语义保证写锁排他。
 
-**unmap caller的锁约束**：
-
-- `__unmap_stage2_range`显式`lockdep_assert_held_write(&kvm->mmu_lock)`
-- 所有进入路径（`kvm_arch_flush_shadow_range`、`stage2_unmap_vm`、
-  `kvm_mmu_wp_memory_region`关联调用等）都在`write_lock(&kvm->mmu_lock)`下
-- pKVM EL2路径走`host_lock_component`，同样exclusive
-
-写锁持有期间任何reader拿不到锁，因此**同一pgt上不会有第二个软件walker**与
-unmap并发，与SHARED flag无关。
-
-**HW page table walker的安全性**：其他vCPU的guest执行仍在硬件层walk stage-2，
-但由BBM序列（clear所有N个PTE → TLBI整个block → put_page）保证：TLBI之后HW
-看不到旧entry，put_page在TLBI之后执行不会出现refcount与映射不一致。
-
-结论：unmap路径上的contig BBM不需要per-PTE锁，原`stage2_unmap_put_pte`直接
-写0的设计在写锁保护下是安全的。我们之前为attr路径讨论的race（PTE[k]清0
-后被并发SHARED walker抢走）在unmap这里不存在。
-
 #### contig BBM的per-PTE 锁分析
 
 问题：当前 contig BBM 只对 `PTE[0]` 做 `cmpxchg → LOCKED` 加锁，
