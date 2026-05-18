@@ -1,9 +1,9 @@
 ARM64 KVM Stage-2 Contiguous Hugetlb 支持
 ===========================================
 
--v0.1 2026.05.09 Sherlock init
--v0.2 2026.05.13 Sherlock partial range + unmap analysis
--v0.4 2026.05.18 Sherlock 修正锁文档：wrprotect/test_clear_young为write_lock（非read_lock），map/relax_perms恢复为read_lock（kvm_fault_lock）
+- v0.1 2026.05.09 Sherlock init
+- v0.2 2026.05.13 Sherlock partial range + unmap analysis
+- v0.3 2026.05.18 Sherlock 修正锁文档：wrprotect/test_clear_young为write_lock（非read_lock），map/relax_perms恢复为read_lock（kvm_fault_lock）
 
 简介：分析ARM64 KVM Stage-2对contiguous PTE的软件支持逻辑。
 
