@@ -5,6 +5,7 @@ ARM64 KVM Stage-2 Contiguous Hugetlb 支持
 - v0.2 2026.05.13 Sherlock partial range + unmap analysis
 - v0.3 2026.05.18 Sherlock 修正锁文档：wrprotect/test_clear_young为write_lock（非read_lock），map/relax_perms恢复为read_lock（kvm_fault_lock）
 - v0.4 2026.05.19 Sherlock 重写5.4.3.1：确认vma_pagesize不一致的唯一来源是force_pte（SRCU窗口），mprotect/madvise/THP不改变hugetlb VMA类型
+- v0.5 2026.05.19 Sherlock 精简第三章，场景1a/1b合并重写；修正mprotect/madvise分析：虽不改VMA类型，但间接触发unfold制造PTE[0]=valid非CONT前置条件；修正竞态汇总表
 
 简介：分析ARM64 KVM Stage-2对contiguous PTE的软件支持逻辑。
 
@@ -446,8 +447,9 @@ write_lock 排他，fault 路径的 read_lock 全部挡在门外。等 write_unl
 但这不代表这些路径完全安全。mprotect/madvise 会间接触发 MMU notifier，KVM 回调中
 可能对 contig block 做 partial unmap/wrprotect——unfold 操作会把 PTE[0] 从
 valid+CONT 变为 valid 非 CONT。此后的并发 fault 如果存在 vma_pagesize 分歧（如
-`force_pte` 差异），即可触发状态 3b 竞态。关键是 mprotect/madvise 制造了 PTE[0] =
-valid 非 CONT 的**前置条件**，而 `force_pte` 分歧（不管来源是什么）利用了这个条件。
+`force_pte` 差异），即可触发 contig 升级与单页 BBM 在 PTE[k] 上的竞态（见 (四)）。
+关键是 mprotect/madvise 制造了 PTE[0] = valid 非 CONT 的**前置条件**，而
+`force_pte` 分歧（不管来源是什么）利用了这个条件。
 
 **（四）场景 1：contig BBM vs map 单页 —— 核心竞态**
 
@@ -520,15 +522,11 @@ T1: stage2_map_contig_leaf()            T2: stage2_map_walker_try_leaf()
   覆盖 LOCKED → T1 `smp_store_release(PTE[k], contig_new)` 覆盖 T2 安装 →
   **T2 映射丢失，refcount 泄漏**。即状态 3b。
 
-**为什么原来没问题**：原来 force_pte 差异导致跨层级分歧——老 reader 走 PTE 级（4K），
-新 reader 走 PMD 级（2M block）。两者操作不同 entry，无竞争。Contig 首次将批量 PTE
-操作（裸 WRITE_ONCE）与单 PTE 操作（cmpxchg）放在同一层级。
-
-**vma_pagesize 分歧**：mprotect/madvise/THP 不改变 hugetlb VMA 类型，不会直接导致
-`get_vma_page_shift` 分歧。vma_pagesize 分歧的已知机制是 `force_pte`（memslot
-logging flag）的 SRCU 窗口，即 1a 分析。但 mprotect/madvise 间接触发的 MMU
-notifier（partial unmap/wrprotect）会 unfold contig block，制造 PTE[0] = valid
-非 CONT 的前置条件——这是状态 3b 竞态的必要条件之一，见 (三) 节分析。
+**vma_pagesize 分歧**：`force_pte`（memslot logging flag）的 SRCU 窗口是已知的
+vma_pagesize 分歧机制，详见 (三) 节。mprotect/madvise 间接触发 MMU notifier
+（partial unmap/wrprotect）unfold contig block，制造 PTE[0] = valid 非 CONT
+的前置条件，见 (三) 节分析。contig 之前无同类问题——force_pte 差异导致的是跨层级
+分歧（PTE 级 vs PMD 级），不在同一 entry 竞争。
 
 **结论**：场景 1a（dirty logging SRCU 窗口）是可确认的触发路径。测试表明正常起虚机
 （无 logging 开关）时 WARN 概率触发，说明存在额外触发路径，需继续排查。修复见
@@ -646,7 +644,7 @@ PTE[0] 自身的 per-PTE 锁天然串行化两个 contig 操作。
 | 场景 | T1 | T2 路径 | 可触发？ | 冲突？ | 后果 |
 |------|----|---------|---------|-------|------|
 | 1a | contig BBM | map 单页（logging 关闭 SRCU 窗口） | **是（低概率）** | cmpxchg 竞态 | 双向丢失更新（状态 3b） |
-| 1b | contig BBM | map 单页（mprotect/madvise/THP） | **否** | — | hugetlb VMA 不被拆分，vma_pagesize 不变，所有 fault 走 contig |
+| 1b | contig BBM | map 单页（mprotect/madvise 间接触发 unfold + force_pte 分歧） | **待确认** | — | 不改 VMA 类型，但制造 PTE[0]=valid 非 CONT 前置条件，见 (三) |
 | 2a | contig BBM | mkyoung | **是** | cmpxchg 竞态 | AF 丢失，多一次 fault，可自愈 |
 | 2b | contig BBM | relax_perms | **是** | cmpxchg 竞态 | 权限丢失，多一次 fault，可自愈 |
 | 3 | contig BBM | age_walker lockless | **否（已修复）** | — | 编译时互斥，lockless 时 contig 禁用 |
@@ -659,7 +657,9 @@ PTE[0] 自身的 per-PTE 锁天然串行化两个 contig 操作。
 - 场景 2（contig BBM vs mkyoung/relax_perms）可触发，后果可自愈
   （AF/权限丢失触发额外 fault 即可恢复），不影响正确性。
 - 场景 3（age_walker）已通过 contig 与 `CONFIG_KVM_MMU_LOCKLESS_AGING` 编译时互斥解决。
-- 场景 1b（VMA 切分）在 PTE[0] 检查 + mmu_invalidate_seq 双重保护下不可达。
+- 场景 1b（mprotect/madvise）：不改 VMA 类型，但间接触发 MMU notifier unfold，
+  制造 PTE[0]=valid 非 CONT 前置条件；正常起虚机时 WARN 概率触发表明存在额外
+  触发路径，需继续排查。
 
 涉及四处修改，均在 `arch/arm64/kvm/hyp/pgtable.c`。
 
