@@ -439,11 +439,15 @@ write_lock 排他，fault 路径的 read_lock 全部挡在门外。等 write_unl
 同一条 entry 上的竞争。contig 是第一次把批量 PTE 操作（`kvm_clear_pte` 裸 WRITE_ONCE）
 和单 PTE 操作（`cmpxchg`）放在了同一层级竞争。
 
-**为什么 mprotect/madvise/THP 不会产生 vma_pagesize 不一致**：三者都不改变 hugetlb
-VMA 的类型——mprotect 只改权限，madvise 只释放页但不改 VMA 属性，THP 是独立子系统
-与 hugetlbfs 无交集。所有 fault 都在同一 hugetlb VMA 上，`get_vma_page_shift` 一致
-返回 `CONT_PTE_SIZE`，都走 contig 路径，PTE[0] cmpxchg 串行化。vma_pagesize 不一致
-的**唯一来源**是 `force_pte`（memslot logging flag），不是 VMA 变化。
+**mprotect/madvise/THP 与 vma_pagesize**：三者都不改变 hugetlb VMA 类型——mprotect
+只改权限，madvise 只释放页，THP 与 hugetlbfs 无交集。单论 `get_vma_page_shift` 的
+返回值，所有 vCPU 一致为 `CONT_PTE_SIZE`，不存在分歧。
+
+但这不代表这些路径完全安全。mprotect/madvise 会间接触发 MMU notifier，KVM 回调中
+可能对 contig block 做 partial unmap/wrprotect——unfold 操作会把 PTE[0] 从
+valid+CONT 变为 valid 非 CONT。此后的并发 fault 如果存在 vma_pagesize 分歧（如
+`force_pte` 差异），即可触发状态 3b 竞态。关键是 mprotect/madvise 制造了 PTE[0] =
+valid 非 CONT 的**前置条件**，而 `force_pte` 分歧（不管来源是什么）利用了这个条件。
 
 **（四）场景 1：contig BBM vs map 单页 —— 核心竞态**
 
@@ -520,12 +524,15 @@ T1: stage2_map_contig_leaf()            T2: stage2_map_walker_try_leaf()
 新 reader 走 PMD 级（2M block）。两者操作不同 entry，无竞争。Contig 首次将批量 PTE
 操作（裸 WRITE_ONCE）与单 PTE 操作（cmpxchg）放在同一层级。
 
-**不受影响的路径**：mprotect/madvise/THP 不改变 hugetlb VMA 类型。同一 VMA 上所有
-fault 一致返回 `CONT_PTE_SIZE`，都走 contig 路径，PTE[0] cmpxchg 天然串行化。
-vma_pagesize 不一致的**唯一来源**是 `force_pte`（memslot logging flag）。
+**vma_pagesize 分歧**：mprotect/madvise/THP 不改变 hugetlb VMA 类型，不会直接导致
+`get_vma_page_shift` 分歧。vma_pagesize 分歧的已知机制是 `force_pte`（memslot
+logging flag）的 SRCU 窗口，即 1a 分析。但 mprotect/madvise 间接触发的 MMU
+notifier（partial unmap/wrprotect）会 unfold contig block，制造 PTE[0] = valid
+非 CONT 的前置条件——这是状态 3b 竞态的必要条件之一，见 (三) 节分析。
 
-**结论**：场景 1a 是 contig BBM per-PTE 锁缺口的唯一可触发真实路径，可致丢失更新。
-修复见 5.4.3.2。
+**结论**：场景 1a（dirty logging SRCU 窗口）是可确认的触发路径。测试表明正常起虚机
+（无 logging 开关）时 WARN 概率触发，说明存在额外触发路径，需继续排查。修复见
+5.4.3.2。
 
 **（五）场景 2：contig BBM vs attr mkyoung / relax_perms**
 
