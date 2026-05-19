@@ -169,6 +169,7 @@ __kvm_pgtable_walk
                     /*
                      * 这个页表项是block、page或者是空的。注意，不管直接page map
                      * 还是创建table，下面都会把这个pte重新load出来做处理。
+                     */
                 +-> ret = kvm_pgtable_visitor_cb(data, &ctx, KVM_PGTABLE_WALK_LEAF)
                         ...
                     +-> stage2_map_walk_leaf

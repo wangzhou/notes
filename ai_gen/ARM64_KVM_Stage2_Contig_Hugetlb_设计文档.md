@@ -786,4 +786,61 @@ ksm / khugepaged / madvise
 
 注：当 CONFIG_KVM_MMU_LOCKLESS_AGING=y 时，KVM_MMU_LOCK 被省略，走 lockless 路径。
 ```
-https://wangzhou.github.io/arm64-KVM-Stage2页表映射流程分析/
+
+## 8. Walker Reload 竞态与修复
+
+### 问题
+
+`__kvm_pgtable_visit` 在 leaf callback 返回后会 reload PTE 值，用于判断地址前进
+`PAGE_SIZE` 还是 `CONT_PTE_SIZE`：
+
+```c
+// capture before callback
+bool is_old_contig = ctx.old & CONT;
+
+// ... callback (e.g. stage2_map_contig_leaf) ...
+
+// reload after callback
+ctx.old = READ_ONCE(*ptep);
+
+if (ctx.old & CONT || is_old_contig)   // 前进 CONT_PTE_SIZE
+else                                    // 前进 PAGE_SIZE
+```
+
+问题：contig map 首次映射时原始 PTE 为 0（`is_old_contig = false`）。contig BBM
+返回后，reload 的瞬间 PTE[0] 可能被**另一个 vCPU 的 contig BBM** 锁住（`LOCKED`）。
+`LOCKED` 不含 `CONT` 位，`is_old_contig` 也为 false，导致前进 `PAGE_SIZE` 而非
+`CONT_PTE_SIZE`。Walker 错误进入 PTE[1]，再次执行 `stage2_map_contig_leaf` 锁
+PTE[1]，而另一个 vCPU 的 contig BBM（锁 PTE[0]）在 Break 循环中碰到 PTE[1]=LOCKED，
+触发 WARN。
+
+```
+vCPU0: contig BBM at PTE[0]            vCPU1: contig BBM at PTE[0]
+  smp_store_release(PTE[0], CONT)
+  return to __kvm_pgtable_visit
+                                        ctx->old = READ(PTE[0]) = valid+CONT
+                                        cmpxchg(PTE[0], CONT, LOCKED) → OK
+  // reload race!
+  ctx.old = READ(PTE[0]) = LOCKED
+  // LOCKED & CONT = 0, is_old_contig = 0
+  data->addr += PAGE_SIZE  ← BUG
+  // enters PTE[1], locks it
+  cmpxchg(PTE[1], ..., LOCKED)
+                                        // vCPU1 loop hits PTE[1]
+                                        WARN_ON_ONCE(is_locked(PTE[1])) ← FIRES
+```
+
+### 修复
+
+commit `54a530722974`（"KVM: arm64: Fix walker reload race"）。在 reload 判断中增加
+第三个条件：reload 值为 `LOCKED` 时也按 `CONT_PTE_SIZE` 前进。Walker 的 `end` 地址
+会兜底，不会越界：
+
+```c
+} else if (!kvm_pte_valid(ctx.old) &&
+           (ctx.old & KVM_INVALID_PTE_LOCKED)) {
+    // LOCKED → contig BBM in progress, step past whole block
+    data->addr = ALIGN_DOWN(data->addr, contig_size);
+    data->addr += contig_size;
+}
+```
