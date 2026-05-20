@@ -975,3 +975,17 @@ EOF
 | **P2** | Ptrace SVE/SME regset 测试 | 10 min | VL 修改、partial write |
 | **P3** | EFI/Kernel NEON 路径 | 5 min | reboot/panic 路径正常 |
 | **P3** | 性能回归 (crypto benchmark) | 5 min | cipher 性能无明显下降 |
+
+---
+
+## 附录: 提示词记录
+
+以下是生成本文档所使用的对话提示词，供后续类似任务参考：
+
+我在linux6.6的版本上使能ARM FP8特性，高版本的内核修复了一堆相关问题，看起来主要
+集中在arch/arm64/kernel/fpsimd.c，不过也不排除其他文件。整理下，6.6后续所有关于
+ARM64 fpsimd的修复。主要要列出修复的patchset，分析下修复了什么问题。给出在6.6上
+回合相关patchset后，测试的具体方法。
+
+每个patchset的cover letter patch也列出来吧，另外加上最后合入一版的lore.kernel.org的连接，
+你要查下连接是否正确
