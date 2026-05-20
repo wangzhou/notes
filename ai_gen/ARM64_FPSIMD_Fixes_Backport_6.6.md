@@ -747,13 +747,82 @@ pKVM 下 host FP 状态管理不完善：
 
 ### 最小回合集（仅使能 FP8 且修复已知严重 bug）
 
-如果只需要在 6.6 上使能 FP8 且稳定运行（不包括 KVM 和 NV），建议至少回合：
+如果只需要在 6.6 上使能 FP8 且稳定运行（不包括 KVM 和 NV），建议至少回合以下补丁。补丁按回合顺序排列，同一组的补丁尽量一起回合以减少冲突。
 
-1. **第 5 层预览** — `d3a181588df9` (fpsimd_save_and_flush_current_state，被后续信号修复依赖)
-2. **第 7 层** — FEAT_FPMR 支持 (`203f2b95a882`, `4035c22ef7d4`, `8c46def44409`)
-3. **第 15 层** — FPMR Bug 修复（特别是 `e5fa85fce08b` FPMR 被 SM 切换破坏、`a90878f297d3` exec 未重置 FPMR）
-4. **第 9 层** — `751ecf6afd65` SVE trap 竞争修复（导致 WARN_ON 的问题）
-5. **第 15 层** — `d3eaab3c7090` SME trap 竞争修复（同类型问题）
+#### 第 1 组: 基础依赖 — fpsimd_save_and_flush_current_state
+
+| Commit | 标题 |
+|--------|------|
+| `d3a181588df9` | arm64/fpsimd: Add fpsimd_save_and_flush_current_state() |
+
+**说明**: 此函数被后续信号修复和 FPMR 修复所依赖，是基础设施。
+
+#### 第 2 组: FEAT_FPMR / FP8 特性使能 (v6.9)
+
+| Commit | 标题 | 文件 |
+|--------|------|------|
+| `203f2b95a882` | arm64/fpsimd: Support FEAT_FPMR | arch/arm64/kernel/fpsimd.c |
+| `4035c22ef7d4` | arm64/ptrace: Expose FPMR via ptrace | arch/arm64/kernel/ptrace.c |
+| `8c46def44409` | arm64/signal: Add FPMR signal handling | arch/arm64/kernel/signal.c |
+
+**说明**: 核心 FP8 使能补丁，上下文切换 + ptrace + 信号处理。
+
+#### 第 3 组: SVE/SME Trap 竞争修复 (v6.12)
+
+| Commit | 标题 |
+|--------|------|
+| `751ecf6afd65` | arm64/sve: Discard stale CPU state when handling SVE traps |
+| `d3eaab3c7090` | arm64/fpsimd: Discard stale CPU state when handling SME traps |
+
+**说明**: SVE 和 SME trap handler 中因抢占导致 stale CPU state 被重用，触发 WARN_ON 并导致寄存器状态错误。使用 FPMR/SME 的系统上都会触发。
+
+#### 第 4 组: FPMR Bug 修复 (v6.14)
+
+| Commit | 标题 |
+|--------|------|
+| `e5fa85fce08b` | arm64/fpsimd: Don't corrupt FPMR when streaming mode changes |
+| `a90878f297d3` | arm64/fpsimd: Reset FPMR upon exec() |
+| `01098d893fa8` | arm64/fpsimd: Avoid clobbering kernel FPSIMD state with SMSTOP |
+| `c94f2f326146` | arm64/fpsimd: Fix merging of FPSIMD state during signal return |
+| `929fa99b1215` | arm64/fpsimd: signal: Always save+flush state early |
+
+**说明**: 
+- `e5fa85fce08b`: FPMR 在 SM 切换时被硬件清零，内核恢复顺序错误导致 FPMR 值丢失
+- `a90878f297d3`: exec() 后 FPMR 未重置为 0，信息泄露
+- `01098d893fa8`: SMSTOP 破坏刚恢复的 kernel FPSIMD 状态
+- `c94f2f326146`: 信号返回时 FPSIMD 低 128 位合并非确定性地失败
+- `929fa99b1215`: 信号处理中 FPMR 可能在不安全的上下文中被访问
+
+#### 第 5 组: 辅助清理
+
+| Commit | 标题 |
+|--------|------|
+| `95507570fb2f` | arm64/fpsimd: Avoid RES0 bits in the SME trap handler |
+| `f699c66691fb` | arm64/fpsimd: Avoid warning when sve_to_fpsimd() is unused |
+
+**说明**: 
+- `95507570fb2f`: SME trap handler 使用 RES0 bits 判断 trap 类型，未来可能失效
+- `f699c66691fb`: 修复第 4 组回合后可能出现的编译 warning
+
+#### 最小回合集汇总（共 14 个 commit）
+
+```
+d3a181588df9 arm64/fpsimd: Add fpsimd_save_and_flush_current_state()
+203f2b95a882 arm64/fpsimd: Support FEAT_FPMR
+4035c22ef7d4 arm64/ptrace: Expose FPMR via ptrace
+8c46def44409 arm64/signal: Add FPMR signal handling
+751ecf6afd65 arm64/sve: Discard stale CPU state when handling SVE traps
+d3eaab3c7090 arm64/fpsimd: Discard stale CPU state when handling SME traps
+e5fa85fce08b arm64/fpsimd: Don't corrupt FPMR when streaming mode changes
+a90878f297d3 arm64/fpsimd: Reset FPMR upon exec()
+01098d893fa8 arm64/fpsimd: Avoid clobbering kernel FPSIMD state with SMSTOP
+c94f2f326146 arm64/fpsimd: Fix merging of FPSIMD state during signal return
+929fa99b1215 arm64/fpsimd: signal: Always save+flush state early
+95507570fb2f arm64/fpsimd: Avoid RES0 bits in the SME trap handler
+f699c66691fb arm64/fpsimd: Avoid warning when sve_to_fpsimd() is unused
+```
+
+**注意**: 此最小集仅覆盖非 KVM 场景。如果需要 KVM guest 使用 FP8，还需要额外回合第 11 节（KVM FPMR）和第 12 节（KVM Host FP 管理重写）的补丁。
 
 ---
 
