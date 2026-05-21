@@ -190,16 +190,23 @@ Intel最早实现了MPAM类似的功能(RDT)，软件上用一个独立的文件
 ├── cpus                     # 整个resctrl系统的CPU列表
 ├── cpus_list                # 人类可读的CPU列表格式
 ├── mon_groups/              # 监控组目录
-├── info/                    # 系统资源信息，静态信息，只出现在顶层目录 (todo: 1. monitor info, 2. 里面的最大PMG文件)
-│   ├── L3/
+├── info/                    # 系统资源信息，静态信息，只出现在顶层目录
+│   ├── L3/                  # cache控制资源信息
 │   │   ├── cbm_mask
 │   │   ├── min_cbm_bits
 │   │   ├── num_closids      # 最大控制组数(class of service ID)，Intel定义的古怪名字
 │   │   └── shareable_bits
-│   ├── MB/
+│   ├── L3_MON/              # cache监控资源信息
+│   │   ├── num_rmids        # 最大PMG数
+│   │   └── mon_features     # 支持的监控事件
+│   ├── MB/                  # 内存带宽控制资源信息
 │   │   ├── bandwidth_gran
 │   │   ├── delay_linear
-│   │   └── min_bandwidth
+│   │   ├── min_bandwidth
+│   │   └── num_closids      # MB支持的最大控制组数
+│   ├── MB_MON/              # 内存带宽监控资源信息
+│   │   ├── num_rmids
+│   │   └── mon_features
 │   └── last_cmd_status      # 最后一次命令执行状态
 ├── mon_data/                # 根控制组的监控数据
 │   ├── mon_L3_00/           # resctrl把控制和监控的MSC直接暴露出来，这里是一个L3 monitor。如果有多个，这里就会有多个节点
