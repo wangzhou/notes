@@ -208,12 +208,13 @@ Intel最早实现了MPAM类似的功能(RDT)，软件上用一个独立的文件
 │   │   ├── num_rmids
 │   │   └── mon_features
 │   └── last_cmd_status      # 最后一次命令执行状态
-├── mon_data/                # 根控制组的监控数据
-│   ├── mon_L3_00/           # resctrl把控制和监控的MSC直接暴露出来，这里是一个L3 monitor。如果有多个，这里就会有多个节点
-│   │   ├── llc_occupancy
+├── mon_data/                # 根控制组的监控数据。每种类型的monitor分开呈现
+│   ├── mon_L3_00/           # L3 cache monitor域0。如果有多个L3 MSC，就有mon_L3_00/01/...
+│   │   └── llc_occupancy
+│   ├── mon_MB_00/           # 内存带宽monitor域0。如果有多个MB MSC，就有mon_MB_00/01/...
 │   │   ├── mbm_total_bytes
 │   │   └── mbm_local_bytes
-│   └── ...                  # 如果有多个L3 monitor，这里就会有多个节点出来
+│   └── ...
 ├── schemata                 # 资源分配方案。如上，整个系统的资源控制MSC都会呈现在整个文件中
 ├── size                     # 根控制组的缓存大小
 ├── tasks                    # 根控制组的进程列表
