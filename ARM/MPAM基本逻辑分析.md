@@ -101,7 +101,7 @@ MPAMCFG_MBW_PBM<n>  Bandwidth Portion Bitmap Partition
 MPAMCFG_MBW_PROP    Memory Bandwidth Proportional Stride Partition
 MPAMCFG_MBW_WINWD   Memory Bandwidth Partitioning Window Width 
 
-MPAMCFG_PRI         Priority Partition  todo: 怎么搞的优先级？
+MPAMCFG_PRI         Priority Partition
 ```
 
 resource monitor
@@ -228,11 +228,10 @@ resctrl使用层次化的结构控制资源，resctrl的根目录是全局资源
 Linux内核实现
 --------------
 
-MPAM对外使用resctrl文件系统作为接口。以openEuler v6.6内核为例，驱动代码在
-drivers/platform/mpam/。这个驱动是一个平台设备驱动，但是但是真正probe的地方在注
-册的cpu online的会调函数里。
+MPAM对外使用resctrl文件系统作为接口。以openEuler v6.6内核为例，驱动代码在drivers/platform/mpam/。
+这个驱动是一个平台设备驱动，但是，真正probe的地方在注册的cpu online的会调函数里。
 
-核心数据结构:
+核心数据结构：
 ```
 /* MPAM设备的分类，比如，cache/memory/IOMMU等 */
 struct mpam_class
@@ -245,7 +244,7 @@ struct mpam_msc
 /* 表示一个MSC上的一个resource type */
 struct mpam_msc_ris
 
-/* ? */
+/* 表示MSC上的一个instance ? */
 struct mpam_component
   +-> ris list
 
@@ -253,7 +252,7 @@ struct mpam_component
 struct mpam_resctrl_res
 ```
 
-MSC设备解析:
+MSC设备解析：
 ```
 mpam_msc_drv_probe                  <-- probe以及创建MSC
   +-> acpi_mpam_parse_resources     <-- 创建mpam_ris
@@ -308,9 +307,11 @@ rdtgroup_mkdir
     +-> mkdir_rdt_prepare
   +-> rdtgroup_mkdir_mon
 ```
-resctrl和驱动的接口似乎是直接arch实现函数调用的... 如此粗暴...
+resctrl和驱动的接口是直接arch实现函数调用的... 如此粗暴...
 
 MPAM资源配置的一般逻辑是，用户已经知道整个系统的cache和memory相关控制节点的拓扑，
 相关控制节点直接呈现在resctrl文件系统中。用户实际上通过resctrl把特性CPU或线程和
 partid绑定，用户通过在各个控制节点上配置partid对应的控制和监控信息达到控制和监控
 的功能。partid最终呈现对应的可能是一个个独立的目录。
+
+todo: 对于一个新创建的控制组，mpam代码怎么决定操作哪个MSC下控制/监控命令？
