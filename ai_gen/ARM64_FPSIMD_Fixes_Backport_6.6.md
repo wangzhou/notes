@@ -1130,7 +1130,423 @@ EOF
 
 ---
 
-## 附录: 提示词记录
+## 附录 A: ARM64 信号帧 (Signal Frame) 机制
+
+### A.1 什么是信号帧
+
+信号帧是内核在**用户态进程的栈上**构造的一块内存，用于在信号处理期间保存进程的完整 CPU 上下文。它是信号处理机制实现 "透明中断" 的核心——进程被信号中断、执行 signal handler、然后通过 sigreturn 恢复，就好像什么都没发生过。
+
+### A.2 信号处理的完整流程
+
+```
+时间线:
+  ┌──────────────────────────────────────────────────────────┐
+  │ 1. 进程正常运行 (user mode, 使用 SVE/FPMR/ZA 等寄存器)     │
+  ├──────────────────────────────────────────────────────────┤
+  │ 2. 信号到达 (硬件中断/定时器/kill/其他进程发来)              │
+  │    内核切换到信号处理路径:                                  │
+  │      a) fpsimd_save_and_flush_current_state()             │
+  │         → 把当前 live 的 FP/SVE/SME 状态保存到 task_struct │
+  │      b) get_sigframe() → 在用户栈上分配 sigframe 空间       │
+  │      c) setup_sigframe() → 把所有寄存器 dump 到 sigframe   │
+  │      d) setup_return() → 篡改 PC=handler, SP=跳过 sigframe │
+  ├──────────────────────────────────────────────────────────┤
+  │ 3. 信号 handler 执行 (user mode)                          │
+  │    可以通过 ucontext 读写 sigframe 里的寄存器内容           │
+  │    可以调用 sigreturn() 返回，也可以直接 exit/longjmp       │
+  ├──────────────────────────────────────────────────────────┤
+  │ 4. sigreturn() 系统调用                                   │
+  │    内核从 sigframe 中逐一恢复所有寄存器                      │
+  │    进程从被中断的地方继续执行                               │
+  └──────────────────────────────────────────────────────────┘
+```
+
+### A.3 信号帧的内存布局
+
+```
+高地址 (栈顶方向)
+┌─────────────────────────────────┐
+│   struct rt_sigframe {           │  ← "信号帧" 整体
+│                                  │
+│     // ---- 固定头部 ----         │
+│     struct siginfo info;         │  si_signo, si_code, si_addr ...
+│                                  │
+│     struct ucontext uc {         │
+│       uc_flags;                  │
+│       uc_link;                   │
+│       uc_stack;                  │  信号栈信息
+│       uc_sigmask;                │  信号屏蔽字
+│                                  │
+│       struct sigcontext {        │  uc_mcontext
+│         __u64 regs[0..30];       │  GP 寄存器 (x0-x30)
+│         __u64 sp;                │  栈指针
+│         __u64 pc;                │  程序计数器
+│         __u64 pstate;            │  处理器状态
+│       } mcontext;                │
+│                                  │
+│       // ---- 可扩展的记录链 ----  │
+│       __u8 __reserved[4096];     │  ← 实际是变长的
+│         ┌──────────────────┐     │
+│         │ fpsimd_context   │     │  magic=FPSIMD_MAGIC
+│         │  .magic, .size   │     │  V0-V31, FPSR, FPCR
+│         │  .fpsr, .fpcr    │     │
+│         │  .vregs[0..31]   │     │
+│         ├──────────────────┤     │
+│         │ sve_context      │     │  magic=SVE_MAGIC (可选)
+│         │  .z[0..31]       │     │  SVE Z 寄存器
+│         │  .p[0..15]       │     │  SVE P 寄存器
+│         │  .ffr            │     │
+│         ├──────────────────┤     │
+│         │ tpidr2_context   │     │  magic=TPIDR2_MAGIC (可选)
+│         ├──────────────────┤     │
+│         │ fpmr_context     │     │  magic=FPMR_MAGIC (可选)
+│         │  .fpmr           │     │  FP8 格式控制寄存器
+│         ├──────────────────┤     │
+│         │ za_context       │     │  magic=ZA_MAGIC (可选)
+│         ├──────────────────┤     │
+│         │ zt_context       │     │  magic=ZT_MAGIC (可选)
+│         ├──────────────────┤     │
+│         │ extra_context    │     │  magic=EXTRA_MAGIC
+│         │  (更多扩展...)    │     │  超大寄存器的溢出区
+│         ├──────────────────┤     │
+│         │ ...              │     │
+│         │ terminator       │     │  magic=0, size=0 (结束标记)
+│         └──────────────────┘     │
+│     } ucontext;                  │
+│   } rt_sigframe;                 │
+├─────────────────────────────────┤
+│   进程原始栈帧                     │
+└─────────────────────────────────┘
+低地址
+```
+
+### A.4 可扩展记录链 (Extensible Context Records)
+
+ARM64 信号帧最精巧的设计：`uc_mcontext.__reserved[]` 不是固定布局，而是一个由 `{magic, size}` 组成的**单向链表**。
+
+每个 record 的结构:
+```c
+struct _aarch64_ctx {
+    __u32 magic;  // 类型标识 (FPSIMD_MAGIC, SVE_MAGIC, FPMR_MAGIC ...)
+    __u32 size;   // 本 record 的总大小 (含 head), 用于遍历
+    // 后面跟着 record 特定的数据
+};
+```
+
+**遍历逻辑** (用户态/内核通用):
+```c
+struct _aarch64_ctx *ctx = (void *)uc->uc_mcontext.__reserved;
+while (ctx->magic != 0) {       // magic=0 是结束标记
+    switch (ctx->magic) {
+    case FPSIMD_MAGIC:  /* 处理 FPSIMD */  break;
+    case SVE_MAGIC:     /* 处理 SVE */     break;
+    case FPMR_MAGIC:    /* 处理 FPMR */    break;
+    // ... 不认识的 magic → 直接跳过
+    }
+    ctx = (void *)ctx + ctx->size;  // size 包含 head, 跳到下一个
+}
+```
+
+**这个设计的核心价值**:
+- **向前兼容**: 旧内核不知道 FPMR → 信号帧中没有 FPMR context → 旧用户态代码跳过
+- **向后兼容**: 旧用户态不认识 FPMR_MAGIC → 根据 size 跳过 → 不影响后续 record 解析
+- **可扩展**: 每个新寄存器类型只需定义新的 magic + data struct，无需修改已有结构体
+
+### A.5 构造过程 (setup_rt_frame)
+
+```c
+static int setup_rt_frame(int usig, struct ksignal *ksig, sigset_t *set,
+                          struct pt_regs *regs)
+{
+    // 步骤 1: 先把当前 live 的 FP 状态保存到 task_struct
+    fpsimd_save_and_flush_current_state();
+
+    // 步骤 2: 在用户栈上分配空间
+    get_sigframe(&user, ksig, regs);
+
+    // 步骤 3: 填写信号帧 (dump 所有寄存器)
+    setup_sigframe(&user, regs, set);
+    //   ├── __put_user(regs->regs[i], &sf->uc.uc_mcontext.regs[i])  // GP 寄存器
+    //   ├── preserve_fpsimd_context()   → fpsimd_context record
+    //   ├── preserve_sve_context()      → sve_context record (如果有 SVE)
+    //   ├── preserve_fpmr_context()     → fpmr_context record (如果有 FPMR)
+    //   ├── preserve_za_context()       → za_context record (如果有 ZA)
+    //   └── ...
+
+    // 步骤 4: 篡改 PC 和 SP, "返回用户空间" → 实际进入 signal handler
+    setup_return(regs, ksig, &user, usig);
+    //   regs->pc = handler_addr;
+    //   regs->sp = (unsigned long)frame;
+}
+```
+
+### A.6 恢复过程 (restore_sigframe)
+
+```c
+static int restore_sigframe(struct pt_regs *regs,
+                            struct rt_sigframe __user *sf)
+{
+    // 步骤 1: 再次确保当前状态已保存 (防御性)
+    fpsimd_save_and_flush_current_state();
+
+    // 步骤 2: 解析信号帧, 遍历所有 context record
+    parse_user_sigframe(&user, sf);
+    //   遍历 __reserved[], 填 user.fpsimd / user.sve / user.fpmr / user.za ...
+
+    // 步骤 3: 按顺序恢复寄存器
+    restore_fpsimd_context(&user);     // V0-V31, 清除 PSTATE.SM
+    restore_sve_fpsimd_context(&user); // 如果有 SVE
+    restore_fpmr_context(&user);       // ★ FPMR (在 SM 切换之后, 安全)
+    restore_za_context(&user);         // ZA (如果有)
+    restore_zt_context(&user);         // ZT0 (如果有)
+
+    // 步骤 4: 恢复 GP 寄存器
+    for (i = 0; i < 31; i++)
+        regs->regs[i] = sf->uc.uc_mcontext.regs[i];
+    regs->sp  = sf->uc.uc_mcontext.sp;
+    regs->pc  = sf->uc.uc_mcontext.pc;  // → 跳回被中断的位置
+}
+```
+
+**恢复顺序至关重要**: FPMR 必须在 PSTATE.SM 切换之后恢复, 因为硬件在 SM 切换时会自动清零 FPMR。`restore_fpsimd_context()` 先清除了 PSTATE.SM, `restore_fpmr_context()` 随后写入 FPMR, 顺序正确。
+
+### A.7 FPMR 在信号帧中的位置
+
+```
+setup_sigframe()
+  ...
+  ├── preserve_fpsimd_context()   ← 保存 V0-V31
+  ├── preserve_sve_context()      ← 保存 SVE (如果 TIF_SVE)
+  ├── preserve_tpidr2_context()   ← 保存 TPIDR2
+  ├── preserve_fpmr_context()     ← ★ 保存 FPMR
+  │       current->thread.uw.fpmr = read_sysreg_s(SYS_FPMR);  // 硬件 → 内存
+  │       __put_user(FPMR_MAGIC,  &ctx->head.magic);
+  │       __put_user(sizeof(*ctx), &ctx->head.size);
+  │       __put_user(current->thread.uw.fpmr, &ctx->fpmr);    // 内存 → 信号帧
+  └── ...
+
+restore_sigframe()
+  ...
+  ├── parse_user_sigframe()      ← 找 FPMR_MAGIC, 记录指针和 size
+  ├── restore_fpsimd_context()   ← 恢复 V0-V31, 清除 PSTATE.SM
+  ├── restore_fpmr_context()     ← ★ 恢复 FPMR
+  │       fpmr = user->fpmr->fpmr;                // 信号帧 → 局部变量
+  │       write_sysreg_s(fpmr, SYS_FPMR);         // 局部变量 → 硬件
+  └── ...
+```
+
+### A.8 PCIe AER 类比
+
+信号帧的设计理念类似于 PCIe AER (Advanced Error Reporting) 中的扩展 capabilities 链表:
+
+| 特性 | PCIe Capabilities | ARM64 Signal Frame |
+|------|------------------|-------------------|
+| 遍历方式 | `pcie_cap + offset` 链表 | `{magic, size}` 链表 |
+| 兼容性 | 未知 cap → 跳过 | 未知 magic → 跳过 |
+| 终止条件 | 特定 cap id | magic=0 |
+| 可扩展性 | 新 cap 加新 id | 寄存器加新 magic |
+
+---
+
+## 附录 B: Ptrace 寄存器读写原理 — 一个调试案例
+
+### B.1 场景
+
+你写了一个 FP8 程序，怀疑 FPMR 配置错了导致计算结果异常。用 GDB 断点停在关键函数处，想看一眼 FPMR 的当前值：
+
+```c
+// test_fp8.c
+#include <arm_fp8.h>
+int main() {
+    __arm_wsr_fpmr(0x8842);         // 写入 FPMR, 选择 FP8 格式
+    do_fp8_matmul();                // ← 怀疑这里算错了
+    return 0;
+}
+```
+
+```gdb
+$ gdb ./test_fp8
+(gdb) b do_fp8_matmul
+(gdb) run
+
+Breakpoint 1, do_fp8_matmul () at test_fp8.c:5
+
+(gdb) p/x $fpmr                    ← 你敲下这行
+$1 = 0x8842                        ← GDB 显示了 FPMR 的值
+```
+
+### B.2 从敲下回车到看到结果, 分三步
+
+**第一步: GDB 把 `$fpmr` 翻译成 ptrace 系统调用**
+
+GDB 维护了一张寄存器表, 记录每个寄存器名对应哪个 ptrace regset。`$fpmr` 的映射是:
+
+```
+GDB 寄存器名      ptrace 参数                           读的是
+────────────────────────────────────────────────────────────────
+$x0 .. $x30       PTRACE_GETREGSET, NT_PRSTATUS         GP 寄存器组
+$sp, $pc, $cpsr   同上
+$v0 .. $v31       PTRACE_GETREGSET, NT_ARM_FPREGSET     FPSIMD V 寄存器组
+$z0 .. $z31       PTRACE_GETREGSET, NT_ARM_SVE          SVE Z 寄存器组
+$fpmr             PTRACE_GETREGSET, NT_ARM_FPMR    ←    FPMR 寄存器
+```
+
+所以 `p/x $fpmr` 实际上触发了:
+
+```c
+// GDB 内部执行的系统调用 (伪代码)
+struct iovec iov = { .iov_base = buf, .iov_len = 8 };
+ptrace(PTRACE_GETREGSET, 被调试进程的pid, NT_ARM_FPMR, &iov);
+// 调用返回后, buf 里就是 tracee 的 FPMR 值
+```
+
+**第二步: 内核在 regset 数组中查找 NT_ARM_FPMR**
+
+```
+sys_ptrace()
+  └─→ ptrace_request()
+        └─→ copy_regset_to_user()                    // 遍历 regset 表
+              └─→ 在 aarch64_regsets[] 中寻找 .core_note_type == NT_ARM_FPMR
+                    └─→ 找到 REGSET_FPMR:
+                          .regset_get = fpmr_get     // ← 调用这个函数
+```
+
+第三步: `fpmr_get()` 从 tracee 的 `task_struct` 里读出值
+
+```c
+// arch/arm64/kernel/ptrace.c
+static int fpmr_get(struct task_struct *target, ...)
+{
+    // target  = 被 GDB 调试的那个 test_fp8 进程
+    // current = GDB 自己 (几乎不可能等于 target)
+
+    if (target == current)
+        fpsimd_preserve_current_state();  // 只有 tracee 读自己才需要同步硬件
+
+    // ★ 就这一行: 从被调试进程的 task_struct 里读 FPMR
+    return membuf_store(&to, target->thread.uw.fpmr);
+}
+```
+
+核心逻辑: tracee 已经被 GDB 断点停住了, 它的最后一条 `__arm_wsr_fpmr(0x8842)` 已经把 FPMR 写入了硬件, 内核在停住 tracee 时又把它从硬件保存到了 `thread.uw.fpmr`。所以直接读内存就行。
+
+### B.3 完整交互流程 (附时序图)
+
+```
+GDB 进程                          被调试的 test_fp8 进程
+    │                                  │
+    │  ptrace(ATTACH, pid)             │
+    │ ───────────────────────────────→ │ 内核: 标记为 TRACED
+    │                                  │
+    │  waitpid(pid)                    │
+    │ ← - - - - - - - - - - - - - - -  │ SIGSTOP (tracee 停下来)
+    │                                  │
+    │  ptrace(POKEDATA, breakpoint)    │
+    │ ───────────────────────────────→ │ 内核: 把断点指令写入
+    │                                  │   do_fp8_matmul 地址
+    │  ptrace(CONT)                    │
+    │ ───────────────────────────────→ │ ─── tracee 恢复执行 ───
+    │                                  │   ...
+    │                                  │   执行 __arm_wsr_fpmr(0x8842)
+    │                                  │   执行到 do_fp8_matmul
+    │                                  │   触发断点异常
+    │                                  │   内核: 停止 tracee
+    │  waitpid(pid)                    │   内核: 保存 FP 状态到
+    │ ← - - - - - - - - - - - - - - -  │     thread.uw.fpmr = 0x8842
+    │  SIGTRAP (断点命中!)             │
+    │                                  │
+    │  ☆ tracee 已完全停止 ☆           │
+    │  ☆ FPMR 值在 tracee->thread.uw.fpmr 里 ☆
+    │                                  │
+    │  ptrace(GETREGSET,               │
+    │         pid, NT_FPMR)            │
+    │ ───────────────────────────────→ │ 内核: fpmr_get(tracee)
+    │                                  │   → 读 tracee->thread.uw.fpmr
+    │                                  │   → 值是 0x8842
+    │ ← 返回 0x8842                    │   → 拷贝给 GDB
+    │                                  │
+(gdb) p/x $fpmr                        │
+$1 = 0x8842                            │
+```
+
+### B.4 写操作: `set $fpmr = 0x01` 的过程
+
+如果 GDB 用户修改 FPMR 然后继续执行:
+
+```gdb
+(gdb) set $fpmr = 0x01
+(gdb) continue
+```
+
+内核路径:
+
+```c
+ptrace(SETREGSET, pid, NT_FPMR, {0x01})
+  └─→ copy_regset_from_user()
+        └─→ fpmr_set(test_fp8, new_value=0x01)
+              │
+              ├── target->thread.uw.fpmr = 0x01;   // ★ 写到 tracee 内存
+              │
+              └── fpsimd_flush_task_state(target);  // ★ 告诉内核:
+                                                    //   "这个 task 的 FP 状态已过时,
+                                                    //    下次恢复时必须重新加载"
+```
+
+最后一行是关键: `fpsimd_flush_task_state(target)` 的作用。
+
+tracee 在断点前可能已经执行了 `__arm_wsr_fpmr(0x8842)`, CPU 硬件 FPMR 寄存器里还持有那个旧值。如果 GDB 只修改了内存中的 `thread.uw.fpmr = 0x01` 但不清掉 CPU 上的绑定, tracee 恢复执行时硬件上可能还是旧值 0x8842。
+
+`fpsimd_flush_task_state()` 就是用来处理这个场景的:
+
+```c
+void fpsimd_flush_task_state(struct task_struct *t)
+{
+    t->thread.fpsimd_cpu = NR_CPUS;   // 解绑: 这个 task 不再持有任何 CPU 的 FP 状态
+    t->thread.fp_type = FP_STATE_FPSIMD;
+    clear_thread_flag(TIF_SVE);       // 清除 SVE 标志
+    barrier();
+}
+```
+
+之后 tracee 被调度恢复执行时, `fpsimd_thread_switch()` 检查到 `fpsimd_cpu != smp_processor_id()`, 认为 CPU 上的状态是 "foreign" 的, 从而调用 `task_fpsimd_load()` 从内存重新加载 FPMR (值为 `0x01`)。
+
+### B.5 本质总结
+
+把 ptrace 看作一个 "远程内存读写协议":
+
+```
+ptrace 操作             实质
+──────────────────────────────────────────────
+ATTACH/DETACH           设置/清除 tracee 的 TRACED 标记
+PEEKDATA/POKEDATA       读/写 tracee 的用户态内存
+GETREGSET               读 tracee->task_struct.某个字段
+SETREGSET               写 tracee->task_struct.某个字段
+                          + fpsimd_flush_task_state 强制重载
+CONT/SINGLESTEP         让 tracee 继续跑 (或走一步)
+
+所有操作的本质: 内核帮你以受控的方式, 操作另一个进程的 task_struct 或地址空间。
+FPMR 的 NT_ARM_FPMR regset 就是这张表里的一个新条目, 逻辑和 NT_PRSTATUS、NT_ARM_SVE
+完全相同。
+```
+
+### B.6 为什么每个新寄存器都要加 ptrace regset
+
+```
+调试器的寄存器可见性:
+
+  用户敲 "p $fpmr"
+    → GDB 查寄存器表
+        → 表里有 NT_ARM_FPMR → GDB 发 ptrace → 内核返回 FPMR 值 ✔
+        → 表里没有           → GDB 报错: "No register named '$fpmr'"  ✘
+```
+
+不加 `NT_ARM_FPMR` 就意味着: 任何调试器、CRIU、core dump 工具都无法访问 FPMR。对 FP8 程序的调试和运维是一个不可接受的盲区。
+
+**注意**: `NT_ARM_FPMR` 还在 core dump (ELF note) 中使用 —— `core_note_type` 字段同时用于 ptrace 和 ELF core dump, 确保 crash 工具可以从 coredump 文件中读取 FPMR。
+
+---
+
+## 附录 C: 提示词记录
 
 以下是生成本文档所使用的对话提示词，供后续类似任务参考：
 
