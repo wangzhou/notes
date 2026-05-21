@@ -168,10 +168,10 @@ Partid Narrow
 所谓Partid Narrow是进入MSC的partid可以通过提前配置好的映射被映射成另外一个partid，
 后面的控制和检测都基于新的partid。
 
-Partid Narrow的硬件编程序列：1. 用reqPARTID写MPAMCFG_PART_SEL（不带INTERNAL位）；
+Partid Narrow的硬件编程序列：1. 用reqPARTID写MPAMCFG_PART_SEL(不带INTERNAL位)；
 2. 用目标intPARTID写MPAMCFG_INTPARTID，置上MPAMCFG_INTPARTID_INTERNAL位；
 3. 写MPAMCFG_PART_SEL，置上INTERNAL位选择intPARTID；4. 后续控制寄存器操作
-（如MPAMCFG_CMAX）都基于此intPARTID。主要用途是扩展监控容量——多个reqPARTID
+(如MPAMCFG_CMAX)都基于此intPARTID。主要用途是扩展监控容量——多个reqPARTID
 可以映射到同一个intPARTID，复用同一组资源配置，但可以通过不同reqPARTID区分
 监控上下文。INTAPPID_MAX在MPAMF_PARTID_NRW_IDR中读出，表示最大intPARTID值。
 
@@ -274,7 +274,7 @@ struct mpam_component
  * 和resctrl fs的交互的数据结构，每个mpam_resctrl_res内嵌resctrl_resource，
  * 全局数组mpam_resctrl_exports[RDT_NUM_RESOURCES]索引L3/L2/MC。初始化时
  * mpam_domains_init()遍历每个class的component，调用mpam_resctrl_alloc_domain()
- * 分配mpam_resctrl_dom（内嵌resctrl_domain），通过resctrl_online_domain()向
+ * 分配mpam_resctrl_dom(内嵌resctrl_domain)，通过resctrl_online_domain()向
  * resctrl核心注册。用户写schemata时，驱动遍历对应component的所有RIS，调用
  * mpam_reprogram_ris_partid()写MSC硬件寄存器。(todo)
  */
@@ -289,10 +289,10 @@ mpam_msc_drv_probe                  <-- probe以及创建MSC
       +-> mpam_class_get            <-- 如果还没有，就创建一个
           /*
            * component表示应统一配置的一组MSC。对于cache，component_id来自ACPI PPTT
-           * 表的cache_reference，唯一标识一个特定缓存（如某个L3）；对于memory，
+           * 表的cache_reference，唯一标识一个特定缓存(如某个L3)；对于memory，
            * component_id来自proximity_domain转换的NUMA node ID，同一NUMA node上的
            * 多个内存控制器属于同一个component。每个component映射到一个resctrl域
-           * （schemata中的一行），是该域的最小配置单元。(todo)
+           * (schemata中的一行)，是该域的最小配置单元。(todo)
            */
       +-> mpam_component_get
 
