@@ -448,3 +448,4 @@ hdbss/热迁移                                     doing
 跨代热迁移逻辑整理   	                         doing
 
 mpam基本逻辑   					 继续补齐
+qemu arm vcpu instance在哪里init

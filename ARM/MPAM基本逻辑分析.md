@@ -6,6 +6,7 @@
 -v0.6 2026.01.07 Sherlock ...
 -v0.7 2026.01.15 Sherlock ...
 -v0.8 2026.03.13 Sherlock ...
+-v0.9 2026.06.03 Sherlock ...
 
 简介：使用本文持续整理ARM MPAM协议的相关内容，分析依据MPAM spec A.a。
 
@@ -34,7 +35,7 @@ cache或者内存的请求根据提前配置的信息进行资源控制和监控
 
 三元组的三个元素是：partition ID space，partition ID，PMG(performance monitor group)。
 partition ID space是安全态，主要用partition ID区分资源类型，PMG用来聚集一组监测
-资源。MSC集成在各个内存相关的部件里，由专门的ACPI或者DTS MPAM表格报给OS。(todo)
+资源。MSC集成在各个内存相关的部件里，由专门的ACPI或者DTS MPAM表格报给OS。
 
 MPAM协议里还定义了一些MPAM内部传递控制信息的概念(第四章)，感觉这些概念以及相关的
 部件是软件较少感知的。
@@ -150,8 +151,8 @@ MSMON_OFLOW_MSI_DATA      MSI数据
 MSMON_OFLOW_MSI_MPAM      MSI MPAM标识
 MSMON_OFLOW_MSI_SR        MSI状态寄存器
 ```
-todo: PMG怎么配置？1. 硬件上是怎么过滤的partid和PMG都一样才能过滤。2. resctrl
-怎么配置过滤多个对象。
+注意，如上描述的是MSC处怎么配置具体的监控。请求发出的源端也要配置partid以及PMG，
+这个依然是配置到MPAMx_ELn寄存器中的。监控需要匹配PARTID+PMG的组合。
 
 SMMU MPAM
 ----------
@@ -167,7 +168,12 @@ Partid Narrow
 所谓Partid Narrow是进入MSC的partid可以通过提前配置好的映射被映射成另外一个partid，
 后面的控制和检测都基于新的partid。
 
-todo: 创建/配置/查询，主要使用场景。
+Partid Narrow的硬件编程序列：1. 用reqPARTID写MPAMCFG_PART_SEL（不带INTERNAL位）；
+2. 用目标intPARTID写MPAMCFG_INTPARTID，置上MPAMCFG_INTPARTID_INTERNAL位；
+3. 写MPAMCFG_PART_SEL，置上INTERNAL位选择intPARTID；4. 后续控制寄存器操作
+（如MPAMCFG_CMAX）都基于此intPARTID。主要用途是扩展监控容量——多个reqPARTID
+可以映射到同一个intPARTID，复用同一组资源配置，但可以通过不同reqPARTID区分
+监控上下文。INTAPPID_MAX在MPAMF_PARTID_NRW_IDR中读出，表示最大intPARTID值。
 
 MPAM虚拟化
 -----------
@@ -184,11 +190,11 @@ Intel最早实现了MPAM类似的功能(RDT)，软件上用一个独立的文件
 ├── cpus                     # 整个resctrl系统的CPU列表
 ├── cpus_list                # 人类可读的CPU列表格式
 ├── mon_groups/              # 监控组目录
-├── info/                    # 系统资源信息
+├── info/                    # 系统资源信息，静态信息，只出现在顶层目录 (todo: 1. monitor info, 2. 里面的最大PMG文件)
 │   ├── L3/
 │   │   ├── cbm_mask
 │   │   ├── min_cbm_bits
-│   │   ├── num_closids
+│   │   ├── num_closids      # 最大控制组数(class of service ID)，Intel定义的古怪名字
 │   │   └── shareable_bits
 │   ├── MB/
 │   │   ├── bandwidth_gran
@@ -196,23 +202,23 @@ Intel最早实现了MPAM类似的功能(RDT)，软件上用一个独立的文件
 │   │   └── min_bandwidth
 │   └── last_cmd_status      # 最后一次命令执行状态
 ├── mon_data/                # 根控制组的监控数据
-│   ├── mon_L3_00/
+│   ├── mon_L3_00/           # resctrl把控制和监控的MSC直接暴露出来，这里是一个L3 monitor。如果有多个，这里就会有多个节点
 │   │   ├── llc_occupancy
 │   │   ├── mbm_total_bytes
 │   │   └── mbm_local_bytes
-│   └── ...
-├── schemata                 # 资源分配方案
+│   └── ...                  # 如果有多个L3 monitor，这里就会有多个节点出来
+├── schemata                 # 资源分配方案。如上，整个系统的资源控制MSC都会呈现在整个文件中
 ├── size                     # 根控制组的缓存大小
 ├── tasks                    # 根控制组的进程列表
-├── <用户创建的目录>/        # 用户自定义控制组
+├── <用户创建的目录>/        # 用户自定义控制组，在用户目录下创建一样的文件
 │   ├── cpus
-│   ├── cpus_list
+│   ├── cpus_list            # A
 │   ├── schemata
 │   ├── size
-│   ├── mon_groups/          # 该控制组的监控组
-│   ├── mon_data/            # 该控制组的监控数据
+│   ├── mon_groups/          # B。该控制组的监控组。可以在这个目录下创建子监控组。
+│   ├── mon_data/            # 该控制组的顶层监控数据。注意，这里会再次展示系统中所有的监控MSC
 │   └── tasks
-└── <mon_groups创建的目录>/  # 监控组目录
+└── <mon_groups创建的目录>/  # 监控组目录。注意这里是全局监控组目录。
     ├── mon_data/            # 监控组的具体监控数据
     └── ...
 (AI生成)
@@ -223,7 +229,15 @@ resctrl使用层次化的结构控制资源，resctrl的根目录是全局资源
 对应起来，partition ID和CPU/线程的绑定关系通过配置cpus/cpus_list/tasks来实现。
 
 控制组创建后，会在控制组目录自动生成监控组控制目录(mon_groups)和监控组数据目录
-(mon_data)。需要手动在mon_group里创建自定义监控组，监控组监控的事件要如何配置? todo
+(mon_data)。可以在mon_group里创建自定义子监控组。拿如上的用户自定义控制组作为一个
+例子，比如在A处的cpus_list配置控制和监控CPU 1-4，完全可以在B处mon_groups中创建多个
+子监控组目录，配置子监控组目录下的cpus_list，独立监控CPU1。
+
+一般来说系统里有多个MSC，对于一个被控制对象，比如一个线程，可以在这些MSC上配置这个
+被控制对象的资源控制和资源监控，这个完全是用户自己的配置行为。resctrl通过schemata
+文件在每个控制层级暴露所有MSC的控制信息，每个域(domain)对应如下代码中的一个mpam_component。(todo)
+
+resctrl中标准监控事件有：llc_occupancy(末级缓存占用)、mbm_total_bytes(总内存带宽)等。
 
 Linux内核实现
 --------------
@@ -248,7 +262,14 @@ struct mpam_msc_ris
 struct mpam_component
   +-> ris list
 
-/* 和resctrl fs的交互的数据结构，怎么建立联系的？*/
+/*
+ * 和resctrl fs的交互的数据结构，每个mpam_resctrl_res内嵌resctrl_resource，
+ * 全局数组mpam_resctrl_exports[RDT_NUM_RESOURCES]索引L3/L2/MC。初始化时
+ * mpam_domains_init()遍历每个class的component，调用mpam_resctrl_alloc_domain()
+ * 分配mpam_resctrl_dom（内嵌resctrl_domain），通过resctrl_online_domain()向
+ * resctrl核心注册。用户写schemata时，驱动遍历对应component的所有RIS，调用
+ * mpam_reprogram_ris_partid()写MSC硬件寄存器。(todo)
+ */
 struct mpam_resctrl_res
 ```
 
@@ -259,9 +280,11 @@ mpam_msc_drv_probe                  <-- probe以及创建MSC
     +-> mpam_ris_create 
       +-> mpam_class_get            <-- 如果还没有，就创建一个
           /*
-           * class和component_id为入参，对于cache是ACPI表中的cache_reference，
-           * 对于memory是proximity_domain。所以compoment的语意是什么？
-           * 
+           * component表示应统一配置的一组MSC。对于cache，component_id来自ACPI PPTT
+           * 表的cache_reference，唯一标识一个特定缓存（如某个L3）；对于memory，
+           * component_id来自proximity_domain转换的NUMA node ID，同一NUMA node上的
+           * 多个内存控制器属于同一个component。每个component映射到一个resctrl域
+           * （schemata中的一行），是该域的最小配置单元。(todo)
            */
       +-> mpam_component_get
 
@@ -313,5 +336,3 @@ MPAM资源配置的一般逻辑是，用户已经知道整个系统的cache和me
 相关控制节点直接呈现在resctrl文件系统中。用户实际上通过resctrl把特性CPU或线程和
 partid绑定，用户通过在各个控制节点上配置partid对应的控制和监控信息达到控制和监控
 的功能。partid最终呈现对应的可能是一个个独立的目录。
-
-todo: 对于一个新创建的控制组，mpam代码怎么决定操作哪个MSC下控制/监控命令？
