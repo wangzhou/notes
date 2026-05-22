@@ -8,6 +8,7 @@
 -v0.8 2026.03.13 Sherlock ...
 -v0.9 2026.06.03 Sherlock ...
 -v1.0 2026.06.06 Sherlock ...
+-v1.1 2026.06.07 Sherlock ...
 
 简介：使用本文持续整理ARM MPAM协议的相关内容，分析依据MPAM spec A.a。
 
@@ -323,14 +324,21 @@ mpam_msc_drv_probe                  <-- probe以及创建MSC
            * (schemata中的一行)，是该域的最小配置单元。(todo)
            */
       +-> mpam_component_get
+  +-> mpam_register_cpuhp_callbacks(&mpam_discovery_cpu_online)
 
 mpam_discovery_cpu_online           <-- 如上probe里注册，cpu online时执行
   +-> mpam_msc_hw_probe             <-- probe MSC硬件
   +-> mpam_enable                   <-- workqueue里执行
-    ...
-    +-> mpam_resctrl_setup
-      +-> mpam_resctrl_resource_init  <-- 创建mpam_resctrl_res数组
-      +-> resctrl_init                <-- 创建resctrl相关文件
+    +-> mpam_enable_once
+      +-> mpam_resctrl_setup
+        +-> mpam_resctrl_resource_init  <-- 创建mpam_resctrl_res数组
+        +-> resctrl_init                <-- 创建resctrl相关文件
+    +-> mpam_register_cpuhp_callbacks(mpam_cpu_online)  <-- 注意，这里更换了mpam cpu online/offline的回调函数
+
+/* todo: 1. 分配domain，2. 控制监控和domain如何联系在一起 */
+mpam_cpu_online
+  ...
+  +-> mpam_resctrl_online_cpu
 ```
 
 resctrl文件创建: 
