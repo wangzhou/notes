@@ -28,7 +28,7 @@ RV应该是只有一个SP？)。ARM的ELx_SP特性的逻辑是，当PSTATE.SP为
 SP_EL0，当PSTATE.SP为1时，各个EL使用SP_ELx。
 
 基于如上的逻辑，在配置SCTRL_EL1.SPINTMASK=1，且当前是使用各个EL自己的SP_ELx(dedicated SP_ELx, PSTATE.SP=1)，
-异常或者中断taken，就全局mask了所有中断。当切到SP_EL0做栈指针时，中断被没有被unmask。
+异常或者中断taken，就全局mask了所有中断。当切到SP_EL0做栈指针时，中断并没有被unmask。
 
 对于如上两种NMI mask的逻辑，中断或异常进入和退出时，各种中断被mask的逻辑依然存在。
 中断或异常进入和退出时，为了防止新的中断进来破坏之前要保存的上下文，硬件是自动关
@@ -156,7 +156,7 @@ static void __gic_handle_irq_from_irqson(struct pt_regs *regs)
 这个时候GICD_TYPE.NMI为0，这里会进不去。后果就是mask住所有中断。普通中断和NMI中断
 的处理中，都会在硬中断返回时恢复PSTATE，这个时候就会恢复之前的中断状态；在中断下
 半步开中断，但是这里只是开PSTATE.I/F，ALLINT还是关的。所以，综合看起来就是，中断
-下半步所有硬中断都进不来。
+下半部所有硬中断都进不来。
 
 这个问题的根本修复方法是，enable NMI的时候应该查看core的NMI ID和GICD_TYPE.NMI，
 当两种同时满足的时候，才可以enable NMI。
