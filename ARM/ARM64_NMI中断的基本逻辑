@@ -72,7 +72,7 @@ ICC_NMIAR1_EL1        NMI对应的IAR寄存器。
 ISR_ELx               新增bit表示是否为NMI中断taken，中断处理入口靠这个识别NMI和普通中断，并分别处理。
 
 GIC相关的NMI寄存器有:
-GICD_INMIR	      配置对应的SPI中断是否是NMI中断。
+GICD_INMIR            配置对应的SPI中断是否是NMI中断。
 GICR_INMIR            配置对应的PPI/SGI中断是否是NMI中断。
 
 NMI虚拟化相关的逻辑

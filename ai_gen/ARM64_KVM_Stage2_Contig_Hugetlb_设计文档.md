@@ -6,6 +6,7 @@ ARM64 KVM Stage-2 Contiguous Hugetlb 支持
 - v0.3 2026.05.18 Sherlock 修正锁文档：wrprotect/test_clear_young为write_lock（非read_lock），map/relax_perms恢复为read_lock（kvm_fault_lock）
 - v0.4 2026.05.19 Sherlock 重写5.4.3.1：确认vma_pagesize不一致的唯一来源是force_pte（SRCU窗口），mprotect/madvise/THP不改变hugetlb VMA类型
 - v0.5 2026.05.19 Sherlock 精简第三章，场景1a/1b合并重写；修正mprotect/madvise分析：虽不改VMA类型，但间接触发unfold制造PTE[0]=valid非CONT前置条件；修正竞态汇总表
+- v0.6 2026.05.24 Sherlock 新增第9节 Bug修复记录：refcount leak (a44ef933)、冗余BBM (0ee2c96e)、walker idx/addr脱钩 (bcda4081b)
 
 简介：分析ARM64 KVM Stage-2对contiguous PTE的软件支持逻辑。
 
@@ -844,3 +845,134 @@ commit `54a530722974`（"KVM: arm64: Fix walker reload race"）。在 reload 判
     data->addr += contig_size;
 }
 ```
+
+## 9. Bug 修复记录（v0.6）
+
+本章记录实现过程中发现并修复的三个 bug，按发现时间从先到后排列。
+每个 bug 描述：问题现象、根因分析、修复方案、并发/触发条件要点。
+
+### 9.1 Bug 1: contig map PTE[0] refcount 泄漏
+
+**commit**: `a44ef9333440` "KVM: ARM64: Fix refcount leak in stage2_map_contig_leaf PTE[0] path"
+
+**问题**：`stage2_map_contig_leaf` 用 cmpxchg 直接锁 PTE[0]（从当前值到 `KVM_INVALID_PTE_LOCKED`），
+跳过了标准 BBM 中 `stage2_try_break_pte`。单页路径的 BBM 对称性——break 时 put_page、make 时 get_page
+——保证 counted→counted 转换净 refcount 差为 0。contig 路径跳过了 break 的 put_page 但仍执行了
+make 的 get_page，当 `ctx->old` 是已 counted 的 PTE 时，PTE[0] 多拿一个页表页引用。
+
+首次映射（`ctx->old == 0`）不受影响——PTE[0] 从 not-counted 变成 counted，make 的 get_page
+恰好对应新的 counted 状态。
+
+**修复**：在 cmpxchg 成功后、make 之前，判断 `stage2_pte_is_counted(ctx->old)`，若为真则
+`mm_ops->put_page(ctx->ptep)`。恰好一行条件，恢复 break/make refcount 对称性。
+
+**触发条件**：同一个 contig block 被第二个 vCPU 以 `read_lock` 并发进入 `stage2_map_contig_leaf`，
+此时 `ctx->old` 为 valid+CONT（第一个 vCPU 已完成映射），cmpxchg 虽成功但跳过了 break put_page。
+相当于重入 BBM（见 Bug 2）的 refcount 副作用。
+
+**影响**：页表页 refcount 永不归零，物理页泄漏。不导致 crash——这也是为什么当时优先怀疑 state-3b
+（可致 crash）而把 leak 看作次要。
+
+**其他 contig helper 不受影响**：`stage2_unmap_contig_aligned/unaligned` 和
+`stage2_attr_contig_aligned/unaligned` 在入口和出口的 counted PTE 数量匹配，虽中间状态
+有短暂不平衡但最终净 refcount 差为 0，无需修复。
+
+### 9.2 Bug 2: contig map 重入 BBM
+
+**commit**: `0ee2c96e898a` "KVM: ARM64: Skip redundant BBM in stage2_map_contig_leaf"
+
+**问题**：`user_mem_abort` 持 `mmu_lock` 读侧（`kvm_fault_lock`），多个 vCPU 可并发对
+同一个 contig block 调用 `kvm_pgtable_stage2_map`。第一个 vCPU 完成 BBM 写入
+PTE[0..N-1] = valid+CONT 后，晚到的 vCPU 在 `__kvm_pgtable_visit` 读到
+`ctx->old = valid+CONT`——既不是 LOCKED 也不算 cmpxchg 冲突——于是再次进入
+`stage2_map_contig_leaf`，对同一个 block 重做一次完整的 BBM。
+
+即使最终 PTE 内容相同，这个重做是有害的：
+
+- PTE[0] 被 cmpxchg 从 valid+CONT 改为 LOCKED，PTE[1..N-1] 被清为 0。
+  并发 walker（其他 vCPU、SMMU stage-2、或 TLBI 后的硬件页表遍历）在此期间
+  看到整个 block 全部无效，直到 make 阶段逐个写回——这是一个不必要的大窗口。
+- 单页路径有 `stage2_pte_needs_update()` 做幂等守卫——发现新旧 PTE 完全相同时
+  直接返回 0 不做 BBM。contig 路径在进入 `stage2_map_contig_leaf` 之前
+  没有等价检查，把"已完成的 contig map"当作需要重新构建。
+
+**修复**：在 contig 分叉点（`stage2_map_walker_try_leaf` 调用
+`stage2_map_contig_leaf` 之前）加入幂等检查。用与 `stage2_map_contig_leaf` 相同的
+逻辑构造目标 PTE（`kvm_init_valid_leaf_pte`），若 PTE[0] 已有完全相同的值则返回 0
+（已是最新，无需 BBM）。
+
+关键细节：只比较 phys 和 attr（LO + HI），**有意不把 S2 permission diff 纳入相等
+测试**。`user_mem_abort` 中 `relax_perms` 的快捷路径条件是 `vma_pagesize == fault_granule`，
+在 contig hit 下此条件不成立（硬件 ESR 报告 PTE 粒度而非 CONT_PTE_SIZE），所以
+perm-only diff 只能走完整 BBM。在这里返回 -EAGAIN 会使 Guest 无限循环。
+
+**触发条件**：多 vCPU 同时对同一个 64K 对齐的 IPA 区域缺页——
+所有 vCPU 的 `fault_supports_stage2_huge_mapping` 都通过（memslot 基地址对齐、HVA 对齐、
+VMA 大小 ≥ 64K），都带 `PROT_CONT` 进入 map。
+
+**影响**：不必要地短暂暴露整个 block 无效 + 不必要 TLBI，并发窗口期间其他访问者被踢出。
+与 Bug 1 一起构成"冗余 BBM + refcount 泄漏"连锁反应。
+
+### 9.3 Bug 3: 通用 walker idx/addr 脱钩 → 多块 walk 写错 PA/刷错 TLBI
+
+**commit**: `bcda4081b9fc` "KVM: ARM64: Fix page-table walker idx/addr desync on contig advance"
+
+**问题**：这是导致 multi-vCPU 迁移 panic 的**根因 bug**。
+
+`__kvm_pgtable_walk` 每轮循环 `++idx`（前进 1 个表项），但 contig leaf visit
+（`__kvm_pgtable_visit` 中地址前进逻辑）将 `data->addr` 增加整块 `CONT_PTE_SIZE`
+（16 个表项的地址跨度）。单块 map fault 时 walker 在 `addr >= end` 处 break，
+只走一轮，idx 与 addr 不脱钩——解释了为什么单 vCPU / 简单场景从不触发。
+
+但**多块范围 walk**（unmap、wrprotect、attr 路径、split 等跨越多个 contig block
+的操作）中，第一块 contig block 处理完后 idx 落后 `data->addr` 共 CONT_PTES-1 项。
+此后 `ctx->ptep = &pgtable[idx]` 与 `ctx->addr` 不再对应同一个 PTE：
+
+- `stage2_map_walker_phys_addr` 用 `ctx->addr - ctx->start` 计算物理地址偏移 →
+  写 PTE 时 PA 对不上 → **PTE 写到错误物理页**。
+- unmap/wrprotect 的 TLBI 用错误范围 → 刷到错误地址或漏刷 → 残留旧翻译。
+
+迁移场景的触发链路：dirty logging 频繁做大范围 wrprotect（多块 walk，跨 contig block）
+→ 多 vCPU 的 dirty 页多 → wrprotect 调用频繁 → 更容易踩中错位。单 vCPU 不触发是因为
+即使有错位，没有并发 reader 去消费写坏的数据。
+
+**修复**：在 `__kvm_pgtable_walk` 循环中，每轮 `__kvm_pgtable_visit` 之后从
+`data->addr` 重新导出 idx，而不是简单地 `++idx`：
+
+```c
+next_idx = kvm_pgtable_idx(data, level);
+if (next_idx <= idx)
+    break;             // addr 已离开本表页，交给上层 walker
+idx = next_idx - 1;   // -1 抵消循环的 ++idx
+```
+
+- 普通 PTE 级别：每轮 visit 前进 PAGE_SIZE → next_idx == idx+1 → 等价于原来的 ++idx。
+- Contig leaf：visit 前进 CONT_PTE_SIZE → next_idx == idx + CONT_PTES → 跳过
+  PTE[1..N-1]，直接到下一个 block 的首 PTE 或超出表尾。
+- Wrap（next_idx <= idx）：`data->addr` 已超出本表页范围，break 交给父级 walker 处理。
+
+单块 map 的行为不变（仍在 `addr >= end` 的 break 处提前退出）。
+
+**触发条件**：调用者传入的范围跨越 contig block 边界（如 wrprotect `[addr, addr+size)`
+覆盖 128K → 跨越两个 64K contig block）。第二个 block 开始 idx 落后 addr，此后所有
+`&pgtable[idx]` 与 `data->addr` 错位。
+
+**影响**：最严重的情况是 PTE 写到错误的物理页框——Guest 随后读/写的是别人的物理页
+→ 空指针 / 数据错乱 / 安全灾难。multi-vCPU 迁移目的端多 wrprotect 操作频繁触发。
+**2026-05-24 用户 multi-vCPU 迁移测试确认修复后 panic 消失。**
+
+---
+
+**三个 bug 的关系**：
+
+| Bug | 触发 | 后果 | 独立于并发？ |
+|-----|------|------|-----------|
+| 1. refcount leak | 并发 BBM 重入（Bug 2 触发时必然发生） | 页表页泄漏 | 可单 vCPU 触发（重入即 leak） |
+| 2. 冗余 BBM | 多 vCPU 同 block 并发缺页 | 不必要的大窗口 + TLBI | 必需要并发 |
+| 3. idx/addr 脱钩 | 多块 walk 跨越 contig block 边界 | 写错 PA、刷错 TLBI → Guest crash | **无需并发也可触发**（单 vCPU 多块 walk 同样有错位，但单 vCPU 没有并发 reader 去消费写坏的数据） |
+
+Bug 1 和 Bug 2 有因果链：Bug 2 制造了"冗余 BBM"场景，而在该冗余 BBM 中，
+`ctx->old` 已是 valid+CONT（counted），Bug 1 使得 refcount 为这次冗余 BBM
+多拿了一个引用。两者独立修复——Bug 1 修 refcount 对称性（根治 leak），
+Bug 2 修幂等检查（消除不必要的 BBM 及随之而来的 TLBI / 互斥窗口）。
+Bug 3 才是真正的 crash 根因，与前两者独立。
