@@ -160,3 +160,101 @@ page table page 的 refcount put 到 0 → 页释放 → 另一 vCPU 的 mmu_cac
   固有的；一次加多个补丁时更无法把"概率降低"归因到某个补丁。不要把采样
   波动当成"补丁生效/某路径是元凶"的信号。定位要靠确定性实验（二分、
   禁用某机制看 panic 是否消失），不靠概率观感。
+
+================================================================
+# 今日后续（同日，接"下一步方向"第 1 条）
+================================================================
+
+接上文。本段进展：**二分实验直接出结论（纯软件）** + **代码级证实 map
+路径绕过 PTE[0] 锁** + **加 3 处探针** + **关键自我修正：state-3b 触发
+前提（4K fault 来源）未验证，可能被否**。
+
+## 0. 关键输入（用户提供）
+
+调试用的**硬件本来就不支持 stage2 contig bit**（硬件忽略 BIT 52 hint）。
+故上文"下一步方向"排第一的二分实验"禁用硬件 CONT bit"**天然已经跑过**。
+
+## 1. 确定性结论：根因在纯软件逻辑
+
+- 二分判据（见上文方向 1）：禁用硬件 CONT → panic 消失=硬件 amalgamation；
+  仍在=纯软件。
+- 硬件本就忽略 CONT ≡ 实验已跑，且 panic 仍在 → **确定性落到纯软件逻辑**，
+  排除硬件 amalgamation。确定性切分，非概率推断。
+- 查证（查 .config 验证前提，非假设）：`CONFIG_KVM_MMU_LOCKLESS_AGING`
+  **未配置** → user_mem_abort 的 1725 分支不生效，contig 路径**确实启用**
+  （排除"contig 根本没跑"这一可能）。
+
+## 2. 代码级证实：map 路径绕过 PTE[0] 锁（= 上文记的"状态3b"）
+
+PTE[0]-as-block-lock 前提是"所有碰 block 的操作都对齐回 PTE[0] 串行"。
+**map 路径不满足**：
+
+- `stage2_contig_supported`（pgtable.c:130）走 contig 的门槛含**请求几何**：
+  `addr 按 64K 对齐 && 区间 ≥64K`。
+- 4K 区间、落 PTE[k]（k≠0）的 fault 必然失败几何检查 → 走
+  `stage2_map_walker_try_leaf` 单页分支，直接对 `ctx->ptep`=PTE[k] 做
+  break+make，**不对齐 PTE[0]、不拿锁**。
+- 即便 PTE[k] 当前有 CONT bit 也如此（`CONT=BIT(52) ∉ HI_SW=GENMASK(58,55)`，
+  故是完整 BBM，不走软件位快存路径）。
+- **路由不对称（关键）**：attr 路径（`stage2_attr_walker`:1694）走 contig
+  只看 `old&CONT` → 任何 CONT PTE 都对齐 PTE[0]，mkyoung/relax/wrprotect
+  **安全**；唯独 map 路径因几何门槛漏。
+
+## 3. 加了 3 处调试探针（编译过 VHE/nVHE/kernel 无 warning；临时代码，未 commit）
+
+1. **单页侧 WARN**（pgtable.c:1292，`stage2_map_walker_try_leaf` 单页分支
+   入口）：`ctx->old & CONT` 时打印 addr/old/phys/level/cpu。抓"4K map 在锁
+   外动一个 CONT PTE"。
+2. **owner 侧 WARN**（pgtable.c:1182，`stage2_map_contig_leaf` make 循环）：
+   make 写 PTE[i] 前若 `cur != 0`（我 break 已清 0）则打印。抓"PTE[0] 锁外
+   有人写了 block 内 PTE"。
+3. **已存在 owner 侧 WARN_ON**（pgtable.c:1131，break 循环）：break 时
+   PTE[i]=LOCKED。
+- 用 `WARN`（非 ONCE）以看并发模式；注意高频可能扰动 race 时序。
+
+## 4. 关键自我修正：state-3b 触发前提未验证（用户质疑）
+
+用户质疑：`vma_pagesize=CONT_PTE_SIZE` 时不会有单页 fault，4K 从哪来？
+
+查 `user_mem_abort`（查代码验证前提）：`force_pte` 唯一正常来源 =
+`logging_active`（mmu.c:1660-1661）。其余：1732 else 带 `WARN_ON(1)`（异常、
+对固定 GFN 稳定，不会与 64K 并发同一 block）、1746 nested（非嵌套不适用）。
+
+| logging | fault 粒度 | 结果 |
+|---|---|---|
+| 关 | 全 64K | 全 contig（contig-vs-contig，PTE[0] 锁串行） |
+| 开 | 全 4K force_pte | **不建 CONT block** |
+
+- 故 state-3b（4K 撞 CONT）只在 **logging 关→开切换 + 切换后 4K 落到已建
+  CONT block** 时成立。
+- "迁移目的端是否有这种 logging 切换"**未验证**（标准 live migration：源端
+  开 logging，目的端通常关）→ **用户质疑很可能成立，可能判 state-3b 出局**。
+- 教训重申（呼应"概率不是因果"那条）：又一次基于未验证前提（"目的端有
+  logging 切换"）设主攻方向。
+
+## 5. 方向收窄
+
+- **owner 侧 WARN 不依赖"有没有 4K fault"这个前提**，直接判 PTE[0] 锁严不严：
+  - 触发 → 锁有洞（绕过者：4K map / contig-vs-contig 锁失效 / advance 重入，
+    任一）。
+  - 不触发 → 锁严密，panic 在**锁之外** → 收窄到 contig-vs-contig 内部的多核
+    问题（可见性/TLB/refcount/advance）。
+- 单页侧 WARN 不触发 → 坐实无 4K 入侵。
+
+## 6. 下一步
+
+- **待加 E（源头侧）**：`user_mem_abort` 记 gfn/vma_pagesize/force_pte/
+  logging_active/cpu，复现时直接测：目的端 logging 状态、有无 4K fault 落到
+  contig 区、vCPU 间粒度分歧。一锤定音 state-3b 前提是否成立。
+- 复现后收集：3 处 WARN 输出 + 栈回溯；panic backtrace + 空指针地址。
+- 候选探针：A 后果侧 refcount 配平（contig unmap/put_page）；B advance
+  LOCKED 过跳记录。
+
+## 7. 今日教训
+
+- "查实际代码/配置验证前提"再次奏效：`LOCKLESS_AGING`、`force_pte` 来源均
+  查证而非假设。
+- state-3b 症状契合，但其前提（logging 切换）未证 → **症状契合 ≠ 根因**
+  （与本文上半天两次否定同一教训）。
+- 探针设计要**可证伪 + 不依赖争议前提**：owner 侧 WARN 的价值正在于绕开
+  "有没有 4K fault"的争论，直接判锁严不严。
