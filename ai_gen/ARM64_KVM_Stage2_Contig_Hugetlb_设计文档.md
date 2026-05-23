@@ -6,7 +6,7 @@ ARM64 KVM Stage-2 Contiguous Hugetlb 支持
 - v0.3 2026.05.18 Sherlock 修正锁文档：wrprotect/test_clear_young为write_lock（非read_lock），map/relax_perms恢复为read_lock（kvm_fault_lock）
 - v0.4 2026.05.19 Sherlock 重写5.4.3.1：确认vma_pagesize不一致的唯一来源是force_pte（SRCU窗口），mprotect/madvise/THP不改变hugetlb VMA类型
 - v0.5 2026.05.19 Sherlock 精简第三章，场景1a/1b合并重写；修正mprotect/madvise分析：虽不改VMA类型，但间接触发unfold制造PTE[0]=valid非CONT前置条件；修正竞态汇总表
-- v0.6 2026.05.24 Sherlock 新增加9节Bug修复记录(refcount leak/冗余BBM/walker idx脱钩)；5.4.1 补全 MMU notifier 触发路径(unmap via invalidate_range_start、destroy_range via release)
+- v0.6 2026.05.24 Sherlock 第8、9章合并为统一的"Bug修复记录"(Walker Reload/refcount leak/冗余BBM/idx脱钩)；5.4.1 补全MMU notifier路径+持锁修正(pKVM fault=write_lock、EL2 exclusive域)
 
 简介：分析ARM64 KVM Stage-2对contiguous PTE的软件支持逻辑。
 
@@ -692,9 +692,16 @@ ksm / khugepaged / madvise
 ```
 (todo: 移到专门的笔记里)
 
-## 8. Walker Reload 竞态与修复
+## 8. Bug 修复记录
 
-### 问题
+本章记录实现过程中发现并修复的 bug，按发现时间从先到后排列。
+每个 bug 描述：问题现象、根因分析、修复方案、并发/触发条件要点。
+
+### 8.1 Walker Reload 竞态
+
+**commit**: `54a530722974` "KVM: arm64: Fix walker reload race"
+
+#### 问题
 
 `__kvm_pgtable_visit` 在 leaf callback 返回后会 reload PTE 值，用于判断地址前进
 `PAGE_SIZE` 还是 `CONT_PTE_SIZE`：
@@ -735,7 +742,7 @@ vCPU0: contig BBM at PTE[0]            vCPU1: contig BBM at PTE[0]
                                         WARN_ON_ONCE(is_locked(PTE[1])) ← FIRES
 ```
 
-### 修复
+#### 修复
 
 commit `54a530722974`（"KVM: arm64: Fix walker reload race"）。在 reload 判断中增加
 第三个条件：reload 值为 `LOCKED` 时也按 `CONT_PTE_SIZE` 前进。Walker 的 `end` 地址
@@ -750,12 +757,7 @@ commit `54a530722974`（"KVM: arm64: Fix walker reload race"）。在 reload 判
 }
 ```
 
-## 9. Bug 修复记录（v0.6）
-
-本章记录实现过程中发现并修复的三个 bug，按发现时间从先到后排列。
-每个 bug 描述：问题现象、根因分析、修复方案、并发/触发条件要点。
-
-### 9.1 Bug 1: contig map PTE[0] refcount 泄漏
+### 8.2 refcount 泄漏: contig map PTE[0]
 
 **commit**: `a44ef9333440` "KVM: ARM64: Fix refcount leak in stage2_map_contig_leaf PTE[0] path"
 
@@ -772,7 +774,7 @@ make 的 get_page，当 `ctx->old` 是已 counted 的 PTE 时，PTE[0] 多拿一
 
 **触发条件**：同一个 contig block 被第二个 vCPU 以 `read_lock` 并发进入 `stage2_map_contig_leaf`，
 此时 `ctx->old` 为 valid+CONT（第一个 vCPU 已完成映射），cmpxchg 虽成功但跳过了 break put_page。
-相当于重入 BBM（见 Bug 2）的 refcount 副作用。
+相当于重入 BBM（见 8.3）的 refcount 副作用。
 
 **影响**：页表页 refcount 永不归零，物理页泄漏。不导致 crash——这也是为什么当时优先怀疑 state-3b
 （可致 crash）而把 leak 看作次要。
@@ -781,7 +783,7 @@ make 的 get_page，当 `ctx->old` 是已 counted 的 PTE 时，PTE[0] 多拿一
 `stage2_attr_contig_aligned/unaligned` 在入口和出口的 counted PTE 数量匹配，虽中间状态
 有短暂不平衡但最终净 refcount 差为 0，无需修复。
 
-### 9.2 Bug 2: contig map 重入 BBM
+### 8.3 冗余 BBM: contig map 重入
 
 **commit**: `0ee2c96e898a` "KVM: ARM64: Skip redundant BBM in stage2_map_contig_leaf"
 
@@ -815,9 +817,9 @@ perm-only diff 只能走完整 BBM。在这里返回 -EAGAIN 会使 Guest 无限
 VMA 大小 ≥ 64K），都带 `PROT_CONT` 进入 map。
 
 **影响**：不必要地短暂暴露整个 block 无效 + 不必要 TLBI，并发窗口期间其他访问者被踢出。
-与 Bug 1 一起构成"冗余 BBM + refcount 泄漏"连锁反应。
+与 8.2 一起构成"冗余 BBM + refcount 泄漏"连锁反应。
 
-### 9.3 Bug 3: 通用 walker idx/addr 脱钩 → 多块 walk 写错 PA/刷错 TLBI
+### 8.4 idx/addr 脱钩: 多块 walk 写错 PA/刷错 TLBI
 
 **commit**: `bcda4081b9fc` "KVM: ARM64: Fix page-table walker idx/addr desync on contig advance"
 
@@ -864,19 +866,3 @@ idx = next_idx - 1;   // -1 抵消循环的 ++idx
 **影响**：最严重的情况是 PTE 写到错误的物理页框——Guest 随后读/写的是别人的物理页
 → 空指针 / 数据错乱 / 安全灾难。multi-vCPU 迁移目的端多 wrprotect 操作频繁触发。
 **2026-05-24 用户 multi-vCPU 迁移测试确认修复后 panic 消失。**
-
----
-
-**三个 bug 的关系**：
-
-| Bug | 触发 | 后果 | 独立于并发？ |
-|-----|------|------|-----------|
-| 1. refcount leak | 并发 BBM 重入（Bug 2 触发时必然发生） | 页表页泄漏 | 可单 vCPU 触发（重入即 leak） |
-| 2. 冗余 BBM | 多 vCPU 同 block 并发缺页 | 不必要的大窗口 + TLBI | 必需要并发 |
-| 3. idx/addr 脱钩 | 多块 walk 跨越 contig block 边界 | 写错 PA、刷错 TLBI → Guest crash | **无需并发也可触发**（单 vCPU 多块 walk 同样有错位，但单 vCPU 没有并发 reader 去消费写坏的数据） |
-
-Bug 1 和 Bug 2 有因果链：Bug 2 制造了"冗余 BBM"场景，而在该冗余 BBM 中，
-`ctx->old` 已是 valid+CONT（counted），Bug 1 使得 refcount 为这次冗余 BBM
-多拿了一个引用。两者独立修复——Bug 1 修 refcount 对称性（根治 leak），
-Bug 2 修幂等检查（消除不必要的 BBM 及随之而来的 TLBI / 互斥窗口）。
-Bug 3 才是真正的 crash 根因，与前两者独立。
