@@ -166,7 +166,8 @@ machvirt_init展开如下：
 machvirt_init
   /* 创建虚机上的各个设备 */
   ....
-  +-> qdev_realize <-- 对于每个possible vCPU调用vCPU的realize函数。
+  +-> object_new(possible_cpus->cpus[n].type)  <--- hw/arm/virt.c, 创建vCPU QOM实例
+  +-> qdev_realize(DEVICE(cpuobj), ...)        <--- hw/arm/virt.c, realize触发arm_cpu_realizefn
 ```
 
 vCPU线程在vCPU的realize函数中创建，线程函数是accel/kvm/kvm-accel-ops.c里的
