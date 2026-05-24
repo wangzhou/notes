@@ -1093,3 +1093,368 @@ Host 运行中
 | **嵌套虚拟化** | HPMN 划分 counter 归属，嵌套过渡时重建 EL1/EL2 过滤不同的 perf_event |
 | **电平中断** | PMU IRQ 为电平型：overflow=1 拉高，overflow=0 拉低 |
 | **PMUSERENR_EL0 竞态** | VHE 下通过关中断保护，host perf IPI 写入 host context 副本 |
+
+---
+
+## 15. Partitioned PMU：直通硬件计数器的 PMU 分区方案
+
+### 15.1 背景与问题
+
+前 14 章分析的 emulated vPMU 存在根本性性能瓶颈：**每个 PMU 寄存器访问都产生 trap 到 EL2**。对于高频 `perf` 使用场景（如 `perf record -F 4000`），代价显著：
+
+| 工况 | Emulated vPMU | 瓶颈 |
+|---|---|---|
+| `perf record` 压缩 | 4.14s real / 0.16s sys | host 内核占 ~35% CPU |
+| SPECint2017 + `perf stat` | 3789s / score 4.28 | host sys 224s，guest 仅占 56% |
+| Host kernel time % | **34.96%** | 大量时间花在 trap/emulate |
+
+Partitioned PMU 的思路：**让 guest 直接访问硬件 PMU 寄存器，减少乃至消除 trap**。
+
+### 15.2 硬件基础：MDCR_EL2.HPMN
+
+ARM PMUv3 架构提供了 `MDCR_EL2.HPMN` 字段，将 PMU counter 硬件划分为两段：
+
+```
+MDCR_EL2.HPMN = k   (0 ≤ k ≤ N)
+
+  Counter 0..k-1           Counter k..N-1
+  ┌─────────────────┬──────────────────────┐
+  │ 第一段 (EL1/EL0) │ 第二段 (EL2 only)      │
+  │ Guest 可直接访问  │ Host hypervisor 专用   │
+  └─────────────────┴──────────────────────┘
+```
+
+- 硬件自动保证：EL1/EL0 写 `PMEVCNTR`/`PMEVTYPER` 等寄存器时，若 idx ≥ HPMN，操作被硬件忽略
+- Host (EL2) 始终可访问全部 counter
+- `FEAT_HPMN0` 允许 HPMN=0（全部 counter 归 host）
+
+这天然提供了隔离机制——不需要 KVM 介入每个 counter 访问。
+
+### 15.3 整体架构：三层寄存器访问策略
+
+```
+                    ┌─────────────────────────────┐
+                    │     PMU 寄存器访问分类       │
+                    └──────────┬──────────────────┘
+           ┌───────────────────┼───────────────────┐
+           ▼                   ▼                   ▼
+    完全直通 (无 trap)    写穿透 (部分过滤)   完全 trap
+    ┌──────────────┐  ┌──────────────┐  ┌──────────────┐
+    │PMEVCNTRn_EL0 │  │PMCNTENSET    │  │PMCEIDn_EL0   │
+    │PMEVTYPERn_EL0│  │PMOVSSET      │  │PMMIR_EL1     │
+    │PMCCNTR_EL0   │  │PMCR_EL0      │  │PMICNTR_EL0   │
+    │PMUSERENR_EL0 │  │PMINTENSET    │  │PMICFILTR_EL0 │
+    │PMSELR_EL0    │  │PMSWINC_EL0   │  │              │
+    └──────────────┘  └──────────────┘  └──────────────┘
+     硬件 HPMN 隔离     HPMN 限制写范围    KVM 完全仿真
+```
+
+**机制支撑：**
+
+| 机制 | 作用 |
+|---|---|
+| **MDCR_EL2.HPMN** | 硬件自动限制 guest 写操作只影响属于它的 counter |
+| **FEAT_FGT (Fine-Grained Traps)** | 选择性 un-trap 高频寄存器，只 trap 需要 KVM 介入的 |
+| **Fallback fast-path** (无 FGT) | 在 `hyp/switch.h` 中提供轻量 handler，比完整 trap 路径仍快很多 |
+
+### 15.4 VHE-Only 限制
+
+Partitioned PMU **仅在 VHE 模式下支持**。原因：
+
+- **VHE**: host 内核跑在 EL2，可以无视 HPMN 限制访问全部 counter。guest 跑在 EL1，HPMN 隔离生效。
+- **nVHE**: host 内核跑在 EL1，HPMN 隔离会让 host 也无法访问分配给 guest 的 counter。每次 host 侧 counter 访问都需要 hypercall，代价不可接受。
+
+### 15.5 动态 Counter 预留 (v7 关键创新)
+
+早期版本在 boot 时静态地从 host 取走 counter。v7 改进为**动态预留**——host 只在 vCPU 实际驻留该 CPU 核时才失去 counter。
+
+**引入 `perf_pmu_resched_update()`**：
+```c
+// 类似 perf_pmu_resched()，但接受一个回调，在事件 schedule out
+// 和 schedule in 之间执行，用于安全地更新 PMU 的可用 counter 范围
+void perf_pmu_resched_update(struct pmu *pmu, void (*update)(void *), void *data);
+```
+
+**vCPU load 流程**：
+```
+kvm_arch_vcpu_load()
+  → 检查 host 事件是否占用了 guest 需要的 counter
+    → 如果占用:
+        perf_pmu_resched_update(arm_pmu, update_cntr_mask, &guest_counters)
+          → 1. schedule out 占用的 host 事件
+          → 2. 更新 cntr_mask (移除 guest counter)
+          → 3. schedule in 其余 host 事件（分配到剩余 counter）
+    → 如果未占用: 无操作 (快速路径)
+```
+
+**vCPU put 流程**：
+```
+kvm_arch_vcpu_put()
+  → 恢复 cntr_mask (归还 counter 给 host)
+  → perf_pmu_resched_update() 重新调度 host 事件
+```
+
+关键：只在有冲突时才触发 perf 重调度，大部分情况下 host 和 guest 使用不同 counter，无额外开销。
+
+### 15.6 HPMN 值的计算
+
+```c
+// 伪代码
+u8 kvm_pmu_hpmn(struct kvm_vcpu *vcpu)
+{
+    u8 nr_host_counters = *host_data_ptr(nr_event_counters);
+    u8 nr_guest_counters = vcpu->kvm->arch.nr_pmu_counters;
+
+    // 未分区 或 vCPU 在不支持的 CPU 上 → HPMN = N (所有 counter 归 EL1)
+    if (!is_partitioned(vcpu) || vcpu_on_unsupported_cpu(vcpu))
+        return nr_host_counters; // 全部归 guest 可见范围
+
+    // 分区后 HPMN 取 min(guest counter 数, 当前 CPU counter 数)
+    return min(nr_guest_counters, nr_host_counters);
+}
+```
+
+写入 `MDCR_EL2`：
+```c
+vcpu->arch.mdcr_el2 = FIELD_PREP(MDCR_EL2_HPMN, hpmn);
+// 同时设置:
+//   MDCR_EL2_HPME  - host 可以监控 guest counter 的溢出
+//   MDCR_EL2_HPMD  - EL1 不能访问 hyp counter 的 event counting (PMUv3p1)
+//   MDCR_EL2_HCCD  - 禁止 cycle counter 在 EL2 计数 (PMUv3p5)
+// 清除 TPM/TPMCR    - FGT 提供更细粒度控制时关闭粗粒度 trap
+```
+
+### 15.7 FGT (Fine-Grained Traps) 配置
+
+当硬件支持 `FEAT_FGT`/`FEAT_FGT2` 时，KVM 可以将粗粒度的 `MDCR_EL2.TPM`/`TPMCR` 替换为精细化的 per-register trap 控制：
+
+| FGT 控制位 | 对应寄存器 | 分区策略 |
+|---|---|---|
+| `HFGxTR_EL2_TPIDR_EL0` → | - | - |
+| `HFGITR_EL2_*` | PMCR, PMSELR, etc. | 大部分 **un-trap**（直通硬件） |
+| 粗粒度 `MDCR_EL2.TPM` | 全部 PMU | 仅 FGT 不可用时作为 fallback |
+
+**Untrap 的寄存器（direct access）**:
+- PMCR_EL0, PMUSERENR_EL0, PMSELR_EL0, PMCCNTR_EL0
+- PMCNTENSET/CLR, PMINTENSET/CLR, PMEVCNTRn_EL0
+
+**保持 Trap 的寄存器**:
+- PMOVSSET/CLR (需要在 KVM 中处理溢出状态)
+- PMEVTYPERn_EL0 / PMCCFILTR_EL0 (需要校验事件号和过滤)
+- PMCEIDn_EL0 (需要按 filter 裁剪)
+- PMSWINC_EL0 (软件增量需要 KVM 处理)
+- PMICNTR_EL0, PMICFILTR_EL0, PMMIR_EL1
+
+**无 FGT 的 fallback**：在 `hyp/switch.h` 中添加轻量级 fast-path handler，直接读/写硬件寄存器而不走完整的 EL2 trap 路径。实测显示性能差异可忽略，但代码复用更好。
+
+### 15.8 上下文切换 (Lazy Swap)
+
+Partitioned PMU 的 guest counter 值**直接驻留在硬件 PMC 上**。vCPU 迁出时需要保存，迁入时需要恢复：
+
+**Lazy 策略**：
+```
+状态追踪: VCPU_PMU_ACCESS_VIRTUAL / VCPU_PMU_ACCESS_PHYSICAL
+
+vCPU Load (kvm_arch_vcpu_load):
+  if guest 已启用分区 PMU AND guest 曾访问过 PMU:
+    从 vCPU context 恢复 guest counter 值到硬件 PMC
+    → write_pmevcntrn(), write_pmevtypern(), etc.
+    清除 PMOVS (避免虚假溢出)
+    设置 HPMN
+
+vCPU Put (kvm_arch_vcpu_put):
+  if guest 曾访问过 PMU:
+    从硬件 PMC 读取 guest counter 值保存到 vCPU context
+    → read_pmevcntrn(), read_pmevtypern(), etc.
+    恢复 PMOVS
+    恢复 host cntr_mask (归还 counter)
+```
+
+Lazy 意味着只在 guest 真正使用 PMU 时才做 swap，大部分 vCPU 调度不产生 PMU 相关开销。
+
+**对比 debug 寄存器的 lazy 模型**：类似 `enum vcpu_register_owner { FREE, HOST_OWNED, GUEST_OWNED }`，guest PMU 寄存器遵循 "谁最后用就归谁" 的语义。
+
+### 15.9 中断处理的改造
+
+Partitioned 场景下，PMU 溢出中断 (PPI) 仍然 trap 到 EL2。改造点：
+
+**Host PMU 驱动侧** (`drivers/perf/arm_pmuv3.c`)：
+```c
+// IRQ handler 中
+for each counter:
+    if counter in guest_partition:
+        // 不清除 guest counter 的 overflow flag
+        // 由 KVM 在注入 guest 前处理
+    else:
+        // 正常 host 流程: 清除 overflow, 调用 perf_event_overflow()
+```
+
+**KVM 侧** (`pmu-emul.c` 或 `pmu-direct.c`)：
+```c
+// Guest entry 时
+kvm_pmu_check_guest_overflow(vcpu):
+    pmovs = read_pmovsclr_el0() & guest_counter_mask;
+    if pmovs:
+        for each set bit:
+            if kvm_vcpu_read_pmcr(vcpu) & PMCR_E:
+                if PMINTENSET & bit:
+                    kvm_vgic_inject_irq(irq_num, 1, pmu);
+                    // 注意: PMOVS 的清除在 guest 写 PMOVSCLR 时硬件完成
+                    // (PMOVSCLR 是写穿透的)
+```
+
+### 15.10 UAPI 设计
+
+经历多次迭代（vCPU ioctl → VM capability → vCPU device attr）：
+
+```c
+// 最终方案 (v5+): vCPU device attribute
+#define KVM_ARM_VCPU_PMU_V3_CTRL        // 已有设备属性组
+#define KVM_ARM_VCPU_PMU_V3_PARTITION   // 新增属性
+
+struct kvm_device_attr {
+    .group = KVM_ARM_VCPU_PMU_V3_CTRL,
+    .attr  = KVM_ARM_VCPU_PMU_V3_PARTITION,
+    .addr  = 0,  // 无需额外参数
+};
+
+// 设置时机: 在 KVM_ARM_VCPU_PMU_V3_INIT 之后，首次 vCPU 运行之前
+```
+
+**VMM 使用流程**：
+```
+1. KVM_CREATE_VM
+2. KVM_ARM_VCPU_INIT (with KVM_ARM_VCPU_PMU_V3 feature)
+3. KVM_SET_DEVICE_ATTR (KVM_ARM_VCPU_PMU_V3_IRQ)     → 设置中断号
+4. KVM_SET_DEVICE_ATTR (KVM_ARM_VCPU_PMU_V3_PARTITION) → 启用分区
+5. KVM_SET_DEVICE_ATTR (KVM_ARM_VCPU_PMU_V3_INIT)      → 实例化 PMU
+6. KVM_CREATE_VCPU 完成 → 可以运行
+```
+
+内核命令行参数（驱动侧）：
+```
+arm_pmuv3.reserved_host_counters=N
+// 为 host 保留 N 个 counter，其余给 guest (仅在 VHE 模式有效)
+// 默认不保留 (N=0)，即不启用分区
+```
+
+### 15.11 性能数据
+
+| Benchmark | Emulated PMU | Partitioned PMU | 改善 |
+|---|---|---|---|
+| `perf record` + gzip (real) | 4.143s | 3.139s | **-24%** |
+| `perf record` + gzip (sys) | 0.159s | 0.110s | **-31%** |
+| SPECint2017 + `perf stat` (real) | 3789s | 3525s | **-7%** |
+| SPECint2017 + `perf stat` (sys) | 224s | 16s | **-93%** |
+| Host kernel CPU% (`perf record`) | 34.96% | 0.97% | **-97%** |
+| Guest CPU% (`perf record`) | 55.85% | 91.06% | **+63%** |
+
+关键结论：**host 侧开销几乎完全消除**，guest 获得了接近物理机的 PMU 使用效率。
+
+### 15.12 Emulated vs Partitioned 对比
+
+| 维度 | Emulated vPMU | Partitioned vPMU |
+|---|---|---|
+| **Counter 值来源** | sys_reg 基线 + perf_event 增量 | 直接读硬件 PMC |
+| **寄存器访问开销** | 每次访问 trap 到 EL2 | 大部分直通硬件 |
+| **事件计数方式** | 依赖 host perf_event 子系统 | 硬件 PMC 原生计数 |
+| **Counter 多路复用** | perf 子系统调度 | 硬件 PMC 独占 |
+| **Host/Guest 隔离** | perf_event 的 exclude_host | HPMN 硬件隔离 |
+| **溢出处理** | perf_event overflow callback | PMU PPI → KVM 读硬件 PMOVS |
+| **事件过滤** | KVM 软件 filter + perf_event | Pseudo-NMI + KVM 软件 filter |
+| **PMCEID 暴露** | 从 arm_pmu 位图动态计算 | 直接读硬件 |
+| **上下文切换** | perf_event_enable/disable | Lazy save/restore 硬件 PMC |
+| **VHE/nVHE** | 均支持 | 仅 VHE |
+| **异构支持** | perf 子系统自动处理 | 需 migration hook |
+| **FGT 要求** | 不需要 | 优选但非必须 |
+
+### 15.13 Patch 系列演进
+
+| 版本 | 日期 | Patches | 关键变化 |
+|---|---|---|---|
+| RFC v1/v2 | 2025.02 | 4-8 | 初始设计，静态 counter 预留 |
+| v1 | 2025.06.02 | 17 | 正式提交，perf 集成 |
+| v2 | 2025.06.20 | 23 | 移除 FGT 硬依赖，双命令行参数 |
+| v3 | 2025.06.26 | 22 | 回退为单参数，HPMN0 capability |
+| v4 | 2025.07.14 | 23 | **Lazy context swap**，`pmu-part.c`→`pmu-direct.c`，Mark Brown FGT 非 UNDEF 控制 |
+| v5 | 2025.12.09 | 24 | Ollie 评审意见：简化 HPMN 计算，UAPI 改为 vCPU device attr |
+| v6 | 2026.02.09 | 19 | Kselftest 完善，异常测试放松 |
+| **v7** | **2026.05.04** | **20** | **动态 counter 预留** (`perf_pmu_resched_update`)，去除无 FGT fast-path bloat，rebased on v7.0-rc7 |
+
+### 15.14 v7 详细 Patch 列表
+
+```
+01/20  arm64: cpufeature: Add cpucap for HPMN0
+02/20  KVM: arm64: Reorganize PMU functions
+03/20  perf: arm_pmuv3: Generalize counter bitmasks
+04/20  perf: arm_pmuv3: Check cntr_mask before using pmccntr
+05/20  perf: arm_pmuv3: Add method to partition the PMU
+06/20  KVM: arm64: Set up FGT for Partitioned PMU
+07/20  KVM: arm64: Add Partitioned PMU register trap handlers
+08/20  KVM: arm64: Set up MDCR_EL2 to handle a Partitioned PMU
+09/20  KVM: arm64: Context swap Partitioned PMU guest registers
+10/20  KVM: arm64: Enforce PMU event filter at vcpu_load()
+11/20  perf: Add perf_pmu_resched_update()
+12/20  KVM: arm64: Apply dynamic guest counter reservations   ← 核心 innovation
+13/20  KVM: arm64: Implement lazy PMU context swaps
+14/20  perf: arm_pmuv3: Handle IRQs for Partitioned PMU guest counters
+15/20  KVM: arm64: Detect overflows for the Partitioned PMU
+16/20  KVM: arm64: Add vCPU device attr to partition the PMU
+17/20  KVM: selftests: Add find_bit to KVM library
+18/20  KVM: arm64: selftests: Add test case for Partitioned PMU
+19/20  KVM: arm64: selftests: Relax testing for exceptions when partitioned
+20/20  (not authored by Colton)
+```
+
+### 15.15 关键设计决策与权衡
+
+| 决策 | 原因 | 代价 |
+|---|---|---|
+| **VHE only** | nVHE 需 hypercall 处理每次 counter 访问，不可接受 | 绑定到 VHE 硬件 |
+| **静态 boot 预留 → 动态预留** (v7) | Will Deacon 建议，host 不在用 guest counter 时不应损失 | 引入 `perf_pmu_resched_update` 复杂度 |
+| **FGT 优先，fallback fast-path** | FGT 最 clean，无 FGT 时保持正确性 | 双路径维护，v7 简化了无 FGT 路径 |
+| **Lazy context swap** | 大多数 vCPU 调度不涉及 PMU 使用 | 追踪额外状态位 |
+| **PMOVS 写穿透** | 硬件 HPMN 自动限制写范围，足够安全 | KVM 需要在 guest entry 检查溢出 |
+| **KVM_CAP → vCPU device attr** | Ollie 评审反馈，与其他 vPMU 控制一致 | UAPI 稳定化周期长 |
+
+### 15.16 与现有 Emulated PMU 共存的代码组织
+
+Partitioned PMU 不是替代而是**增强**现有 emulated PMU。关键集成点：
+
+```
+arch/arm64/kvm/
+  pmu-emul.c          ← 已有：emulated vPMU 的 perf_event 后盾
+  pmu.c               ← 已有：VHE/nVHE 事件切换
++ pmu-direct.c        ← 新增：Partitioned direct-access path
+  sys_regs.c          ← 修改：FGT 配置 + 分区 trap handler
+  hyp/
+    include/hyp/switch.h  ← 修改：无 FGT fallback fast-path
+    vhe/switch.c          ← 修改：VHE 分区上下文切换
+
+drivers/perf/
+  arm_pmuv3.c         ← 修改：armv8pmu_partition(), 中断处理改造
+
+include/kvm/
+  arm_pmu.h           ← 修改：新增分区相关声明
+
+include/linux/
+  perf_event.h        ← 修改：perf_pmu_resched_update()
+  perf/arm_pmuv3.h    ← 修改：分区 bitmask 辅助宏
+```
+
+### 15.17 总结：Partitioned PMU 的语义本质
+
+> **Partitioned PMU 将传统 emulated vPMU 的 "KVM 为每个 guest counter 创建 host perf_event 影子" 的模式，升级为 "硬件直接提供隔离，guest 用自己的 counter 段，host 用自己的 counter 段"**。
+
+- **Emulated vPMU**: guest counter ↔ kernel perf_event ↔ 硬件 PMC（间接，每步都有开销）
+- **Partitioned vPMU**: guest counter ↔ 硬件 PMC（直接，HPMN 硬件隔离）
+
+KVM 的角色从 "过度翻译" 退化为 "设置和维护隔离边界"，仅在 guest 访问**控制类**寄存器（PMCR, PMCNTENSET, PMOVS, PMCEID, PMSWINC）时才介入。这种设计利用了 ARM 架构的硬件虚拟化特性，将 PMU trap 开销从 ~35% CPU 降到 <1%。
+
+---
+
+**参考资料**：
+- [PATCH v7 00/20] ARM64 PMU Partitioning, Colton Lewis, 2026.05.04 ([lore.kernel.org](https://lore.kernel.org/lkml/20260504211813.1804997-15-coltonlewis@google.com/T/#u))
+- [PATCH v1 00/17] ARM64 PMU Partitioning, Colton Lewis, 2025.06.02 ([lkml.org](https://lkml.org/lkml/2025/6/2/944))
+- [PATCH v4 00/23] ARM64 PMU Partitioning, Colton Lewis, 2025.07.14 ([lists.openwrt.org](https://lists.openwrt.org/pipermail/linux-arm-kernel/2025-July/1045108.html))
+- KVM Forum 2025: PMU Partitioning presentation (slides + video)

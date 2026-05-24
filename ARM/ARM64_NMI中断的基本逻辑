@@ -40,17 +40,14 @@ NMI，不管是普通中断还是NMI中断，只要中断被taken，PSTATE.I(F)/
 NMI的情况下，中断正常处理，普通中断的情况下，中断处理程序应该保存上下文后打开ALLINT，
 叫NMI可以进来。
 
-GIC spec上规定支持NMI的中断类型有PPI/SGI/SPI，LPI是不支持NMI的。在支持NMI的GIC
-版本上，这里的关系有点绕，GICv3.3/GICv4.2都支持NMI。首先，GICv3.x相当于GICv3的一
-个stable分支，GICv4.x支持虚拟中断直通特性，ARM定义GICv3.3支持NMI，是说在GICv3.2
-的基础上支持NMI，其中vNMI支持是说注入的PPI/SGI/SPI支持NMI，GICv4.2支持NMI，是说
-直通的vSGI支持NMI。有意思吧，这种留个stable版本的定义方式感觉主要是为了只支持GICv3
-的系统。
+GIC spec上规定支持NMI的中断类型有PPI/SGI/SPI，LPI是不支持NMI的。
+
+在支持NMI的GIC版本上，这里的关系有点绕，你去看GIC spec会发现协议说GICv3.3/GICv4.2
+都支持NMI，意思是基于GICv3.2/GICv4.1支持NMI，支持NMI后，协议把这个版本叫做GICv3.3/GICv4.2。
+GIC关于NMI的配置，只有GICD_TYPE.nmi，所以，GICv3.3/GICv4.2只是一个称谓。实际上，
+GIC协议允许GICv3.2/GICv4.0/GICv4.1叠加GICD_TYPE.nmi这个配置。
 
 再进一步展开看就是：
-
-GIC关于NMI的配置，只有GICD_TYPE.nmi，所谓GICv3.3/GICv4.2只是一个称谓。GIC协议允许
-GICv3.2/GICv4.0/GICv4.1叠加GICD_TYPE.nmi这个配置。
 
 GICv3.2叠加这个配置后，host支持NMI，guest通过LR注入的vPPI/vSGI/vSPI支持NMI。
 GICv4.0叠加这个配置后，host支持NMI，guest通过LR注入的vPPI/vSGI/vSPI支持NMI。
