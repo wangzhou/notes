@@ -6,6 +6,7 @@ qemu模拟ARM构架综合分析-KVM
 -v0.3 2024.11.3  Sherlock ...
 -v0.4 2025.03.15 Sherlock ...
 -v0.5 2026.05.05 Sherlock ...
+-v0.6 2026.06.11 Sherlock ...
 
 简介：本文分析qemu模拟ARM平台的方式，我们并不会深入分析相关的技术细节，只是大概
       看下整体构架，点出各个模拟的关键点，保证我们在随后的深入分析中可以迅速找见
@@ -14,7 +15,13 @@ qemu模拟ARM构架综合分析-KVM
 基本逻辑
 ---------
 
-todo: ...
+QEMU作为VMM启动基于KVM的虚机，QEMU的作用仅仅在于配置虚机，虚机的数据面基本上都由
+硬件承载了。QEMU通过下发各种KVM ioctl配置虚机的vCPU、GIC、Timer、内存、SMMU以及
+IO。当然QEMU是可以支持KVM和软件模拟混合的，比如可以vCPU、memory使用硬件加速，IO
+使用软件模拟。
+
+当前QEMU-KVM的ARM系统上，基本上所有部件用硬件加速，每个部件都会使用少量软件模拟
+补齐完整功能。
 
 基础数据结构
 -------------
@@ -140,7 +147,7 @@ main
     |         +-> todo: ...                                                              |
     |           +-> vm_start                                                             |
     |                                                                                    |
-    |     else             <--- 如上流程中拉起的vCPU线程中vCPU并没有投入于行，这里 <------
+    |     else             <--- 如上流程中拉起的vCPU线程中vCPU并没有投入于行，这里 <-----|
     |       +-> qmp_cont        才实际上促使vCPU运行起来。
     |         +-> vm_start
     |           +-> resume_all_vcpus
@@ -216,8 +223,6 @@ kvm_arch_put_registers
 系统寄存器访问
 ---------------
 
-todo: 主要是为跨代热迁移做准备
-
 从get_arm_cp_reginfo可以看出，系统寄存器被保存在名为cp_regs的一个哈希表里，这个
 函数就是通过指令的各个域段作为key找到相关系统寄存器的描述结构体，寄存器的相关
 操作函数都定义在这个结构体里，在系统初始化的时候插入到cp_regs哈希表里:
@@ -260,7 +265,7 @@ AddressSpace表示地址空间，收集归拢MemoryRegion和MemoryListener等。
 ```
 
 根MemoryRegion和AddressSpace的创建，初始化address_space_memory/address_space_io/
-system_memory/system_io，前两这是address space，后两者是memory region。
+system_memory/system_io，前两者是address space，后两者是memory region。
 ```
 memory_map_init // system/physmem.c
   +-> system_memory = container, size=UINT64_MAX  <--- 所有内存树的根
@@ -332,6 +337,8 @@ ram_start_offset    <--- 在RAMBlock里的偏移
 guest_memfd         <--- KVM_SET_USER_MEMORY_REGION2专用
 ```
 
+todo: 补齐基本逻辑
+
 GIC模拟
 --------
 
@@ -378,6 +385,8 @@ ITS (arm_gicv3_its_kvm.c):
   - KVM in-kernel ITS: kvm_create_device(KVM_DEV_TYPE_ARM_VGIC_ITS)
   - MSI注入: kvm_its_send_msi -> KVM_SIGNAL_MSI ioctl (带device ID)
   - 设置 kvm_msi_use_devid=true, kvm_gsi_direct_mapping=false
+
+todo: 基本逻辑
 
 SMMU模拟
 ---------
@@ -471,11 +480,6 @@ SMMU的qemu模拟逻辑可以参考[这里](https://wangzhou.github.io/qemu-iomm
 ```
 
 todo: 标记脏页逻辑
-
-VFIO直通外设模拟
------------------
-
-todo: ...
 
 ACPI表构建
 -----------
