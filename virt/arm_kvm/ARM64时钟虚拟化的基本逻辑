@@ -62,6 +62,17 @@ non security EL2 physical timer: VHE时，host内核的timer。
 EL1 virtual timer: VHE时，对于虚机中的timer，timer中断先触发EL2 27号中断trap，再
 向vCPU中注入27号中断，所以虚机中看到的arch_timer是27号中断。
 
+为了使得host/guest看到是一样的寄存器，VHE host状态下，EL1 physical/virtual timer
+相关的寄存器会被映射到EL2 EL1 physical/virtual timer的寄存器，具体映射如下：
+```
+CNTP_TVAL_EL0  --->    CNTHP_TVAL_EL2
+CNTP_CTL_EL0   --->    CNTHP_CTL_EL2
+CNTP_CVAL_EL0  --->    CNTHP_CVAL_EL2
+
+CNTV_TVAL_EL0  --->    CNTHV_TVAL_EL2
+CNTV_CTL_EL0   --->    CNTHV_CTL_EL2
+CNTV_CVAL_EL0  --->    CNTHV_CVAL_EL2
+```
 
 时钟虚拟化的逻辑
 -----------------
@@ -194,4 +205,7 @@ kvm_arch_vcpu_load
     kvm_timer_vcpu_load_gic
     /* 恢复上线vCPU vtimer的状态 */
     timer_restore_state
+    [...]
+    /* 配置timer相关寄存器是否trap */
+    timer_set_traps
 ```
