@@ -6,11 +6,12 @@
 -v0.4 2025.03.15 Sherlock ...
 -v0.5 2026.05.05 Sherlock ...
 -v0.6 2026.06.11 Sherlock ...
--v0.7 2026.06.20 Sherlock ...
+-v0.7 2026.06.20 Sherlock 完善GIC和SMMU章节概述
 
 简介：本文分析qemu模拟ARM平台的方式，我们并不会深入分析相关的技术细节，只是大概
       看下整体构架，点出各个模拟的关键点，保证我们在随后的深入分析中可以迅速找见
       相关代码。使用的qemu版本是9.1.90。
+
 
 ## 基本逻辑
 
@@ -386,9 +387,11 @@ host内存管理和KVM hypvisor的交互。
 
 ## GIC模拟
 
-todo: 基本逻辑
+QEMU-KVM虚拟化中，GIC有两种模拟方式：in-kernel irqchip和用户态模拟。in-kernel irqchip
+将GICD/GICR的MMIO访问直接在KVM处理，避免退出到QEMU处理。用户态模拟在TCG或KVM不支持
+in-kernel irqchip时使用。
 
-GIC版本选择(finalize_gic_version, hw/arm/virt.c:2094):
+GIC版本选择(finalize_gic_version, hw/arm/virt.c):
 ```
 finalize_gic_version
       /* KVM + in-kernel irqchip时, 通过ioctl探测host支持的GIC版本 */
@@ -400,7 +403,7 @@ finalize_gic_version
   - GICv2: kvm-arm-gic (KVM) 或 arm_gic (TCG)
   - GICv3: kvm-arm-gicv3 (KVM) 或 arm-gicv3 (TCG)
 
-GIC创建 (create_gic, hw/arm/virt.c:796):
+GIC创建(create_gic, hw/arm/virt.c):
 ```
 create_gic
   +-> 选设备class名 (gic_class_name/gicv3_class_name)
@@ -433,6 +436,9 @@ ITS (arm_gicv3_its_kvm.c):
   - 设置 kvm_msi_use_devid=true, kvm_gsi_direct_mapping=false
 
 ## SMMU模拟
+
+QEMU的SMMU模拟主要分软件模拟和硬件加速两条路径：软件模拟通过IOMMUMemoryRegion的
+translate回调完成地址翻译；硬件加速(smmuv3-accel)通过iommufd将翻译卸载到物理SMMUv3硬件。
 
 SMMU创建 (create_smmu, hw/arm/virt.c:1523):
   - 条件: -machine iommu=smmuv3 时 vms->iommu == VIRT_IOMMU_SMMUV3
