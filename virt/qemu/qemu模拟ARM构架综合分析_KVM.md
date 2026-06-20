@@ -400,14 +400,14 @@ finalize_gic_version
       /* TCG下GICv2总是可用, GICv3需检查arm-gicv3模块 */
 ```
 选出的版本决定了设备class:
-  - GICv2: kvm-arm-gic (KVM) 或 arm_gic (TCG)
-  - GICv3: kvm-arm-gicv3 (KVM) 或 arm-gicv3 (TCG)
+  - GICv2: kvm-arm-gic (KVM)或 arm_gic (TCG)
+  - GICv3: kvm-arm-gicv3 (KVM)或 arm-gicv3 (TCG)
 
 GIC创建(create_gic, hw/arm/virt.c):
 ```
 create_gic
-  +-> 选设备class名 (gic_class_name/gicv3_class_name)
-  +-> 设置属性 (revision, num-cpu, num-irq, redist-region-count...)
+  +-> 选设备class名(gic_class_name/gicv3_class_name)
+  +-> 设置属性(revision, num-cpu, num-irq, redist-region-count...)
   +-> sysbus_realize_and_unref
   |     /* KVM路径: kvm_arm_gicv3_realize in arm_gicv3_kvm.c */
   |   +-> kvm_create_device(KVM_DEV_TYPE_ARM_VGIC_V3)
@@ -424,7 +424,7 @@ create_gic
 VM exit到QEMU。中断注入通过kvm_arm_gicv3_set_irq -> kvm_arm_set_irq -> KVM
 ioctl实现。
 
-KVM GICv3的寄存器访问 (热迁移/调试用):
+KVM GICv3的寄存器访问(热迁移/调试用):
   KVM_DEV_ARM_VGIC_GRP_DIST_REGS   — distributor寄存器
   KVM_DEV_ARM_VGIC_GRP_REDIST_REGS — redistributor寄存器(用MPIDR选CPU)
   KVM_DEV_ARM_VGIC_GRP_CPU_SYSREGS — CPU interface系统寄存器
@@ -440,9 +440,9 @@ ITS (arm_gicv3_its_kvm.c):
 QEMU的SMMU模拟主要分软件模拟和硬件加速两条路径：软件模拟通过IOMMUMemoryRegion的
 translate回调完成地址翻译；硬件加速(smmuv3-accel)通过iommufd将翻译卸载到物理SMMUv3硬件。
 
-SMMU创建 (create_smmu, hw/arm/virt.c:1523):
+SMMU创建(create_smmu, hw/arm/virt.c):
   - 条件: -machine iommu=smmuv3 时 vms->iommu == VIRT_IOMMU_SMMUV3
-  - MMIO位于 0x09050000 (VIRT_SMMU), 4个SPI中断 (irq 74-77)
+  - MMIO位于 0x09050000 (VIRT_SMMU), 4个SPI中断(irq 74-77)
   - 默认stage="nested", 挂到PCIe primary bus
 
 SMMU类继承:
@@ -451,7 +451,7 @@ SMMU类继承:
     configs (STE/CD缓存), iotlb (TLB缓存), smmu_pcibus_by_busptr,
     iommu_ops (PCIIOMMUOps)
 
-SMMU与PCIe的IOMMU挂钩 (smmu_base_realize, smmu-common.c:933):
+SMMU与PCIe的IOMMU挂钩(smmu_base_realize, smmu-common.c):
 ```
 smmu_base_realize
   +-> pci_setup_iommu(primary_bus, &smmu_ops, s)
@@ -462,18 +462,18 @@ smmu_base_realize
          * 返回SMMUDevice->as, 这个AddressSpace的后端是IOMMUMemoryRegion
          */
 
-smmu_find_add_as                                   <--- smmu-common.c:879
+smmu_find_add_as                                   <--- smmu-common.c
   +-> smmu_init_sdev -> memory_region_init_iommu   <--- 创建IOMMUMemoryRegion
       /* IOMMUMemoryRegion的translate回调 = smmuv3_translate */
 ```
 
-SMMU翻译流程 (smmu_translate, smmu-common.c:772):
+SMMU翻译流程(smmu_translate, smmu-common.c):
 ```
-smmuv3_translate                                   <--- smmuv3.c:1059
+smmuv3_translate                                   <--- smmuv3.c
       /* 检查CR0.SMMUEN, 如果禁用则检查GBPA.ABORT */
   +-> smmuv3_get_config                            <--- 从缓存或客户机内存解码STE/CD
   +-> smmuv3_do_translate
-    +-> smmu_translate                             <--- smmu-common.c:772
+    +-> smmu_translate                             <--- smmu-common.c
           /* 先在模拟IOTLB里找 */
       +-> smmu_iotlb_lookup
           /* 未命中则做PTW(页表遍历) */
@@ -491,9 +491,9 @@ smmuv3_translate                                   <--- smmuv3.c:1059
   - 翻译故障时SMMU写入EVENTQ_BASE处的循环缓冲区, 触发事件中断
   - 命令16字节, 事件32字节
 
-StreamID: SMMU用PCI BDF (bus:dev.fn) 作为StreamID, 每个PCI设备有独立的SMMUDevice
+StreamID: SMMU用PCI BDF (bus:dev.fn)作为StreamID, 每个PCI设备有独立的SMMUDevice
 
-硬件加速 (accel=on, smmuv3-accel.c):
+硬件加速(accel=on, smmuv3-accel.c):
   - 需要iommufd支持的KVM
   - 将真实SMMUv3硬件配置为nested模式，VFIO直通设备直接使用硬件SMMU
   - 嵌套: KVM模拟S1翻译, 硬件处理S2翻译
