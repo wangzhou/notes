@@ -6,6 +6,7 @@
 -v0.4 2025.03.15 Sherlock ...
 -v0.5 2026.05.05 Sherlock ...
 -v0.6 2026.06.11 Sherlock ...
+-v0.7 2026.06.20 Sherlock ...
 
 简介：本文分析qemu模拟ARM平台的方式，我们并不会深入分析相关的技术细节，只是大概
       看下整体构架，点出各个模拟的关键点，保证我们在随后的深入分析中可以迅速找见
@@ -126,7 +127,7 @@ main
     |   ...
     |   +-> machine_run_board_init
     |     +-> machine_class->init(machine)  <--- 函数指针，在hw/arm/virt.c virt_machine_class_init里
-    |       +-> machvirt_init               <--- 初始化虚机上的各个设备，包括如下调用arm_cpu_realizefn，拉起vCPU线程，
+    |       +-> machvirt_init               <--- 初始化虚机上的各个设备，包括如下调用arm_cpu_realizefn，拉起vCPU线程，虚机内存注册等。
     |                                            注意，vCPU这里没有实际投入运行，实际运行在下面，具体又分为热迁移迁入端和普通虚机启动两种情况。
     |                                                                                    |
     | +-> qemu_machine_creation_done                                                     |
@@ -277,10 +278,43 @@ memory_map_init // system/physmem.c
 ### Host KVM中的虚机内存管理
 
 如上地址空间中定义的内存，需要qemu分配host内存来支持，所以被分配出来的虚机内存实际
-上有三个访问接口：最核心的是guest内的访问指令直接访问，第二个是KVM访问，第三个是
-qemu进程访问。
+上有多个访问或管理接口：最核心的是guest内的访存指令直接访问，第二个是KVM hyp的管理，
+第三个是qemu进程访问，第四个是host内核内存管理机制的管理。
 
-todo: ....
+如下是KVM虚拟内存管理示意图：
+```
+ +----------------------------------------------------------------------+
+ |  QEMU process                                                        |
+ |                                  |                 |                 |
+ |  QEMU main thread                |  vCPU0 thread   |   vCPU1 thread  |
+ |                                  |   (host EL0)    |    (host EL0)   |
+ |                                  |                 |                 |
+ |  +----------------+ <-- host VA  |                 |                 |
+ |   \                \             |                 |                 |
+ |    \                \            |                 |                 |
+ +----------------------------------+-----------------+-----------------+
+ |      \                \          |                 |                 |
+ |       \                \         | +----+          |    +----+       | <-- guest VA
+ |        \                \        |      \          |      /          |   |
+ |         \   host S1 map  \       |       \         |     /           |   | guest S1 map
+ |         ...              ...     |        \             /      KVM   |   v
+ |           \                \     |       +----------------+          | <-- IPA
+ |            \                \    +------------ / --------------------+   |
+ |             \             -------+------------/                HYP   |   |
+ |              \           /    \  |                                   |   | guest S2 map
+ +-------------------------/--------+-----------------------------------+   |
+ |                \       /        \                                    |   v
+ |   Memmory       +----------------+                                   | <-- PA
+ |                                                                      |
+ +----------------------------------------------------------------------+
+```
+虚机的物理地址是在QEMU主线程里分配的一段QEMU进程的虚拟地址，IPA的地址是在QEMU里
+定义的，QEMU通过ioctl(KVM_SET_USER_MEMORY_REGION)把这个信息传递给KVM。
+
+直观上看，虚机内会自己管理自己的S1 map，KVM hypvisor会管理虚机的S2 map。虚机内存
+实际上是QEMU进程的内存，对应的内存会受到host内核各种内存管理机制的管理，比如，透明
+大页、传统大页、页面迁移等。host内核内存管理如果涉及到guest物理内存，需要通过mmu
+notifier的机制通知到KVM hypvisor，hypvisor一般的应对手段是unmap掉对应的guest S2 map。
 
 KVM memslot的同步 — MemoryListener机制(accel/kvm/kvm-all.c):
 kvm_init阶段通过kvm_memory_listener_register注册一个KVMMemoryListener到address_space_memory上。
@@ -295,8 +329,8 @@ kvm_init
       +-> listener_add_address_space -> kvm_region_add -> kvm_set_phys_mem
 ```
 
-machvirt_init调用memory_region_add_subregion的逻辑，最后会调用到之前注册的kvm_region_commit，
-其中会调用kvm ioctl把这段内存注册给内核kvm。machvirt_init里内存相关操作(hw/arm/virt.c)如下：
+machvirt_init调用memory_region_add_subregion的逻辑，最后会调用到如上注册的kvm_region_commit，
+其中会调用kvm ioctl把这段内存注册给内核KVM。machvirt_init里内存相关操作(hw/arm/virt.c)如下：
 ```
 machvirt_init
       /*
@@ -345,9 +379,16 @@ ram_start_offset    <--- 在RAMBlock里的偏移
 guest_memfd         <--- KVM_SET_USER_MEMORY_REGION2专用
 ```
 
+KVM运行时的内存管理基本在KVM hypvisor内处理，注意的骨架是各种KVM S2 PTW(page table walk)、
+host内存管理和KVM hypvisor的交互。
+
+热迁移相关的内存管理逻辑在另外的文章中总结。
+
 ## GIC模拟
 
-GIC版本选择 (finalize_gic_version, hw/arm/virt.c:2094):
+todo: 基本逻辑
+
+GIC版本选择(finalize_gic_version, hw/arm/virt.c:2094):
 ```
 finalize_gic_version
       /* KVM + in-kernel irqchip时, 通过ioctl探测host支持的GIC版本 */
@@ -390,8 +431,6 @@ ITS (arm_gicv3_its_kvm.c):
   - KVM in-kernel ITS: kvm_create_device(KVM_DEV_TYPE_ARM_VGIC_ITS)
   - MSI注入: kvm_its_send_msi -> KVM_SIGNAL_MSI ioctl (带device ID)
   - 设置 kvm_msi_use_devid=true, kvm_gsi_direct_mapping=false
-
-todo: 基本逻辑
 
 ## SMMU模拟
 
