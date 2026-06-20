@@ -129,24 +129,24 @@ main
     |   +-> machine_run_board_init
     |     +-> machine_class->init(machine)  <--- 函数指针，在hw/arm/virt.c virt_machine_class_init里
     |       +-> machvirt_init               <--- 初始化虚机上的各个设备，包括如下调用arm_cpu_realizefn，拉起vCPU线程，虚机内存注册等。
-    |                                            注意，vCPU这里没有实际投入运行，实际运行在下面，具体又分为热迁移迁入端和普通虚机启动两种情况。
-    |                                                                                    |
-    | +-> qemu_machine_creation_done                                                     |
-    |   +-> qdev_machine_creation_done                                                   |
-    |     +-> cpu_synchronize_all_post_init                                              |
-    |           /*                                                                       |
-    |            * 调用accel/kvm/kvm-accel-ops.c里的kvm_cpu_synchronize_post_init        |
-    |            * 的回调把kvm_arch_put_registers放到vcpu的work_list里。                 |
-    |            */                                                                      |
-    |       +-> cpu_synchronize_post_init                                                |
-    |                                                                                    |
-    | +-> if (incoming)    <--- 如果是热迁移的迁入端，做相应的准备工作             <-----+
-    |       +-> qmp_migrate_incoming                                                     |
-    |         +-> todo: ...                                                              |
-    |           +-> vm_start                                                             |
-    |                                                                                    |
-    |     else             <--- 如上流程中拉起的vCPU线程中vCPU并没有投入运行，这里 <-----+
-    |       +-> qmp_cont        才实际上促使vCPU运行起来。
+    |                                            注意，vCPU这里没有实际投入运行，实际运行在下面，具体又分为热迁移迁入端(A)和普通虚机启动(B)。
+    |                                                                             
+    | +-> qemu_machine_creation_done                                              
+    |   +-> qdev_machine_creation_done                                            
+    |     +-> cpu_synchronize_all_post_init                                       
+    |           /*                                                                
+    |            * 调用accel/kvm/kvm-accel-ops.c里的kvm_cpu_synchronize_post_init 
+    |            * 的回调把kvm_arch_put_registers放到vcpu的work_list里。          
+    |            */                                                               
+    |       +-> cpu_synchronize_post_init                                         
+    |                                                                             
+    | +-> if (incoming)    <--- 如果是热迁移的迁入端，做相应的准备工作(A)            
+    |       +-> qmp_migrate_incoming                                              
+    |         +-> todo: ...                                                       
+    |           +-> vm_start                                                      
+    |                                                                             
+    |     else             <--- 如上流程中拉起的vCPU线程中vCPU并没有投入运行，这里
+    |       +-> qmp_cont        才实际上促使vCPU运行起来。(B)
     |         +-> vm_start
     |           +-> resume_all_vcpus
     |             +-> cpu_resume
