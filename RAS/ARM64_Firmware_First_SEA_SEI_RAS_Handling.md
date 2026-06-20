@@ -3,6 +3,7 @@ ARM64固件优先SEA/SEI RAS处理基本逻辑
 
 -v0.1 2026.04.25 Sherlock init
 -v0.2 2026.04.25 Sherlock 增加固件优先寄存器配置、EL3到OS通知机制
+-v0.3 2026.06.20 Sherlock
 
 简介：分析ARM64架构上固件优先(Firmware First)模式的SEA/SEI RAS错误处理流程，包括异常触发、固件处理、OS处理及关键数据结构。
 
@@ -31,17 +32,17 @@ ARM64固件优先SEA/SEI RAS处理基本逻辑
 硬件通过SCR_EL3配置SEA/SEI报到EL2还是EL3。
 ```
 SCR_EL3
-┌─────────────────────────────────────────────────────────────┐
-│ Bit 3  │ EA (External Abort)                                │
-│        │ 1 = External Abort/SError routed to EL3            │
-│        │ 0 = External Abort routed based on exception level │
-├────────┼────────────────────────────────────────────────────┤
-│ Bit 2  │ FIQ (Fast Interrupt)                               │
-│        │ 1 = FIQ routed to EL3                              │
-├────────┼────────────────────────────────────────────────────┤
-│ Bit 1  │ IRQ (Interrupt Request)                            │
-│        │ 1 = IRQ routed to EL3                              │
-└────────┴────────────────────────────────────────────────────┘
++--------+----------------------------------------------------+
+| Bit 3  | EA (External Abort)                                |
+|        | 1 = External Abort/SError routed to EL3            |
+|        | 0 = External Abort routed based on exception level |
++--------+----------------------------------------------------+
+| Bit 2  | FIQ (Fast Interrupt)                               |
+|        | 1 = FIQ routed to EL3                              |
++--------+----------------------------------------------------+
+| Bit 1  | IRQ (Interrupt Request)                            |
+|        | 1 = IRQ routed to EL3                              |
++--------+----------------------------------------------------+
 ```
 注意，整个硬件系统分很多部件，比如很多L3/内存相关的部件OS里是看不见的，而core上
 报SEA/SEI是core和这些OS看不见部件综合作用的结果，这些部件可以有私有的配置，这些
@@ -69,3 +70,44 @@ do_sea(unsigned long addr, unsigned int esr, struct pt_regs *regs)
 关中断的时候，SEI被taken了，那么SEI看到的信息是SEA的栈信息，无法打印出实际触发这个
 RAS错误的栈。这个时候可以hack下这里的do_sea，一进来就panic内核，这样可以看到触发
 RAS错误的栈。
+
+## RAS处理中上下文保存和恢复
+
+EL级别切换示意：
+```
+    +-------------+
+    | EL0/EL1/EL2 |
+    +-------------+
+          |        \
+          |         \
+          |          \
+          |           v
+          |          +-------+
+     SEA  |          |  EL2  |
+          |          +-------+
+          |           ^
+          |          /
+          |         /
+          v        /
+    +-------------+
+    |     EL3     |
+    +-------------+
+```
+逻辑上看，比EL3低的特权级发生SEA时，CPU直接跳到EL3，EL3这时是知道EL0/EL1/EL2的上
+下文的。EL3在做完RAS相关处理后，需要把控制转移到EL2异常入口处理，这个转移过程逻辑
+上应该模拟EL0/EL1/EL2直接到EL2异常的过程，这样到EL2后，EL2异常处理先保存EL0/EL1/EL2
+的上下文，然后进入EL2处理，各种信息不会丢失。理论上看，EL3应该把之前的上下文放到
+GPR和EL2相关的寄存器上，SPSR_EL3配置为一个固定PSTATE值，模拟EL0/EL1/EL2异常进入EL2
+时EL2 PSTATE的值(这个值是进入EL2时的新PSTATE值，一般是一个固定的值)。
+
+总结下EL3中的配置：
+
+X0-X31 = EL0/EL1/EL2进入EL3的上下文
+SPSR_EL2 = EL0/EL1/EL2进入EL3的SPSR_EL3
+SPSR_EL3 = 一个固定的PSTATE
+...
+ERET到EL2
+
+实际上，在RAS处理的流程中，之前EL0/EL1/EL2的PSTATE的值，已经不重要了。所以，直接
+把SPSR_EL3配置成一个固定的值就好。
+

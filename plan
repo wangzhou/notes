@@ -441,8 +441,8 @@ host kvm各种异常向量分析			 doing
 
 
 qemu模拟ARM构架综合分析(qemu内存管理)            doing
-mpam基本逻辑   					 继续补齐 to post
-partition PMU
+mpam基本逻辑   					 c
+partition PMU                                    #
 整理host FP
 
 虚拟化热迁移的基本
@@ -452,3 +452,7 @@ hdbss/热迁移                                     doing
 GICv5
 qemu vcpu hotplug
 TLBID/FNB
+
+perf kprobe问题
+qemu + sea问题
+
