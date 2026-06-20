@@ -501,6 +501,8 @@ StreamID: SMMU用PCI BDF (bus:dev.fn)作为StreamID, 每个PCI设备有独立的
 
 SMMU的qemu模拟逻辑可以参考[这里](https://wangzhou.github.io/qemu-iommu模拟思路分析/)。
 
+todo: 基于iommufd的vSMMU逻辑
+
 ## 热迁移的逻辑
 
 所有热迁移涉及的部件都有一个VMStateDescription结构，qemu用这个结构描述热迁移的相
