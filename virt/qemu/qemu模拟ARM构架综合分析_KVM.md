@@ -1,4 +1,4 @@
-# qemu模拟ARM构架综合分析-KVM
+# qemu模拟ARM架构综合分析-KVM
 
 -v0.1 2023.1.19  Sherlock init
 -v0.2 2024.11.2  Sherlock ...
@@ -35,7 +35,7 @@ machine类的继承关系：
 TYPE_OBJECT <- TYPE_MACHINE <- TYPE_VIRT_MACHINE
 ```
 
-ARM核的数据结果大概是如下：
+ARM核的数据结构大概是如下：
 ```
 typedef struct CPUArchState {       <--- 这个是env
         ...
@@ -78,8 +78,8 @@ aarch64_host_initfn
           /* ioctl KVM_GET_ONE_REG */
       +-> read_sys_reg64
 ```
-可以看到这里host语意就是虚拟机和host的CPU feature一致，通过KVM_GET_ONE_REG ioctl
-得到值是kvm->kvm_arch->id_reg里的值，这些值在vCPU初始化的时候，被更新为host上对应
+可以看到这里host语义就是虚拟机和host的CPU feature一致，通过KVM_GET_ONE_REG ioctl
+得到的值是kvm->kvm_arch->id_reg里的值，这些值在vCPU初始化的时候，被更新为host上对应
 寄存器的值。
 
 可以看到aarch64_a57_initfn里直接定义了a57需要支持的CPU特性。
@@ -109,7 +109,7 @@ main
     |          * accel类的关系是：TYPE_ACCEL <- TYPE_KVM_ACCEL, 这里调用kvm accel
     |          * class里的kvm_init。(accel/kvm/kvm-all.c)
     |          *
-    |          * kvm_init里打开/dev/kvm，并通过KVM_CREATE_VM ioctl的获得vmfd，
+    |          * kvm_init里打开/dev/kvm，并通过KVM_CREATE_VM ioctl获得vmfd，
     |          * 调用kvm_arch_init，初始化脏页跟踪的数据结构。
     |          *
     |          * /dev/kvm的fd和vm的fd保存在KVMState中，分别是fd和vmfd。
@@ -145,7 +145,7 @@ main
     |         +-> todo: ...                                                              |
     |           +-> vm_start                                                             |
     |                                                                                    |
-    |     else             <--- 如上流程中拉起的vCPU线程中vCPU并没有投入于行，这里 <-----+
+    |     else             <--- 如上流程中拉起的vCPU线程中vCPU并没有投入运行，这里 <-----+
     |       +-> qmp_cont        才实际上促使vCPU运行起来。
     |         +-> vm_start
     |           +-> resume_all_vcpus
@@ -198,7 +198,7 @@ arm_cpu_realizefn
            +-> qemu_wait_io_event_common
                  /*
                   * 执行之前放入vcpu work_list里的任务，执行kvm_arch_put_registers。
-                  * 语意是把CPUState中的寄存器保存到list寄存器，再把list寄存器的
+                  * 语义是把CPUState中的寄存器保存到list寄存器，再把list寄存器的
                   * 数据通过ioctl KVM_SET_ONE_REG配置到KVM里。
                   */
              +-> process_queued_cpu_work
@@ -238,7 +238,7 @@ kvm_arch_put_registers
 ## 内存模拟
 
 基于KVM的QEMU虚机，会在QEMU里定义内存的基本拓扑、创建虚机内存管理基本框架，但是
-实际虚机内存管理数据面上的行为还是需要KVM支持。
+实际虚机内存管理数据面上的行为还是由KVM承载。
 
 ### QEMU中内存定义
 
@@ -305,17 +305,17 @@ memory_map_init // system/physmem.c
  |              \           /    \  |                                   |   | guest S2 map
  +-------------------------/--------+-----------------------------------+   |
  |                \       /        \                                    |   v
- |   Memmory       +----------------+                                   | <-- PA
+ |   Memory        +----------------+                                   | <-- PA
  |                                                                      |
  +----------------------------------------------------------------------+
 ```
 虚机的物理地址是在QEMU主线程里分配的一段QEMU进程的虚拟地址，IPA的地址是在QEMU里
 定义的，QEMU通过ioctl(KVM_SET_USER_MEMORY_REGION)把这个信息传递给KVM。
 
-直观上看，虚机内会自己管理自己的S1 map，KVM hypvisor会管理虚机的S2 map。虚机内存
+直观上看，虚机内会自己管理自己的S1 map，KVM hypervisor会管理虚机的S2 map。虚机内存
 实际上是QEMU进程的内存，对应的内存会受到host内核各种内存管理机制的管理，比如，透明
 大页、传统大页、页面迁移等。host内核内存管理如果涉及到guest物理内存，需要通过mmu
-notifier的机制通知到KVM hypvisor，hypvisor一般的应对手段是unmap掉对应的guest S2 map。
+notifier的机制通知到KVM hypvisor，hypervisor一般的应对手段是unmap掉对应的guest S2 map。
 
 KVM memslot的同步 — MemoryListener机制(accel/kvm/kvm-all.c):
 kvm_init阶段通过kvm_memory_listener_register注册一个KVMMemoryListener到address_space_memory上。
@@ -324,7 +324,7 @@ kvm_init阶段通过kvm_memory_listener_register注册一个KVMMemoryListener到
 kvm_init
   [...]
   +-> kvm_memory_listener_register
-    +-> 创建kvm lister，增加相关回调kvm_region_add/del/commit, kvm_log_start/stop/sync/clear/sync_global等
+    +-> 创建kvm listener，增加相关回调kvm_region_add/del/commit, kvm_log_start/stop/sync/clear/sync_global等
     +-> memory_listener_register(&kml->listener, &address_space_memory)
         /* 注册时立即同步当前已有的FlatView */
       +-> listener_add_address_space -> kvm_region_add -> kvm_set_phys_mem
@@ -400,8 +400,8 @@ finalize_gic_version
       /* TCG下GICv2总是可用, GICv3需检查arm-gicv3模块 */
 ```
 选出的版本决定了设备class:
-  - GICv2: kvm-arm-gic (KVM)或 arm_gic (TCG)
-  - GICv3: kvm-arm-gicv3 (KVM)或 arm-gicv3 (TCG)
+  - GICv2: kvm-arm-gic (KVM)或arm_gic (TCG)
+  - GICv3: kvm-arm-gicv3 (KVM)或arm-gicv3 (TCG)
 
 GIC创建(create_gic, hw/arm/virt.c):
 ```
