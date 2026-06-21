@@ -410,7 +410,7 @@ irqbalance分析/中断亲和性配置
 ---- 热迁移系列 ----
 1. 基本逻辑                                 ### 2
 2. vfio热迁移基本逻辑                                   <---
-3. GIC热迁移基本逻辑        doing
+3. GIC热迁移基本逻辑        doin
 4. SMMU热迁移基本逻辑       doing
 5. 标脏处理：kvm fault基础/hdbss/AFdirtybit/SMMUhttu       ### 3
 
@@ -441,12 +441,12 @@ host kvm各种异常向量分析			 doing
 
 
 qemu模拟ARM构架综合分析(qemu内存管理)            doing
+虚拟化热迁移的基本
+hdbss/热迁移                                     doing
+
 mpam基本逻辑   					 c
 partition PMU                                    #
 整理host FP
-
-虚拟化热迁移的基本
-hdbss/热迁移                                     doing
 
 跨代热迁移逻辑整理   	                         dg
 GICv5
@@ -454,3 +454,4 @@ qemu vcpu hotplug
 TLBID/FNB
 
 perf kprobe问题
+virtio blk
