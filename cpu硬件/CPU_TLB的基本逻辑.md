@@ -138,24 +138,6 @@ isb();
 
 ### 虚机上CnP的软件支持
 
-当前的软件是，只要检测到host支持CnP，S2就会把CnP配置上，guest默认也会配置上CnP，
-这样，从硬件配置角度看，虚机的CnP是全部打开的。
-
-当多个vCPU同时在多个thread上运行时，CnP会实际运行：
-```
-     ASID1 VA1 PA1         ASID1 VA1 PA2
-     vcpu0 s1 cnp = 1      vcpu1 s1 cnp = 1
-     +--------+            +---------+
-     | thead0 |            | thread1 |
-     +--------+            +---------+
-               \          /
-                \        /
-                 +------+       s2 cnp = 1 
-                 | core |
-                 +------+
-```
-这样逻辑上会错，但是这种情况是违反ARM构架的。
-
 kvm_arch_vcpu_load里会有：
 ```
          /*                                                                      
@@ -173,5 +155,26 @@ kvm_arch_vcpu_load里会有：
          }                                                                       
 ```
 上线的时候检测，如果这个物理CPU跑过同一个VM上的其它vCPU，就先无效下这个物理CPU
-上虚机的TLB。这个支持确保vCPU的TLB始终是private的。
+上虚机的TLB，因为其它vCPU的TLB可能和上线vCPU的ASID/VA相同、PA不同(what?)。这个支
+持确保vCPU的TLB始终是private的。
+
+但是，如上逻辑在使能CnP的虚机还正确么？当前的软件是，只要检测到host支持CnP，S2就
+会把CnP配置上，guest默认也会配置上CnP，这样，从硬件配置角度看，虚机的CnP是全部打
+开的。
+
+当多个vCPU同时在多个thread上运行时，CnP会实际运行：
+```
+     ASID1 VA1 PA1         ASID1 VA1 PA2
+     vcpu0 s1 cnp = 1      vcpu1 s1 cnp = 1
+     +--------+            +---------+
+     | thead0 |            | thread1 |
+     +--------+            +---------+
+               \          /
+                \        /
+                 +------+       s2 cnp = 1 
+                 | core |
+                 +------+
+```
+这样逻辑上会错，但是这种情况是违反ARM构架的。(上面的场景也可能是CnP打开的, 为啥
+上面就不违反ARM构架?)
 
