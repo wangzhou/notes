@@ -92,47 +92,38 @@ todo: Host上使用TLBI的场景。
 
 - Guest在EL1自己发TLBI
 
-guest执行 `tlbi vae1is` → EL1&0 regime，而当前 `VTTBR_EL2.VMID` 就是该guest的VMID，
-硬件自动把失效**锁定在这台guest**。默认KVM不trap guest的TLBI(`HCR_EL2.TTLB=0`)，
-guest的TLBI原生执行、原生按VMID隔离，host完全不参与。IS广播在物理上发给inner-shareable
-域内所有PE，但每个PE按标签匹配：别的guest(VMID不同)、host(regime=EL2&0，压根不匹配)都不会误伤。
+guest执行tlbi vae1is → EL1&0 regime，而当前VTTBR_EL2.VMID就是该guest的VMID，硬件
+自动把失效锁定在这台guest。默认KVM不trap guest的TLBI(HCR_EL2.TTLB=0)，guest的TLBI
+原生执行、原生按VMID隔离，host完全不参与。IS广播在物理上发给inner-shareable域内
+所有PE，但每个PE按标签匹配：别的guest(VMID不同)、host(regime=EL2&0，压根不匹配)
+都不会误伤。
 
 - Host(KVM)在EL2替guest刷
 
-难点：VHE下host平时是 {E2H,TGE}={1,1}，此时 `tlbi *E1` 打的是EL2&0(host自己)，
-**打不到guest的EL1&0**。要打guest，必须翻转其中一位。改E2H不行(一动TTBR1_EL2就没了)，
-所以KVM的做法是**临时把TGE清0**(`arch/arm64/kvm/hyp/vhe/tlb.c::__tlb_switch_to_guest`)：
-
+VHE下host平时是{E2H,TGE}={1,1}，此时tlbi *E1打的是EL2&0(host自己)，打不到guest
+的EL1&0。所以KVM的做法是临时把TGE清0：
 ```c
+// arch/arm64/kvm/hyp/vhe/tlb.c::__tlb_switch_to_guest
 __load_stage2(mmu, mmu->arch);      // 先把目标VM的VMID装进VTTBR_EL2
 val = read_sysreg(hcr_el2);
 val &= ~HCR_TGE;                    // TGE: 1 -> 0
 write_sysreg(val, hcr_el2);
 isb();
-// ...此刻 tlbi *E1 命中的是 guest 的 EL1&0(且限定当前VMID)...
+// ...此刻tlbi *E1命中的是guest的EL1&0(且限定当前VMID)。
 ```
-刷完再把TGE置回1。可见"TGE"就是那把开关：TGE=1打EL2&0(host)，TGE=0打EL1&0(guest)。
+刷完再把TGE置回1。
 
-**(C) 改了stage2页表后的经典序列**——为什么要两条TLBI一起打
-(`__kvm_tlb_flush_vmid_ipa`)：
+- 无效stage2 TLB的一般逻辑
 
+由于如上的存储结构，无效stage2 TLB后，还要无效下虚机的combined TLB:
 ```c
-__tlbi(ipas2e1is, ipa);   // (1) 打 stage2-only 条目: 按 IPA 精确失效
-dsb(ish);                 //     等广播完成，保证 (2) 能看到 (1) 的效果
-__tlbi(vmalle1is);        // (2) 打 combined(S1+S2) 条目: 只能按 VMID 全清
+//__kvm_tlb_flush_vmid_ipa
+__tlbi(ipas2e1is, ipa);   // (1) 打stage2-only条目: 按IPA精确失效
+dsb(ish);                 //     等广播完成，保证(2)能看到(1)的效果
+__tlbi(vmalle1is);        // (2) 打combined(S1+S2)条目: 只能按VMID全清
 dsb(ish);
 isb();
 ```
-
-原因纯粹由**上面"三类TLB存储"的结构**决定：
-
-- **stage2-only条目**用IPA做键 → `IPAS2E1` 能按IPA点名失效。
-- **combined条目**(第2类，S1+S2塌缩成一条)用的是 **VA** 做键，里面**没有存IPA**。硬件
-  拿到一个IPA，反查不出"哪些VA映到了它"。→ 只能退而求其次：`VMALLE1` 按VMID把该guest的
-  所有combined/S1条目整片清掉。**"combined TLB的存在"直接解释了这段代码为什么长这样。**
-
-相关的还有 `VMALLS12E1IS`("S1+S2+combined、当前VMID全清")，撤销整台VM映射时用
-(`__kvm_tlb_flush_vmid`)。
 
 ## 虚机上CnP的软件支持
 
