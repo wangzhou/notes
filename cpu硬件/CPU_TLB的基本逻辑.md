@@ -3,7 +3,7 @@
 
 简介: 收集和ARM TLB硬件相关的知识，基于ARM构架。
 
-## TLB硬件
+## TLB保存类型
 
 TLB在硬件内部一般有三种保存情况：
 
@@ -29,49 +29,45 @@ TLB在硬件内部一般有三种保存情况：
 PE之间共享TLB。具体定义是，如果多个PE的TTBRx_ELx的页表是一样的(包括VMID，ASID)，
 同时TTBRx_ELx.CNP配置为1，那么多个PE上的相同TLB可以共享一个TLB。
 
-注意，在虚拟话的情况下，需要TTBRx_EL1.CNP和VTTBR_EL2.CNP都是1，才会创建共享的TLB。
+注意，在虚拟化的情况下，需要TTBRx_EL1.CNP和VTTBR_EL2.CNP都是1，才会创建共享的TLB。
 一个直观的硬件实现是，当硬件发现满足共享TLB的条件的时候，就去查找有无共享TLB，如果
 没有就创建一个TLB，并打上共享的标记，如果找见共享TLB就直接使用。
 
-## TLBI使用场景
+## TLBI指令
 
-从如上的TLB类型的角度看下TLBI指令都有哪些。
-
-### TLBI指令
-
-TLB是key-value的存储结构，key是一组数据的集合，硬件执行TLBI指令就是根据TLBI指令
-带的输入，去匹配TLB的key，匹配上了，就把对应的TLB无效化。
+从如上的TLB类型的角度看下TLBI指令都有哪些。TLB是key-value的存储结构，key是一组数据
+的集合，硬件执行TLBI指令就是根据TLBI指令带的输入，去匹配TLB的key，匹配上了，就把
+对应的TLB无效化。
 
 一个贴近真实硬件的条目模型如下：
 ```c
 struct tlb_entry {
-    /* ---- 查找/匹配键 ---- */
-    u64 in_addr;   // 输入地址: VA(stage1/combined) 或 IPA(stage2)
-    u8  regime;    // 关键! EL1&0 / EL2 / EL2&0 / EL3  (× 安全状态 NS/S/Realm)
-    u16 vmid;      // 仅"受stage2约束"的条目有效(guest EL1&0 与 stage2)
-    u16 asid;      // 仅 stage1 非全局(nG=1) 条目有效
-    u8  nG;        // 全局? nG=0 => 匹配时忽略 asid
-    u8  stage;     // S1-only / S2-only / S1+S2 combined
-    u8  ttl_size;  // 页/块/contig —— 即上面"覆盖范围"的三种
-    /* ---- 载荷 ---- */
-    u64 out_addr;  // PA
-    /* attrs... */
+    /* -- key --  */
+    u64 in_addr;        // 输入地址: VA(stage1/combined)或IPA(stage2)
+    u8  regime;         // 各种EL1&0/EL2/EL2&0/EL3 translation regime (安全状态NS/S/Realm)
+    u16 vmid;
+    u16 asid;
+    u8  size;
+    /* -- value -- */
+    u64 pa;
+    /* -- attrs-- */
+    ...
 };
 ```
 
-TLBI指令名可以拆成三段来读: `TLBI <操作><级别><范围>`。
+TLBI指令名可以拆成三段来读: TLBI <操作><级别><范围>。
 
-- 操作(选哪类条目 / 用什么键匹配):
-  - `VA`     : 按VA点名(带ASID)。
-  - `VAA`    : 按VA点名，但忽略ASID(all-ASID)。
-  - `ASID`   : 按ASID整体失效。
-  - `VMALL`  : 当前VMID下，该regime的stage1/combined条目全清(不按地址)。
-  - `VMALLS12`: 当前VMID下，stage1 + stage2 + combined 全清。
-  - `IPAS2`  : 按IPA点名，只打 **stage2-only** 条目。
-  - `ALL`    : 该级别regime全清(不看VMID/ASID)。
-  - `R*`(如RVAE1/RIPAS2E1): Range变体，一条指令按 {BaseADDR,TG,SCALE,NUM} 失效一段区间。
-- 级别(隐含目标regime，最终仍受E2H/TGE调制): `E1` / `E2` / `E3`。
-- 范围: 无后缀=本PE local; `IS`=inner-shareable广播; `OS`=outer-shareable; `nXS`=不等XS。
+- 操作:
+  - VA        : 按VA失效(带ASID)。
+  - VAA       : 按VA失效，但忽略ASID(all-ASID)。
+  - ASID      : 按ASID整体失效。
+  - VMALL     : 当前VMID下，该regime的stage1/combined条目全清(不按地址)。
+  - VMALLS12  : 当前VMID下，stage1 + stage2 + combined全清。
+  - IPAS2     : 按IPA失效，只失效stage2条目。
+  - ALL       : 该级别regime全清(不看VMID/ASID)。
+  - R*        : 按地址范围(Range)失效，一条指令失效一段区间。
+- 级别: E1/E2/E3。
+- 范围: 无后缀=本PE local; IS=inner-shareable广播; OS=outer-shareable; nXS=不等XS。
 
 注意，如上ELx级别不是直接指对应EL级别的TLB，ELx结合当前机器所处在的状态(HCR_EL2.E2H/TGE)
 会最终决定无效化作用于哪个translation regime，translation regime的定义可以参考[这里](https://wangzhou.github.io/ARM64系统寄存器总结/)。
@@ -84,6 +80,8 @@ VHE场景下，TLBI xEL1x + TGE为1，表示EL2&0 translation regime，TLBI xEL1
 
 TLBI xIPAx表示对stage2 TLB的无效化。
 
+## TLBI使用场景
+
 ### Host上TLBI的使用
 
 todo: Host上使用TLBI的场景。
@@ -92,14 +90,14 @@ todo: Host上使用TLBI的场景。
 
 分两个视角：guest自己发TLBI，和host(KVM)替guest刷。
 
-**(A) guest在EL1自己发TLBI**
+- Guest在EL1自己发TLBI
 
 guest执行 `tlbi vae1is` → EL1&0 regime，而当前 `VTTBR_EL2.VMID` 就是该guest的VMID，
 硬件自动把失效**锁定在这台guest**。默认KVM不trap guest的TLBI(`HCR_EL2.TTLB=0`)，
 guest的TLBI原生执行、原生按VMID隔离，host完全不参与。IS广播在物理上发给inner-shareable
 域内所有PE，但每个PE按标签匹配：别的guest(VMID不同)、host(regime=EL2&0，压根不匹配)都不会误伤。
 
-**(B) host(KVM)在EL2替guest刷**
+- Host(KVM)在EL2替guest刷
 
 难点：VHE下host平时是 {E2H,TGE}={1,1}，此时 `tlbi *E1` 打的是EL2&0(host自己)，
 **打不到guest的EL1&0**。要打guest，必须翻转其中一位。改E2H不行(一动TTBR1_EL2就没了)，
@@ -136,7 +134,9 @@ isb();
 相关的还有 `VMALLS12E1IS`("S1+S2+combined、当前VMID全清")，撤销整台VM映射时用
 (`__kvm_tlb_flush_vmid`)。
 
-### 虚机上CnP的软件支持
+## 虚机上CnP的软件支持
+
+如下是和虚机上CnP软硬件逻辑相关的一个问题。这个是一个独立问题，先在这个文档中记录。
 
 kvm_arch_vcpu_load里会有：
 ```
@@ -167,7 +167,7 @@ kvm_arch_vcpu_load里会有：
      ASID1 VA1 PA1         ASID1 VA1 PA2
      vcpu0 s1 cnp = 1      vcpu1 s1 cnp = 1
      +--------+            +---------+
-     | thead0 |            | thread1 |
+     | thread0|            | thread1 |
      +--------+            +---------+
                \          /
                 \        /
@@ -177,4 +177,3 @@ kvm_arch_vcpu_load里会有：
 ```
 这样逻辑上会错，但是这种情况是违反ARM构架的。(上面的场景也可能是CnP打开的, 为啥
 上面就不违反ARM构架?)
-
