@@ -392,14 +392,14 @@ mon_event_read(&rr, r, d, rdtgrp, evtid, false);            // rdtgrp 提供 rmi
             |                                        |
 ============+================ resctrl core layer ====+==============================
             |                                        |
-   +----------------+  global list             +--------------+ global list rdt_all_groups
-   | resctrl_schema |<- resctrl_schema_all      |  rdtgroup    |<-(ctrl grp / mon grp)
-   +----------------+   (one per ctrl resource) +--------------+
-   | name  "L3"     |                           | closid       |  <- ctrl identity (scalar)
-   | num_closid     |                           | mon.rmid     |  <- mon identity  (scalar)
-   | conf_type      |                           | mon.mon_data_kn
-   | res -----------+--+                         | kn (dir)     |
-   +----------------+  |                         +--------------+
+   +----------------+  global list             +----------------+ global list rdt_all_groups
+   | resctrl_schema |<- resctrl_schema_all     |  rdtgroup      |<-(ctrl grp / mon grp)
+   +----------------+   (one per ctrl resource)+----------------+
+   | name  "L3"     |                          | closid         |  <- ctrl identity (scalar)
+   | num_closid     |                          | mon.rmid       |  <- mon identity  (scalar)
+   | conf_type      |                          | mon.mon_data_kn|
+   | res -----------+--+                       | kn (dir)       |
+   +----------------+  |                       +----------------+
                        |  several schema may point to one res (CDP)
                        v
    +-------------------------------+   resctrl_arch_get_resource(rid)
@@ -434,18 +434,18 @@ mon_event_read(&rr, r, d, rdtgrp, evtid, false);            // rdtgrp 提供 rmi
                    |                     +-------------------+--+
 ================ mpam hardware abstraction layer =======+=========================
                    v                                    |
-   +---------------------------+  global mpam_classes    |
-   | mpam_class                |<-(L3 / L2 / MC ...)     |
-   +---------------------------+                         |
-   | level / type              |                         |
-   | affinity                  |                         |
-   | props (hw capability agg) |                         |
-   | components ------+        |                         |
-   | ida_csu_mon      |        |  <- monitor instance    |
-   | ida_mbwu_mon     |        |     allocators          |
-   +------------------+--------+                         |
-                      v list class->components           |
-   +---------------------------+<------------------------+
+   +---------------------------+  global mpam_classes   |
+   | mpam_class                |<-(L3 / L2 / MC ...)    |
+   +---------------------------+                        |
+   | level / type              |                        |
+   | affinity                  |                        |
+   | props (hw capability agg) |                        |
+   | components ------+        |                        |
+   | ida_csu_mon      |        |  <- monitor instance   |
+   | ida_mbwu_mon     |        |     allocators         |
+   +------------------+--------+                        |
+                      v list class->components          |
+   +---------------------------+<-----------------------+
    | mpam_component            |   dom->comp points here (ctrl + mon share it)
    +---------------------------+
    | comp_id   (= domain id)   |
@@ -460,25 +460,25 @@ mon_event_read(&rr, r, d, rdtgrp, evtid, false);            // rdtgrp 提供 rmi
                       |  +----------------------+
                       |  | ris_idx / idr        |
                       |  | props                |
-                      |  | comp_list  <-+ on component
-                      |  | msc_list   <-+--+ on msc  (same ris on both lists)
-                      |  | comp (back-ptr) |  |
-                      |  | msc  (back-ptr) |  |
-                      |  | mbwu_state -----+--+--> msmon_mbwu_state{cfg,correction}
-                      |  +-----------------+--+
-                      v                    |  v list msc->ris (msc_list)
-   +-----------------------------+         | +----------------------+
-   | mpam_config (cfg[partid])   |         | | mpam_msc             | <- physical MSC device
-   +-----------------------------+         | +----------------------+
-   | features (which fields valid)         | | id                   |
-   | cpbm  (cache portion bitmap)|         | | pdev                 |
-   | mbw_max/min  cmax/cmin      |         | | accessibility(cpumask)
-   | dspri/intpri                |         | | mapped_hwpage(MMIO)  |
-   +-----------------------------+         | | partid_max/pmg_max   |
-                                           | | ris -----------------+
-       global mpam_all_msc --------------->| | glbl_list            |
-                                           | +----------------------+
-                                           +--> actual MMIO: MPAMCFG_* / MSMON_*
+                      |  | comp_list          <-+ on component
+                      |  | msc_list           <-+--+ on msc  (same ris on both lists)
+                      |  | comp (back-ptr)      |  |
+                      |  | msc  (back-ptr)      |  |
+                      |  | mbwu_state ----------+--+--> msmon_mbwu_state{cfg,correction}
+                      |  +----------------------+--+
+                      v                         |  v list msc->ris (msc_list)
+   +-----------------------------+              | +----------------------+
+   | mpam_config (cfg[partid])   |              | | mpam_msc             | <- physical MSC device
+   +-----------------------------+              | +----------------------+
+   | features (which fields valid)              | | id                   |
+   | cpbm  (cache portion bitmap)|              | | pdev                 |
+   | mbw_max/min  cmax/cmin      |              | | accessibility(cpumask)
+   | dspri/intpri                |              | | mapped_hwpage(MMIO)  |
+   +-----------------------------+              | | partid_max/pmg_max   |
+                                                | | ris -----------------+
+       global mpam_all_msc -------------------->| | glbl_list            |
+                                                | +----------------------+
+                                                +--> actual MMIO: MPAMCFG_* / MSMON_*
 ```
 
 8.2 container_of bridge (glue layer rides on core structs)
