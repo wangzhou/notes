@@ -295,6 +295,15 @@ L3 component 被投影出 4 个 mpam_resctrl_dom，分属 4 个 rdt_resource 的
   component 提供身份/边界/物理通路(静态)，resource 决定投影几份(每个控制维度
   一份)，CPU online/offline 决定这份投影当前的 cpu_mask 和存亡(动态)。
 
+【版本说明 / 与主线的差异，2026.07.20 补】
+本文“控制与监控共用同一个 mpam_resctrl_dom(经 dom->comp)”只对 openEuler v6.6
+成立。主线(v7.2-rc4)已把 domain 拆成两套独立结构：
+  rdt_domain_hdr(公共头) + rdt_ctrl_domain(控制) + rdt_l3_mon_domain(监控)，
+rdt_resource 也从单链表 domains 变成 ctrl_domains + mon_domains 双链表，online/
+offline 回调拆成 resctrl_online_{ctrl,mon}_domain。即主线的控制域和监控域可以有
+不同 scope。openEuler 移植的是这次重构之前的快照。详见
+《主线vs_openEuler_MPAM支持对比.md》§4。
+
 
 7. resctrl 一个组如何触达系统全部资源(schemata / mon_data)
 ==========================================================
