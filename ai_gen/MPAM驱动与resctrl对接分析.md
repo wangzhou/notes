@@ -417,7 +417,7 @@ mon_event_read(&rr, r, d, rdtgrp, evtid, false);            // rdtgrp 提供 rmi
    | rdt_domain                    |  <- domain: one schemata column / one mon_data subdir
    +-------------------------------+
    | id          (= comp_id)       |
-   | cpu_mask    (filled as CPUs   |
+   | cpu_mask    (filled as CPUs   d
    |              come online)     |
    | staged_config[]  ctrl staging |
    | mbm_total / mbm_local  mon st |
@@ -450,35 +450,38 @@ mon_event_read(&rr, r, d, rdtgrp, evtid, false);            // rdtgrp 提供 rmi
    +---------------------------+
    | comp_id   (= domain id)   |
    | affinity                  |
-   | cfg[] -----------+        |  <- per-partid control config array
+   | cfg[] -----------+        |  <- per-partid control config array (this field IS mpam_config[])
    | ris -------------+--+     |
    | class (back-ptr) |  |     |
    +------------------+--+-----+
-                      |  v list comp->ris (comp_list)
-                      |  +----------------------+
-                      |  | mpam_msc_ris         |  <- one resource type (RIS) on an MSC
-                      |  +----------------------+
-                      |  | ris_idx / idr        |
-                      |  | props                |
-                      |  | comp_list          <-+ on component
-                      |  | msc_list           <-+--+ on msc  (same ris on both lists)
-                      |  | comp (back-ptr)      |  |
-                      |  | msc  (back-ptr)      |  |
-                      |  | mbwu_state ----------+--+--> msmon_mbwu_state{cfg,correction}
-                      |  +----------------------+--+
-                      v                         |  v list msc->ris (msc_list)
-   +-----------------------------+              | +----------------------+
-   | mpam_config (cfg[partid])   |              | | mpam_msc             | <- physical MSC device
-   +-----------------------------+              | +----------------------+
-   | features (which fields valid)              | | id                   |
-   | cpbm  (cache portion bitmap)|              | | pdev                 |
-   | mbw_max/min  cmax/cmin      |              | | accessibility(cpumask)
-   | dspri/intpri                |              | | mapped_hwpage(MMIO)  |
-   +-----------------------------+              | | partid_max/pmg_max   |
-                                                | | ris -----------------+
-       global mpam_all_msc -------------------->| | glbl_list            |
-                                                | +----------------------+
-                                                +--> actual MMIO: MPAMCFG_* / MSMON_*
+              cfg[] col |  | ris col
+                        |  +----+
+                        |       v list comp->ris (comp_list)
+                        |     +----------------------+
+                        |     | mpam_msc_ris         |  <- one resource type (RIS) on an MSC
+                        |     +----------------------+
+                        |     | ris_idx / idr        |
+                        |     | props                |
+                        |     | comp_list          <---- on component (this list)
+                        |     | msc_list           <---+ on msc (same ris on both lists)
+                        |     | comp (back-ptr)      |  |
+                        |     | msc  (back-ptr)      |  |
+                        |     | mbwu_state ------------------> msmon_mbwu_state{cfg,correction}
+                        |     +----------------------+  |
+                        v                               | list msc->ris (msc_list)
+   +--------------------------------+                   v
+   | mpam_config (= comp->cfg[partid],       +----------------------+
+   |               not a separate level)     | mpam_msc             | <- physical MSC device
+   +--------------------------------+         +----------------------+
+   | features (which fields valid)  |         | id                   |
+   | cpbm  (cache portion bitmap)   |         | pdev                 |
+   | mbw_max/min  cmax/cmin         |         | accessibility(cpumask)|
+   | dspri/intpri                   |         | mapped_hwpage(MMIO)  |
+   +--------------------------------+         | partid_max/pmg_max   |
+                                              | ris ------------------+  (msc->ris list head)
+       global mpam_all_msc --------------->---| glbl_list            |
+                                              +----------------------+
+                                              +--> actual MMIO: MPAMCFG_* / MSMON_*
 ```
 
 8.2 container_of bridge (glue layer rides on core structs)
