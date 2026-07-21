@@ -51,7 +51,6 @@ L0: host kvm (EL2)
 NV性能很差，已经不在支持，Linux主线已经支持NV2和NV3。支持嵌套虚拟化的核心是要高效
 的把vEL2模拟出来。
 
-
 vEL2寄存器模拟
 ---------------
 
@@ -137,41 +136,8 @@ FGT寄存器    L0读VNCR -> triage_sysreg_trap查表判断
 第二种需要在L0上线L1时换上VNCR中的vEL2寄存器。相关寄存器有：
 VBAR_EL2、SCTLR_EL2、TCR_EL2、SPSR_EL2、ELR_EL2、ESR_EL2、FAR_EL2 ...
 
-第三种
-
-├────────────┬─────────────────────────────────────────────────┤
-│ VSESR_EL2  │ L0 注入 SError 时读到它填物理寄存器               │
-│ VDISR_EL2  │                        同上                      │
-│ TPIDR_EL2  │ 就留在 VNCR 页，L0 搬都不搬                       │
-└────────────┴─────────────────────────────────────────────────┘
-
-6. L2 异常到 vEL2 的完整流程
-
-L2 在物理 EL1 跑，执行了 L1 设置要 trap 的操作:
-
-    L2 → 硬件 trap 到 L0 (真 EL2)
-      │  trap 目标永远是 L0，不会是 vEL2
-      ▼
-    L0: triage_sysreg_trap() → "这个 trap L1 想要"
-      │
-      ├─ vcpu_put(L2):  保存 L2 的 EL1 寄存器 (物理→内存)
-      ├─ kvm_inject_el2_exception(): 标记 pending exception
-      ├─ vcpu_load(L1): VNCR[VBAR_EL2] → 物理 EL1 VBAR
-      │                  VNCR[SCTLR_EL2]→ 物理 EL1 SCTLR
-      │                  现在物理 EL1 = L1 的 vEL2
-      ▼
-    L1 运行 (vEL2), CPU 从物理 EL1 VBAR (即 L1 的 VBAR_EL2 值) 取向量
-      │  CPU 自动写物理 EL1 SPSR/ELR/ESR/FAR (= L1 的 vEL2 对应寄存器)
-      ▼
-    L1 ERET → L0 → vcpu_put(L1) / vcpu_load(L2) → L2 继续跑
-
-L1 的 vEL2 VBAR 和 L2 的 vEL1 VBAR 不会同时需要物理 EL1 寄存器 —
-L0 总在中间做切换，物理 EL1 寄存器只承载"当前在跑"的值。
-
-但 VNCR 页上的值 "同时" 有效: L2 在跑时写 EL2 编码 (如 ICH_LR0_EL2),
-硬件通过 fixmap VNCR 直写进 L1 的 VNCR 页。L1 无论是当前在跑还是
-后续被调度，读到 VNCR 页都能看到 L2 写入的最新值。
-
+第三种并不改变硬件的行为，只要做到软件可以写入和读出数据就好。相关寄存器有：
+VSESR_EL2、VDISR_EL2、TPIDR_EL2 ...
 
 vEL2 Stage2页表管理
 --------------------
@@ -267,7 +233,6 @@ S2和EL2 S2，合并得到EL2 merged S2。
 的到PA，然后完成映射。但是，vEL2 S2映射的建立和eret trap进入EL2是独立的逻辑，两者
 不应该建立联系。难到EL2要便利下vEL2 S2的页表? (todo)
 
-
 TLBI整体逻辑
 -------------
 
@@ -290,7 +255,6 @@ guest3和guest2(非嵌套)应该有不同的VMID。虚机的combined TLB和S2 TL
 
 1和2需要在EL2做对应TLB无效化。3在虚机内做，本来就是虚机内系统的行为。
 
-
 vtimer整体逻辑
 -------------
 
@@ -303,10 +267,8 @@ todo: 到底是给嵌套虚机还是vEL2一个新timer。vEL2不可以用之前�
 
 CNTVOFF/CNTPOFF的逻辑是怎么样的？vEL2 CNTVOFF怎么模拟的？
 
-
 vIRQ整体逻辑
 -------------
 
 vPPI/vSGI/vSPI/vLPI
-
 
