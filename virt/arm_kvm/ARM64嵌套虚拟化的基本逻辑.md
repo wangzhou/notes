@@ -1,7 +1,7 @@
--v0.1 2026.6.15 Sherlock init
--v0.2 2026.7.21 补充vEL2寄存器模拟的完整分析
--v0.3 2026.7.31 补充vEL2 S2、TLBI、VMID、timer、中断的逻辑推演
--v0.4 2026.8.01 重新整理vEL2寄存器
+- v0.1 2026.6.15 Sherlock init
+- v0.2 2026.7.21 补充vEL2寄存器模拟的完整分析
+- v0.3 2026.7.31 补充vEL2 S2、TLBI、VMID、timer、中断的逻辑推演
+- v0.4 2026.8.01 重新整理vEL2寄存器
 
 简介：梳理ARM64 nested virtualization的基本逻辑。
 
