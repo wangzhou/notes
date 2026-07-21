@@ -231,7 +231,7 @@ S2和EL2 S2，合并得到EL2 merged S2。
 
 我们具体看EL2 merged S2的建立，如果EL2知道IPA->IPA‘中IPA和IPA'的值，则可以通过IPA'
 的到PA，然后完成映射。但是，vEL2 S2映射的建立和eret trap进入EL2是独立的逻辑，两者
-不应该建立联系。难到EL2要便利下vEL2 S2的页表? (todo)
+不应该建立联系。难到EL2要遍历下vEL2 S2的页表? (todo)
 
 TLBI整体逻辑
 -------------
