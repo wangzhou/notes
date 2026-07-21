@@ -1,6 +1,7 @@
 -v0.1 2026.6.15 Sherlock init
 -v0.2 2026.7.21 补充vEL2寄存器模拟的完整分析
 -v0.3 2026.7.31 补充vEL2 S2、TLBI、VMID、timer、中断的逻辑推演
+-v0.4 2026.8.01 重新整理vEL2寄存器
 
 简介：梳理ARM64 nested virtualization的基本逻辑。
 
@@ -91,84 +92,53 @@ guest2
 vEL2的模拟需要：1. 使得软件可以访问vEL2的寄存器，2. 对应的vEL2寄存器的语义是正常
 工作的。
 
+NV2硬件基础。软件对vEL2寄存器访问可以重定向到一段内存里，NV2新增系统寄存器VNCR_EL2
+表示这段内存的基地址。(todo: 这里配置的是IPA?）
 
-1. NV2 硬件基础: VNCR_EL2
+注意，在L2运行时，触发异常硬件需要直接更新对应的vEL2寄存器。所以，L2也需要叫硬件
+感知到这段内存的地址。todo: 如何感知到？L1 VNCR页的HPA?
 
-NV2 的核心设计: L1 所有 Op0=4 (EL2 编码) 的 MSR/MRS 指令, 硬件自动转为对
-[VNCR_EL2 + offset] 地址的内存读写, 不产生 trap。
+vEL2终归还是要运行vEL2的代码，比如，如上vEL2 handle的逻辑中，软件可能访问vEL2寄存器、
+访问EL1名字寄存器(VHE下实际应该映射到vEL2寄存器)、通过EL12类型寄存器访问实际的EL1
+寄存器。如何使用物理EL1寄存器模拟如上的行为(todo)。
 
-L0 为每个 vCPU 分配一页内存 vncr_array[] (kvm_vcpu_init_nested, nested.c:79-81),
-这就是 L1 的 VNCR 页。物理 VNCR_EL2 根据当前运行的身份指向不同地址:
+todo: 明确下如上三种情况如何模拟。先猜测下：
 
-    L1 在跑 (is_hyp_ctxt=true):  VNCR_EL2 = vncr_array
-    L2 在跑 (is_hyp_ctxt=false): VNCR_EL2 = fixmap(L1 VNCR 页的 HPA)
+1. vEL2的寄存器。语义上访问xxx_EL2寄存器，(L0上线L1时，把VNCR内存中的xxx_EL2填入
+   物理EL1寄存器)直接使用物理EL1的寄存器。
+```
+   vcpu_load(L1):                 vcpu_put(L1):
+     VNCR[VBAR_EL2]  ->  物理VBAR    物理VBAR  ->  VNCR[VBAR_EL2]
+     VNCR[SCTLR_EL2] ->  物理SCTLR   物理SCTLR ->  VNCR[SCTLR_EL2]
+     VNCR[TCR_EL2]   ->  物理TCR     物理TCR   ->  VNCR[TCR_EL2]
+     ...                           ...
+```
 
-2. 两层寄存器架构
+2. EL1名字寄存器。语义上访问xxx_EL2寄存器，(软件如上相同恢复xxx_EL2)直接使用物理
+   EL1的寄存器。
 
-┌─────────────────────────────────────────────────────┐
-│ VNCR 页 (内存): 所有 EL2 寄存器的持久存储               │
-│  - 硬件自动管理，不 trap                              │
-│  - 值永远不丢                                        │
-├─────────────────────────────────────────────────────┤
-│ 物理 EL1 寄存器: 当前正在跑的身份的"舞台"               │
-│  - L1 跑时 = L1 的 vEL2 寄存器                       │
-│  - L2 跑时 = L2 的 vEL1 寄存器                       │
-│  - L0 在切换时搬运                                    │
-└─────────────────────────────────────────────────────┘
+3. EL12类型寄存器。语义上是要访问xxx_EL1寄存器(L2的EL1)，怎么模拟？
 
-3. L0 的角色: 在该搬的时候把 VNCR 的值搬进/搬出物理 EL1 寄存器
+VNCR内存上的vEL2寄存器可以分三类：1. 控制CPU整体硬件行为(e.g. HCR_EL2)，2. 控制
+vEL2行为的(e.g. VBAR_EL2)，3. 向软件报告硬件状态的(e.g. VSESR_EL2)。
 
-vcpu_load(L1):                 vcpu_put(L1):
-  VNCR[VBAR_EL2] → 物理 VBAR    物理 VBAR → VNCR[VBAR_EL2]
-  VNCR[SCTLR_EL2]→ 物理 SCTLR   物理 SCTLR→ VNCR[SCTLR_EL2]
-  VNCR[TCR_EL2]  → 物理 TCR     物理 TCR  → VNCR[TCR_EL2]
-  ...                           ...
+第一种需要在返回L2之前，在L0里配置对应的寄存器，使得硬件控制实际生效。一般是是L0
+里把控制整合到对应物理寄存器里。
+```
+HCR_EL2      L0读VNCR -> __compute_hcr()合并进物理HCR
+VTCR_EL2     L0读VNCR -> 查找影子S2 → 加载物理VTCR   
+VTTBR_EL2    L0读VNCR -> 查影子S2 → 加载物理VTTBR    
+CPTR_EL2     L0读VNCR -> translate → 物理CPACR_EL1    
+CNTHCTL_EL2  L0读VNCR -> 跟CNTKCTL_EL1合并           
+FGT寄存器    L0读VNCR -> triage_sysreg_trap查表判断   
+...
+```
 
-代码: sysreg-sr.c __sysreg_restore_vel2_state() / __sysreg_save_vel2_state()
+第二种需要在L0上线L1时换上VNCR中的vEL2寄存器。相关寄存器有：
+VBAR_EL2、SCTLR_EL2、TCR_EL2、SPSR_EL2、ELR_EL2、ESR_EL2、FAR_EL2 ...
 
-4. L1 访问 EL2 寄存器的语义表
+第三种
 
-EL1 和 EL2 是两套编码。VHE Host 写 _EL1 编码设自己的 EL2 寄存器
-(硬件重定向), L1 也写同样的代码, L0 保证语义一致。
-
-┌────────┬─────────────┬──────────────────────┬──────────────────────┐
-│ 谁来访问 │ 用什么编码     │ 语义                   │ 硬件行为                │
-├────────┼─────────────┼──────────────────────┼──────────────────────┤
-│ L1      │ MSR x_EL2    │ 设我的 vEL2 寄存器      │ NV2 → VNCR 页          │
-│         │ (Op0=4)      │                       │ 不进物理寄存器           │
-│         │ MSR x_EL1    │ 设我的 vEL2 寄存器      │ 直接物理 EL1 寄存器      │
-│         │ (Op0=3)      │ (和上面一样，不同路径，   │ L0 vcpu_load 已从 VNCR   │
-│         │              │  VHE Host 也这样写)     │ 搬到物理寄存器           │
-├────────┼─────────────┼──────────────────────┼──────────────────────┤
-│ L2      │ MSR x_EL1    │ 设自己的 vEL1 寄存器     │ 直接物理 EL1 寄存器      │
-│         │ (Op0=3)      │                       │ L0 已加载 L2 的值        │
-│         │ MSR x_EL2    │ 不该碰                  │ NV2 → fixmap →         │
-│         │ (Op0=4)      │                       │ 直写进 L1 的 VNCR 页     │
-└────────┴─────────────┴──────────────────────┴──────────────────────┘
-
-5. VNCR 页上 EL2 寄存器如何保证功能 — 分三类
-
-┌──────────────────────────────────────────────────────────────┐
-│ 第一类: 控制 CPU 行为 (硬件必须读到物理寄存器才能生效)           │
-├────────────┬─────────────────────────────────────────────────┤
-│ HCR_EL2    │ L0 读 VNCR → __compute_hcr() 合并进物理 HCR     │
-│ VTCR_EL2   │ L0 读 VNCR → 查找影子 S2 → 加载物理 VTCR         │
-│ VTTBR_EL2  │ L0 读 VNCR → 查影子 S2 → 加载物理 VTTBR          │
-│ CPTR_EL2   │ L0 读 VNCR → translate → 物理 CPACR_EL1         │
-│ CNTHCTL_EL2│ L0 读 VNCR → 跟 CNTKCTL_EL1 合并                │
-│ FGT 寄存器  │ L0 读 VNCR → triage_sysreg_trap 查表判断         │
-├────────────┴─────────────────────────────────────────────────┤
-│ 第二类: 纯状态值 (CPU 在异常时会写，但不主动读来做决策)          │
-├────────────┬─────────────────────────────────────────────────┤
-│ VBAR_EL2   │ vcpu_load: VNCR → 物理 EL1 VBAR                │
-│ SCTLR_EL2  │                        同上                      │
-│ TCR_EL2    │                        同上                      │
-│ SPSR_EL2   │                        同上                      │
-│ ELR_EL2    │                        同上                      │
-│ ESR_EL2    │ vcpu_put: 物理 EL1 → VNCR (CPU 异常时写物理EL1)  │
-│ FAR_EL2    │                        同上                      │
-├────────────┴─────────────────────────────────────────────────┤
-│ 第三类: 纯数据 (CPU 不碰，只有软件读写)                         │
 ├────────────┬─────────────────────────────────────────────────┤
 │ VSESR_EL2  │ L0 注入 SError 时读到它填物理寄存器               │
 │ VDISR_EL2  │                        同上                      │
