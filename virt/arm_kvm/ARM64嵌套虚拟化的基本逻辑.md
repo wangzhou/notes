@@ -8,12 +8,14 @@
 基本逻辑
 --------
 
- L2: nested guest OS  (virtual EL0, virtual EL1)
+嵌套虚拟化是在虚机里支持vEL2的模拟，这样在虚机里可以再起一个KVM虚机。预定的术语里，
+最底层到最上层分别为L0/L1/L2，定义如下：
 
- L1: guest hypervisor (EL1, virtual EL2)
+L2: nested guest OS  (virtual EL0, virtual EL1)
+L1: guest hypervisor (EL1, virtual EL2)
+L0: host kvm (EL2)
 
- L0: host kvm (EL2)
-
+嵌套虚拟化的一个大致示意图如下：
 ```                                        
                                                guest2
                                                +-------------------------+
@@ -42,7 +44,7 @@
 |        EL2                                                                  |
 +-----------------------------------------------------------------------------+
 ```
-
+期中guest1是普通虚机，guest2是支持嵌套的虚机，guest3是其中的嵌套虚机。
 
 
 vEL2寄存器模拟
@@ -280,13 +282,19 @@ guest3和guest2(非嵌套)应该有不同的VMID。虚机的combined TLB和S2 TL
 vtimer整体逻辑
 -------------
 
+普通KVM虚拟化的vtimer支持逻辑可以参考[这里](https://wangzhou.github.io/ARM64时钟虚拟化基本逻辑/)。简单讲就是host和虚机个用一个定时器，
+并且这两个定时器用不同的中断号。嵌套虚拟化下，host和虚机的timer还和以前一样，需要
+给嵌套虚机一个独立的timer。
 
+todo: 到底是给嵌套虚机还是vEL2一个新timer。vEL2不可以用之前的虚机timer么？
+      新timer用哪个，中断号是什么？
+
+CNTVOFF/CNTPOFF的逻辑是怎么样的？vEL2 CNTVOFF怎么模拟的？
 
 
 vIRQ整体逻辑
 -------------
 
- vPPI/vSGI/vSPI
-
+vPPI/vSGI/vSPI/vLPI
 
 
