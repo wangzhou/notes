@@ -1,5 +1,6 @@
 -v0.1 2026.6.15 Sherlock init
 -v0.2 2026.7.21 补充vEL2寄存器模拟的完整分析
+-v0.3 2026.7.31 补充vEL2 S2、TLBI、VMID、timer、中断的逻辑推演
 
 简介：梳理ARM64 nested virtualization的基本逻辑。
 
@@ -244,26 +245,48 @@ guest2(非嵌套)和guest3都要从L0进入，进入guest2(非嵌套)时，EL2�
 进入guest3时，EL2配置的是merged S2，guest3运行发生S2缺页的时候，进入EL2处理缺页，
 EL2不能直接处理这个缺页，vEL2的逻辑需要在vEL2中自己处理，EL2把这个缺页处理注入给
 vEL2处理(todo: 补齐注入逻辑)，vEL2处理这个缺页逻辑，建立IPA->IPA'映射，这个映射
-只是存在于vEL2的页表里，这个页表并没有和物理硬件有关系。
+只是存在于vEL2的页表里，这个页表并没有和物理硬件有关系。vEL2处理完vEL2 S2缺页使用
+eret返回guest3，在嵌套虚拟化下，vEL2的eret会trap到EL2，EL2这个时候就可以根据vEL2
+S2和EL2 S2，合并得到EL2 merged S2。
 
-todo: 什么时候再回到EL2里做页表merge?
-
-
-多核逻辑视图
-
+我们具体看EL2 merged S2的建立，如果EL2知道IPA->IPA‘中IPA和IPA'的值，则可以通过IPA'
+的到PA，然后完成映射。但是，vEL2 S2映射的建立和eret trap进入EL2是独立的逻辑，两者
+不应该建立联系。难到EL2要便利下vEL2 S2的页表? (todo)
 
 
 TLBI整体逻辑
 -------------
 
-VMID整体逻辑
--------------
+对于TLB基本的介绍可以参考[这里](https://wangzhou.github.io/todo)。嵌套虚机和它的外层虚机应该有不同的VMID，也就是
+guest3和guest2(非嵌套)应该有不同的VMID。虚机的combined TLB和S2 TLB被虚机自己的VMID
+标记。考虑虚机TLB失效的时间，当虚机上任意一段地址翻译改变时，就应该失效对应的TLB。
+
+在嵌套虚拟化的场景，当如上逻辑视图中三段映射任意一段映射改变的时候，都要无效与之
+相关的所有TLB，这意味着嵌套虚机会有更多的TLB无效化操作。
+
+打开具体看下：
+
+1. EL2 S2映射变化。需要无效EL2 S2 TLB、S1 combined TLB(注意这两个是guest2(非嵌套)
+   的TLB)、EL2 merged S2 TLB、S1 combined TLB(后面这两个是guest3的TLB)
+
+2. vEL2 S2映射变化。需要无效EL2 merged S2 TLB、S1 combined TLB。这个只影响嵌套虚机
+   的TLB。
+
+3. S1映射变化。虚拟内做S1 combined TLB无效化就可以。
+
+1和2需要在EL2做对应TLB无效化。3在虚机内做，本来就是虚机内系统的行为。
+
 
 vtimer整体逻辑
 -------------
+
+
+
 
 vIRQ整体逻辑
 -------------
 
  vPPI/vSGI/vSPI
+
+
 
