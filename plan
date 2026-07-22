@@ -449,7 +449,6 @@ partition PMU                                    #
 整理host FP
 
 跨代热迁移逻辑整理   	                         dg
-GICv5
 qemu vcpu hotplug
 TLBID/FNB
 
@@ -457,6 +456,8 @@ perf kprobe问题
 virtio blk
 rust
 qemu accel mshv
-arm嵌套虚拟化
-arm spe可以玩下
 内存气球
+arm spe
+arm嵌套虚拟化
+GICv5
+vfio设备模拟
