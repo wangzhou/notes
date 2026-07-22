@@ -1,8 +1,8 @@
 # 笔记写作 Skill
 
-> 适用于技术文档、架构分析、学习笔记
->
-> -v0.2 2026.05.09 新增中英文间无空格规则、80字符换行规则
+适用于技术文档、架构分析、学习笔记
+
+-v0.2 2026.05.09 新增中英文间无空格规则、80字符换行规则
 -v0.3 2026.05.09 用DrawIt纯文本图替代Unicode box-drawing图
 -v0.4 2026.07.19 新增不使用行内渲染(加粗/斜体/行内代码)规则
 
@@ -225,8 +225,11 @@ int kvm_xxx(struct kvm *kvm, u64 addr, u64 size);
 
 笔记完成後，通过以下步骤转为 Hexo 博客文章：
 
-1. 在 `/home/wz/hexo_blog_source` 下执行 `npx hexo new "文章标题"` 创建脚手架
+1. 在 `/home/wz/hexo_blog_source` 下执行 `npx hexo new "文章标题"` 创建脚手架。
+   必须走这一步，不能手动创建 .md 文件——`hexo new` 会自动生成 `date` 字段，
+   缺少 date 会导致 Hexo 用文件 mtime fallback，造成文章排序错乱。
 2. 填写 frontmatter：
+   - `date`: 保留脚手架自动生成的值，不要删除
    - `description`: 引号包裹，内容为笔记的简介
    - `tags`: 相关技术标签
    - `categories`: 留空
@@ -235,4 +238,5 @@ int kvm_xxx(struct kvm *kvm, u64 addr, u64 size);
 
 注意：
 - description 必须用双引号包裹，否则 YAML 语法错误
+- date 字段必须保留，来源只能是 `hexo new` 自动生成
 - 笔记是工作副本(有版本跟踪)，博客是发布版本(frontmatter 管理元信息)
