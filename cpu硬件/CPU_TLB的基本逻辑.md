@@ -1,5 +1,6 @@
 -v0.1 2026.3.29 Sherlock init
 -v0.2 2026.6.22 Sherlock 补齐TLBI三节(指令/Host/虚机)
+-v0.3 2026.8.08 Sherlock 全文逻辑整理
 
 简介: 收集和ARM TLB硬件相关的知识，基于ARM构架。
 
@@ -7,7 +8,7 @@
 
 TLB在硬件内部一般有三种保存情况：
 
-1. stage1 TLB。
+1. stage1 TLB，host使用的TLB。
 
 2. combine TLB，也就是stage1和stage2最后综合得到的TLB。
 
@@ -27,7 +28,8 @@ TLB在硬件内部一般有三种保存情况：
 
 一般来说一个PE有一个独立的结构来保存TLB，但是，ARM上新增加了CnP这个特性，可以多个
 PE之间共享TLB。具体定义是，如果多个PE的TTBRx_ELx的页表是一样的(包括VMID，ASID)，
-同时TTBRx_ELx.CNP配置为1，那么多个PE上的相同TLB可以共享一个TLB。
+同时TTBRx_ELx.CNP配置为1，那么多个PE上的相同TLB可以共享一个TLB。实际实现时，一般
+是一个物理核的多个逻辑核共享TLB。
 
 注意，在虚拟化的情况下，需要TTBRx_EL1.CNP和VTTBR_EL2.CNP都是1，才会创建共享的TLB。
 一个直观的硬件实现是，当硬件发现满足共享TLB的条件的时候，就去查找有无共享TLB，如果
@@ -88,39 +90,20 @@ todo: Host上使用TLBI的场景。
 
 ### 虚机上TLBI的使用
 
-分两个视角：guest自己发TLBI，和host(KVM)替guest刷。
+从三个视角看下：guest自己发TLBI，host上刷stage2 TLB，host(KVM)替guest无效TLB。
 
 - Guest在EL1自己发TLBI
 
-guest执行tlbi vae1is → EL1&0 regime，而当前VTTBR_EL2.VMID就是该guest的VMID，硬件
-自动把失效锁定在这台guest。默认KVM不trap guest的TLBI(HCR_EL2.TTLB=0)，guest的TLBI
-原生执行、原生按VMID隔离，host完全不参与。IS广播在物理上发给inner-shareable域内
+Guest执行tlbi vae1is无效化TLB为EL1&0 regime，而当前VTTBR_EL2.VMID就是该guest的VMID，
+硬件自动把失效锁定在这台guest。默认KVM不trap guest的TLBI(HCR_EL2.TTLB=0)，guest的
+TLBI原生执行、原生按VMID隔离，host完全不参与。IS广播在物理上发给inner-shareable域内
 所有PE，但每个PE按标签匹配：别的guest(VMID不同)、host(regime=EL2&0，压根不匹配)
 都不会误伤。
 
-- Host(KVM)在EL2替guest刷
+- 无效stage2 TLB
 
-如果stage2页表有变动，刷新了S2 TLB，S1 combined的TLB信息也不对了，这时就需要EL2
-把EL1的combined TLB也刷掉。
-
-看下具体做法。VHE下host平时是{E2H,TGE}={1,1}，此时tlbi *E1打的是EL2&0(host自己)，
-打不到guest的EL1&0。所以KVM的做法是临时把TGE清0：
-```c
-// arch/arm64/kvm/hyp/vhe/tlb.c::__tlb_switch_to_guest
-__load_stage2(mmu, mmu->arch);      // 先把目标VM的VMID装进VTTBR_EL2
-val = read_sysreg(hcr_el2);
-val &= ~HCR_TGE;                    // TGE: 1 -> 0
-write_sysreg(val, hcr_el2);
-isb();
-// ...此刻tlbi *E1命中的是guest的EL1&0(且限定当前VMID)。
-```
-刷完再把TGE置回1。
-
-- 无效stage2 TLB的一般逻辑。
-
-S2页表发生变化，都要刷新S2 TLB。
-
-由于如上的存储结构，无效stage2 TLB后，还要无效下虚机的combined TLB:
+S2页表发生变化，都要刷新S2 TLB。由于如上的存储结构，无效stage2 TLB后，还要无效下
+虚机的combined TLB:
 ```c
 //__kvm_tlb_flush_vmid_ipa
 __tlbi(ipas2e1is, ipa);   // (1) 打stage2-only条目: 按IPA精确失效
@@ -129,6 +112,24 @@ __tlbi(vmalle1is);        // (2) 打combined(S1+S2)条目: 只能按VMID全清
 dsb(ish);
 isb();
 ```
+
+- Host(KVM)在EL2替guest无效化guest TLB
+
+如上，如果stage2页表有变动，就要无效S2 TLB，S1 combined的TLB信息也不对了，这时就
+需要EL2把EL1的combined TLB也刷掉。
+
+看下具体做法。VHE下host平时是{E2H,TGE}={1,1}，此时tlbi *E1打的是EL2&0 regime对应
+的TLB(host自己)，打不到guest的EL1&0 regime的TLB。所以KVM的做法是临时把TGE清0：
+```c
+// arch/arm64/kvm/hyp/vhe/tlb.c __tlb_switch_to_guest
+__load_stage2(mmu, mmu->arch);      // 先把目标VM的VMID装进VTTBR_EL2
+val = read_sysreg(hcr_el2);
+val &= ~HCR_TGE;                    // TGE: 1 -> 0
+write_sysreg(val, hcr_el2);
+isb();
+// ...此刻tlbi *E1命中的是guest的EL1&0(且限定当前VMID)。
+```
+刷完再把TGE置回1。
 
 ## 虚机上CnP的软件支持
 
@@ -162,9 +163,9 @@ kvm_arch_vcpu_load里会有：
 ```
      ASID1 VA1 PA1         ASID1 VA1 PA2
      vcpu0 s1 cnp = 1      vcpu1 s1 cnp = 1
-     +--------+            +---------+
-     | thread0|            | thread1 |
-     +--------+            +---------+
+     +---------+           +---------+
+     | thread0 |           | thread1 |
+     +---------+           +---------+
                \          /
                 \        /
                  +------+       s2 cnp = 1 
