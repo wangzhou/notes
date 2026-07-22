@@ -36,5 +36,63 @@ guest侧按non-cache访问，有可能数据还是cache里，从而访问到不�
 
 ## 软件支持
 
+没有S2FWB时，以下位置需要dcache/icache刷cache操作，都在arch/arm64/kvm/hyp/pgtable.c。
+
+### map路径: dcache(line 1045)
+
+安装新的cacheable映射前，清扫陈旧cache行。
+
+```c
+if (!kvm_pgtable_walk_skip_cmo(ctx) && mm_ops->dcache_clean_inval_poc &&
+    stage2_pte_cacheable(pgt, new))
+    mm_ops->dcache_clean_inval_poc(kvm_pte_follow(new, mm_ops), granule);
+```
+
+
+### map路径: icache(line 1050)
+
+安装新的可执行映射前，刷I-cache。
+
+```c
+if (!kvm_pgtable_walk_skip_cmo(ctx) && mm_ops->icache_inval_pou &&
+    stage2_pte_executable(new))
+    mm_ops->icache_inval_pou(kvm_pte_follow(new, mm_ops), granule);
+```
+
+
+### unmap路径: dcache(line 1226, 1236)
+
+拆cacheable映射后，把脏cache行写回内存。有FWB时need_flush=false跳过。
+
+```c
+need_flush = !cpus_have_final_cap(ARM64_HAS_STAGE2_FWB);  // line 1226
+...
+if (need_flush && mm_ops->dcache_clean_inval_poc)         // line 1236
+    mm_ops->dcache_clean_inval_poc(...);
+```
+
+
+### relax_perms路径: icache(line 1295)
+
+给已有映射加X权限前，刷I-cache。
+
+```c
+if (mm_ops->icache_inval_pou &&
+    stage2_pte_executable(pte) && !stage2_pte_executable(ctx->old))
+    mm_ops->icache_inval_pou(kvm_pte_follow(pte, mm_ops), granule);
+```
+
+
+### flush路径: dcache(line 1446, 1460)
+
+显式flush操作。有FWB时整个函数直接return 0。
+
+```c
+if (cpus_have_final_cap(ARM64_HAS_STAGE2_FWB))           // line 1460
+    return 0;
+...
+mm_ops->dcache_clean_inval_poc(...);                      // line 1446
+```
+
 需要反过来看这个逻辑，如果没有S2FWB，我们需要在哪里加刷cache的操作。有了S2FWB，
 就是这些刷cache的地方都不需要了。
