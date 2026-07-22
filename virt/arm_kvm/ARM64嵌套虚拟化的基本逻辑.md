@@ -132,9 +132,9 @@ FEAN_NV2有定义，把EL1访问EL2寄存器的行为重定向到对应的EL1寄
 里把控制整合到对应物理寄存器里。
 ```
 HCR_EL2      L0读VNCR -> __compute_hcr()合并进物理HCR
-VTCR_EL2     L0读VNCR -> 查找影子S2 → 加载物理VTCR   
-VTTBR_EL2    L0读VNCR -> 查影子S2 → 加载物理VTTBR    
-CPTR_EL2     L0读VNCR -> translate → 物理CPACR_EL1    
+VTCR_EL2     L0读VNCR -> 查找影子S2 -> 加载物理VTCR   
+VTTBR_EL2    L0读VNCR -> 查影子S2 -> 加载物理VTTBR    
+CPTR_EL2     L0读VNCR -> translate -> 物理CPACR_EL1    
 CNTHCTL_EL2  L0读VNCR -> 跟CNTKCTL_EL1合并           
 FGT寄存器    L0读VNCR -> triage_sysreg_trap查表判断   
 ...
@@ -243,7 +243,7 @@ S2和EL2 S2，合并得到EL2 merged S2。
 TLBI整体逻辑
 -------------
 
-对于TLB基本的介绍可以参考[这里](https://wangzhou.github.io/todo)。嵌套虚机和它的外层虚机应该有不同的VMID，也就是
+对于TLB基本的介绍可以参考[这里](https://wangzhou.github.io/CPU-TLB的基本逻辑/)。嵌套虚机和它的外层虚机应该有不同的VMID，也就是
 guest3和guest2(非嵌套)应该有不同的VMID。虚机的combined TLB和S2 TLB被虚机自己的VMID
 标记。考虑虚机TLB失效的时间，当虚机上任意一段地址翻译改变时，就应该失效对应的TLB。
 
@@ -261,6 +261,8 @@ guest3和guest2(非嵌套)应该有不同的VMID。虚机的combined TLB和S2 TL
 3. S1映射变化。虚拟内做S1 combined TLB无效化就可以。
 
 1和2需要在EL2做对应TLB无效化。3在虚机内做，本来就是虚机内系统的行为。
+
+todo: 考虑具体做TLB无效化的方式
 
 vtimer整体逻辑
 -------------
@@ -442,4 +444,5 @@ shadow S2 vs TLBI的关系总结
 vEL2 S2被合并进shadow S2。L1的TLBI在L0有两种翻译方式:
 - **unmap shadow S2**: IPAS2E1/RIPAS2E1/VMALLS12E1 → 直接kvm_stage2_unmap_range()
 - **真实TLBI**: S1E1 VA TLBI → s2_mmu_tlbi_s1e1() → __kvm_tlbi_s1e2() 对shadow S2做实TLBI
+
 
