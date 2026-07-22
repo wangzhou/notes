@@ -100,10 +100,11 @@ guest执行tlbi vae1is → EL1&0 regime，而当前VTTBR_EL2.VMID就是该guest�
 
 - Host(KVM)在EL2替guest刷
 
-todo: 什么时候需要
+如果stage2页表有变动，刷新了S2 TLB，S1 combined的TLB信息也不对了，这时就需要EL2
+把EL1的combined TLB也刷掉。
 
-VHE下host平时是{E2H,TGE}={1,1}，此时tlbi *E1打的是EL2&0(host自己)，打不到guest
-的EL1&0。所以KVM的做法是临时把TGE清0：
+看下具体做法。VHE下host平时是{E2H,TGE}={1,1}，此时tlbi *E1打的是EL2&0(host自己)，
+打不到guest的EL1&0。所以KVM的做法是临时把TGE清0：
 ```c
 // arch/arm64/kvm/hyp/vhe/tlb.c::__tlb_switch_to_guest
 __load_stage2(mmu, mmu->arch);      // 先把目标VM的VMID装进VTTBR_EL2
@@ -115,9 +116,9 @@ isb();
 ```
 刷完再把TGE置回1。
 
-- 无效stage2 TLB的一般逻辑
+- 无效stage2 TLB的一般逻辑。
 
-todo: 什么时候需要
+S2页表发生变化，都要刷新S2 TLB。
 
 由于如上的存储结构，无效stage2 TLB后，还要无效下虚机的combined TLB:
 ```c
