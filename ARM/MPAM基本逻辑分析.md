@@ -107,6 +107,11 @@ MPAMCFG_MBW_WINWD   Memory Bandwidth Partitioning Window Width
 MPAMCFG_PRI         Priority Partition
 ```
 
+看下cache控制和监控的基本逻辑。cache line里需要保存partid等信息，cache的控制和监控
+可以根据这些信息来实现，MPAM spec(5.8)里定义，当cache被evicted的时候，下一级cache
+line带的partid需要是被evited的上一级cache line里的信息，其实，就是cache line里的
+信息要标记cache line的当前实际拥有者。
+
 resource monitor
 ------------------
 
