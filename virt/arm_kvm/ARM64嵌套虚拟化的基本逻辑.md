@@ -2,6 +2,7 @@
 - v0.2 2026.7.21 补充vEL2寄存器模拟的完整分析
 - v0.3 2026.7.31 补充vEL2 S2、TLBI、VMID、timer、中断的逻辑推演
 - v0.4 2026.8.01 重新整理vEL2寄存器
+- v0.4 2026.8.13 整理vtimer的逻辑
 
 简介：梳理ARM64 nested virtualization的基本逻辑。
 
@@ -265,11 +266,11 @@ guest3和guest2(非嵌套)应该有不同的VMID。虚机的combined TLB和S2 TL
 todo: 考虑具体做TLB无效化的方式
 
 vtimer整体逻辑
--------------
+---------------
 
 普通KVM虚拟化的vtimer支持逻辑可以参考[这里](https://wangzhou.github.io/ARM64时钟虚拟化基本逻辑/)。简单讲就是host和虚机个用一个定时器，
 并且这两个定时器用不同的中断号。嵌套虚拟化下，host和虚机的timer还和以前一样，需要
-给嵌套虚机一个独立的timer。
+给嵌套虚机一个逻辑上独立的vEL2 timer。
 
 只看VHE下normal状态下的各个timer：
 ```
@@ -287,9 +288,20 @@ vtimer整体逻辑
 | EL2 ptimer |  26  |             |                    |                    |
 +------------+------+-------------+--------------------+--------------------+
 ```
+最新的v7.2内核中，L0 timer使用EL2V timer，L1 timer使用EL1 vtimer，就是说按照irq27
+报中断到host，但kvm给L1注入的是irq28，这样vEL2看到一个和L0逻辑一样的vEL2 timer。
 
-CNTVOFF/CNTPOFF的逻辑是怎么样的？vEL2 CNTVOFF怎么模拟的？
+L2 timer也是使用EL1 vtimer，但是L1/L0的timer是复用的EL1 vtimer。基本逻辑是，L2访问
+EL1 vtimer寄存器会被重定向到VNCR的内存区域，触发trap到L0(todo)，随后L0上线L2的时候，
+把内存区域的值写如EL1 vtimer寄存器，EL1 vtimer中原来的timer使用L0软件模拟。
 
+普通虚机有CNTVOFF_EL2表示CNTV_CNT/CNTP_CNT之间offset的机制，在嵌套虚拟化下，这样
+的逻辑怎么继续? vEL2有CNTVOFF_EL2寄存器，L1访问这个寄存器时，值保存在VNCR内存里。
+L0上线L2，目的要使得L2 CNTV_CNT/CNTP_CNT里的值保持逻辑正确。逻辑上，CNTV_CNT = CNTP_CNT + CNTVOFF_EL2，
+这里右边的两个逻辑是L1的逻辑值，我们还有L0的CNTP_CNT(L0)和CNTVOFF_EL2(L0)，需要
+靠这些值，计算出L2的CNTV_CNT。所以，CNTV_CNT = CNTP_CNT(L0) + CNTVOFF_EL2(L0) + CNTVOFF_EL2。
+
+todo: 需要CNTPOFF么？
 
 vIRQ整体逻辑
 -------------
