@@ -14,10 +14,13 @@
   **是** = 直接针对 PMR/pseudo-NMI 路径;**部分** = 通用 DAIF/EFI 路径但涉及 PMR 一致性;
   **否** = 与伪NMI无关(纯重构/清理/性能/FEAT_NMI/文档)。
 
-## 结论:需要回合的 6 个 — #3、#4、#33、#35、#36、#37
+## 结论:需要完整回合的 6 个 + 部分回合的 1 个
+
+完整回合:**#3、#4、#33、#35、#36、#37**;部分回合:**#32**(仅 assembler.h/entry.S 的
+save/restore exceptions 宏 ALLINT 屏蔽逻辑,框架部分不回合,见后文专节)。
 
 其中伪NMI相关的是 **#3(是)和 #4(部分)**;#33/#35/#36/#37 属 FEAT_NMI(架构NMI)体系。
-其余 39 个:29 个是架构重构/清理(Murzin 的 logical exception context 体系,不回合),
+其余 38 个:28 个是架构重构/清理(Murzin 的 logical exception context 体系,不回合),
 10 个是使能/文档类且 oe 已有等价实现。
 
 ## 全量分析表(45 行)
@@ -55,7 +58,7 @@
 | 29 | arm64: ptrace: Add PSR_ALLINT_BIT | ALLINT pstate 位 | 否(oe 曾加后被回退;**是 33/35 的依赖**) | 否(FEAT_NMI) |
 | 30 | arm64: idreg: Add an override for FEAT_NMI | arm64.nmi= override | 否(oe 已有) | 否(FEAT_NMI) |
 | 31 | arm64: cpufeature: Detect PE support for FEAT_NMI | NMI 双 cap 检测 | 否(oe 已有) | 否(FEAT_NMI) |
-| 32 | arm64: nmi: Manage masking for superpriority interrupts | ALLINT 屏蔽顺序管理 | 否(重构) | 否(FEAT_NMI) |
+| 32 | arm64: nmi: Manage masking for superpriority interrupts | ALLINT 屏蔽顺序管理 | 部分(仅 save/restore exceptions 宏的 ALLINT 逻辑,见下) | 否(FEAT_NMI) |
 | **33** | **arm64: irq: Report FEAT_NMI masking local IRQs** | irq flags 记账纳入 ALLINT(带 system_uses_nmi 门控) | **是** | 否(FEAT_NMI 修复;但与伪NMI互斥门控,oe 的 eefea6156921/f7cea6febbbc 历史正是在伪NMI场景踩的坑) |
 | 34 | arm64: nmi: Add handling of superpriority interrupts as NMIs | ISR_EL1 分流 NMI handler | 否(oe 已有) | 否(FEAT_NMI) |
 | **35** | **arm64: suspend: Always initialise PSTATE.ALLINT** | resume 初始化 ALLINT,防 NMI 提前注入 | **是** | 否(FEAT_NMI) |
@@ -70,7 +73,7 @@
 | 44 | irqchip/gic-v5: Add NMI support for PPIs, SPIs and LPIs | GICv5 NMI | 否(6.6 无该驱动) | 否(FEAT_NMI) |
 | 45 | irqchip/gic-v5: Add NMI support for IPIs | GICv5 IPI NMI | 否(同上) | 否(FEAT_NMI) |
 
-## 需要回合的 6 个补丁(证据与注意事项)
+## 需要完整回合的 6 个补丁(证据与注意事项)
 
 ### #3 arm64: hibernate: mask DAIF before restoring hibernated kernel 【伪NMI相关:是】
 - 问题:恢复休眠内核前只屏蔽了 IRQ,DAIF.D/A/F 全开;commit 原文:"When pseudo-NMI is enabled
@@ -86,6 +89,9 @@
 ### #33 arm64: irq: Report FEAT_NMI masking local IRQs 【伪NMI相关:否,但与伪NMI互斥】
 - 问题:SPINTMASK=0 时 ALLINT 屏蔽全部 IRQ,但 arch_local_save_flags / interrupts_enabled(regs) 等只记账 PSR.I → ALLINT 屏蔽状态下异常被误报"IRQ 使能",即 hard LOCKUP 一类问题的根源
 - oe 历史:eefea6156921 曾给 interrupts_enabled/fast_interrupts_enabled 加 ALLINT 检查 → f7cea6febbbc(HEAD 分支对应 0081767f38ac)因"硬件支持 FEAT_NMI 时即使 ARM64_NMI 关闭,硬件也动 ALLINT 导致系统停摆"而**无门控地整体回退** → 现在 ARM64_NMI=y 时该问题回归
+- eefea6156921 的 commit message 记录了不修的完整失败链:ALLINT 留在 softirq 上下文置位 →
+  `local_irq_enable()`(只清 DAIF.I/置 PMR=IRQON,不碰 ALLINT)开不了 IRQ → watchdog NMI 进不来
+  → hard LOCKUP → panic(issue I90N2C,报障原文 "watchdog: Watchdog detected hard LOCKUP on cpu 1")
 - v2 的写法正是正确形态:以 `system_uses_nmi()` 门控
 - 回合注意:需适配 oe 老结构(irqflags.h / ptrace.h 的 interrupts_enabled 宏),并**补回 PSR_ALLINT_BIT 位定义**
 
@@ -100,6 +106,27 @@
 ### #37 arm64: kprobes: Disable NMIs 【伪NMI相关:否】
 - 问题:kprobe 单步期间 NMI 可打断 kprobe 状态机导致同 CPU 嵌套 kprobe / 状态损坏(只挡 PSR.I 挡不住 superpriority IRQ)
 - oe 现状:kprobes.c:189-190、196-197 只 mask DAIF_MASK;oe 真实 .config 同时开 ARM64_NMI=y 与 KPROBES=y;无 NMI 相关本地修复
+
+## #32 部分回合:save_and_disable_daif 的 ALLINT 屏蔽逻辑(建议,低优先)
+
+**结论:框架部分不回合,但 assembler.h + entry.S 的宏逻辑建议回合。**
+
+### 补丁做了什么(assembler.h + entry.S 部分)
+- `save_and_disable_daif` 拆为 `save_and_disable_exceptions`(先保存 DAIF **+ ALLINT**,再**先置 ALLINT 后 daifset**)与 `restore_exceptions`(**先恢复 DAIF 后恢复 ALLINT**),保证"屏蔽时 NMI 先于 DAIF 关闭、解除时 NMI 后于 DAIF 打开",任何时刻不会出现"NMI 在 DAIF 全屏蔽时投递"
+- entry.S 三处替换:cpu_switch_to(1 处)、call_on_irq_stack(2 处)
+
+### oe 现状与窗口分析
+- oe 的 disable_daif/enable_daif **已有**正确顺序(disable_allint→daifset;daifclr→enable_allint),这部分 Brown 版已覆盖
+- oe 的 `save_and_disable_daif` 只保存/屏蔽 DAIF,**不处理 ALLINT**(assembler.h:66-69)
+- 三处使用点逐个分析:
+  1. **call_on_irq_stack ×2**(entry.S:1124/1142,调用方 entry-common.c:344 do_interrupt_handler):运行在异常入口路径,SPINTMASK=0 时硬件已自动置 ALLINT=1 → **窗口已关**,宏补 ALLINT 无功能差异(统一改无害)
+  2. **cpu_switch_to**(entry.S:1073):oe 的 arch_local_irq_disable() 只 daifset #3,不置 ALLINT(irqflags.h 注释明言"NMI 屏蔽需显式做")→ 切换期间 **ALLINT=0,NMI 可投递**。`mov sp, x9` 之后到 `ret` 之间若来 NMI,vector 会把 pt_regs 写到**新任务的活栈帧**上(被切换出任务的 sp 下方是它未返回的更老栈帧),恢复后回卷即踩坏 fp/lr → 崩溃。SCS 关掉时主要靠这个窗口;若开 SCS(oe 当前 .config 未开),scs_save/scs_load 之间不一致危害更大
+- 与 pseudo-NMI 对比:pseudo-NMI 下 arch_local_irq_disable → PMR=IRQOFF,**切换期间伪NMI是被屏蔽的** → oe 的 FEAT_NMI 在此处与 pseudo-NMI 行为不对称,大概率是 Brown 原系列遗漏而非有意设计
+- 注意:Mark Brown 原系列(oe 回合的版本)就没改这个宏,所以这是 v2 相对 Brown 版的一个真实加固点
+
+### 回合方式(独立,不依赖 interrupts/ 框架)
+把 v2 的 `save_and_disable_exceptions`/`restore_exceptions` 两宏(alternative_if ARM64_NMI 块,内部用 oe 已有的 _allint_set/_allint_clear 或 disable_allint/enable_allint)移植进 oe assembler.h,替换 entry.S 三处调用即可,十几行改动。
+
 
 ## ⚠️ 附带发现
 
