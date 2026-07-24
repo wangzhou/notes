@@ -315,11 +315,13 @@ EL1 vtimer寄存器会被重定向到VNCR的内存区域，触发trap到L0(todo)
 
 普通虚机有CNTVOFF_EL2表示CNTV_CNT/CNTP_CNT之间offset的机制，在嵌套虚拟化下，这样
 的逻辑怎么继续? vEL2有CNTVOFF_EL2寄存器，L1访问这个寄存器时，值保存在VNCR内存里。
-L0上线L2，目的要使得L2 CNTV_CNT/CNTP_CNT里的值保持逻辑正确。逻辑上，CNTV_CNT = CNTP_CNT + CNTVOFF_EL2，
-这里右边的两个逻辑是L1的逻辑值，我们还有L0的CNTP_CNT(L0)和CNTVOFF_EL2(L0)，需要
-靠这些值，计算出L2的CNTV_CNT。所以，CNTV_CNT = CNTP_CNT(L0) + CNTVOFF_EL2(L0) + CNTVOFF_EL2。
-
-todo: 需要CNTPOFF么？
+L0上线L2，目的要使得L2 CNTV_CNT/CNTP_CNT里的值保持逻辑正确。逻辑上，
+CNTV_CNT(L2) = CNTP_CNT(L1) + CNTVOFF_EL2(L1)，这里右边的两个逻辑是L1的逻辑值，
+继续展开得到逻辑上的计算公式：
+```
+CNTV_CNT(L2) = CNTP_CNT(L0) + CNTPOFF_EL2(L0) + CNTVOFF_EL2(L1)
+```
+物理上，需要把后两项之和配置给CNTVOFF_EL2(L0)。
 
 vIRQ整体逻辑
 -------------
