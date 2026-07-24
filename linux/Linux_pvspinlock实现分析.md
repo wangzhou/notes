@@ -15,16 +15,15 @@ pv-spinlock的收益基础是虚拟化和host CPU的实际形态是不一样的�
 
 pv-spinlock的基本逻辑可以总结为以下三点。
 
-1. QEMU/KVM通过半虚拟化的方式，把vCPU线程是否被挂起这个信息告诉guest系统。一般是
-   通过guest/KVM共享guest的一段IPA地址空间，KVM在vCPU上下线的时候更新对应的信息，
-   guest里通过读这段地址上的数据得到vCPU是否在位。每个vCPU都有一个这样的IPA地址
-   空间。
+QEMU/KVM通过半虚拟化的方式，把vCPU线程是否被挂起这个信息告诉guest系统。一般是通过
+guest/KVM共享guest的一段IPA地址空间，KVM在vCPU上下线的时候更新对应的信息，guest里
+通过读这段地址上的数据得到vCPU是否在位。每个vCPU都有一个这样的IPA地址空间。
 
-2. 对于抢锁vCPU，比如，vCPU0持有锁但是被调度出去了，vCPU1在抢锁。vCPU1知道vCPU0
-   不在位，vCPU1不在死等，vCPU1自己放弃物理CPU资源。
+对于抢锁vCPU，比如，vCPU0持有锁但是被调度出去了，vCPU1在抢锁。vCPU1知道vCPU0不在位，
+vCPU1不在死等，vCPU1自己放弃物理CPU资源。
 
-3. 对于持锁vCPU，比如，vCPU0持有锁、vCPU1在等锁。vCPU0释放锁的时候，可以唤醒vCPU1
-   线程，触发vCPU1上位。
+对于持锁vCPU，比如，vCPU0持有锁、vCPU1在等锁。vCPU0释放锁的时候，可以唤醒vCPU1线程，
+触发vCPU1上位。
 
 主线的patch只实现了如上1和2(但是不涉及qspinlock，是在其它类型的锁里判断vCPU是否
 在位)，openEuler的patch如上各点都实现了。
