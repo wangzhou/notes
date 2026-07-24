@@ -148,14 +148,65 @@ hint 不参与内存序，release/acquire 语义由原指令保证，加 hint �
 - coherency 总线事务数（PMU 事件，验证"定向转发"确实减少了失效广播）
 - overcommit 下 PV spinlock 的 wakeup→acquire 时间（kick 后第一次 load 的延迟）
 
-## 5. 小结
+## 5. 生态支持现状（GCC / Clang / C 库 / 用户态锁）
+
+结论：2026.7 时点，**只有 GCC 刚合入内建**；C 库、用户态锁、内核 hwcap 通告均无支持。
+
+### 5.1 GCC：内建已合入，接口仍在演化
+
+- 2026-01-06 合入主线（r16-6521，Richard Ball，Arm）：
+  `__atomic_store_with_stshh(addr, value, memory_order, ret)`，声明于 `arm_acle.h`，
+  ret 参数 0=keep / 1=strm；store 本体按序生成 `str`（relaxed）或 `stlr/stlur`
+  （release/seq_cst）；定义特性宏 `__ARM_FEATURE_PCDPHINT`
+- 2026-02 修复 C++ 支持（_Generic 宏 → overloaded builtin）
+- 配套 `__pldir` 内建（PRFM IR 侧）
+- 2026-06 起被 FEAT_CMH 系列泛化：`__arm_atomic_store_with_hint(addr, value, order, hint)`
+  统一 hint 家族（SHUH/STCPH），新增 `__arm_atomic_fetch_*_with_hint`
+
+关键点：
+1. 普通 C11 `__atomic_store`/`std::atomic` **不会**自动获得 STSHH——内建是显式接口，
+   用户态锁必须改代码才能受益
+2. 必须做成内建的原因：STSHH 语义是"紧跟在后面的下一条 store 才被 hint"，
+   需要编译器保证 hint+store 成对原子发出，普通 hint asm 无法保证
+
+### 5.2 Clang/LLVM：加了又删，无可用内建
+
+- 汇编器/反汇编支持：2024.10 合入（PR #112341）
+- ACLE 内建 `__arm_atomic_store_with_stshh` 加过（PR #181386），因内存序约束实现错误
+  **被移除**（PR #192419 / commit 456bf22："removing for now so users don't pick this up"）
+- 2026 年移除汇编层 `+pcdphint` gating（PR #181633）——指令可汇编，语言内建缺失
+
+### 5.3 glibc / C 库：零支持
+
+libc-alpha 无任何 STSHH/PCDPHINT patch。glibc aarch64 锁优化目前止步于 LSE2 CAS
+（pthread spinlock/condvar）与 CMPBR。pthread_mutex_lock、pthread_spin_lock、
+futex 路径均未使用 PCDP hint。
+
+### 5.4 用户态锁：零支持，缺两环依赖
+
+pthread spinlock、pthread mutex（futex）、userspace RCU、folly 等锁库均未使用。
+生态链缺：
+- 编译器稳定内建：GCC 刚合入且接口在 hint 家族化重构中；Clang 已移除
+- **内核 HWCAP 通告**：无 `HWCAP2_PCDPHINT`/`ARM64_HAS_PCDPHINT` 内核 patch
+  （本树 grep 确认无 PCDP 字样）。虽然 NOP 兼容（用了不坏），但 glibc 类库
+  需要 hwcap 位做 ifunc/alternative dispatch 双路径，否则无特性平台无收益
+
+### 5.5 用户态锁的潜在映射（生态就绪后）
+
+- pthread spinlock：unlock 的 store 前加 STSHH strm（与内核 qspinlock unlock 同构）
+- futex 路径：`pthread_mutex_unlock` 里 `atomic_store_release(futex_word, 0)` 前加
+  STSHH——等待者在 futex wait，wake 后第一次 load 是关键路径（与 PV spinlock kick
+  场景同构）；`futex_wake` 调用前的 store 尤其典型
+- PRFM IR：spinlock CAS 失败重试循环前（"我要读一个可能还没被写的值"）
+
+## 6. 小结
 
 PCDP hint 把"点对点传递"从软件（MCS 队列、kick hypercall）延伸到硬件（coherency
 定向转发）：宿主 qspinlock 的令牌链和 PV spinlock 的 kick 链都受益。PV 场景收益可能
 更大——wakeup→acquire 延迟里"数据在途"占的比重更高。与 WFET/WFIT（本树已有基础）
 组合，可同时优化"等待侧"（有界等待 + 观测通道）与"唤醒侧"（定向转发 + 提前就位）。
 
-## 6. 参考资料
+## 7. 参考资料
 
 - [Arm A-profile A64 ISA: STSHH (Store Shared Hint)](https://developer.arm.com/documentation/ddi0602/2025-06/Base-Instructions/STSHH--Store-shared-hint-)
 - [STSHH — A64 (Stanford ARM64 reference)](https://www.scs.stanford.edu/~zyedidia/arm64/stshh.html)
