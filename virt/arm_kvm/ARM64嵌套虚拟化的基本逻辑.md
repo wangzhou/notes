@@ -2,7 +2,8 @@
 - v0.2 2026.7.21 补充vEL2寄存器模拟的完整分析
 - v0.3 2026.7.31 补充vEL2 S2、TLBI、VMID、timer、中断的逻辑推演
 - v0.4 2026.8.01 重新整理vEL2寄存器
-- v0.4 2026.8.13 整理vtimer的逻辑
+- v0.5 2026.8.13 整理vtimer的逻辑
+- v0.6 2026.8.23 整理TLBI的逻辑
 
 简介：梳理ARM64 nested virtualization的基本逻辑，本文梳理构架逻辑，代码在其他文章里梳理。
 
@@ -263,11 +264,22 @@ guest3和guest2(非嵌套)应该有不同的VMID。虚机的combined TLB和S2 TL
 
 1和2需要在EL2做对应TLB无效化。3在虚机内做，本来就是虚机内系统的行为。
 
-考虑vEL2具体做TLB无效化的方式。
+考虑vEL2具体做TLB无效化的方式。首先，vEL2的TLBI大概分三类，1. 刷vEL2的S2 TLB, 
+2. vEL2作为host时，刷这个虚拟host的TLB，3. 在vEL2可以刷嵌套虚机的TLB。
 
-首先，vEL2的tlbi大概分三类，1. 刷vEL2的S2, 2. vEL2作为host, 刷host的tlb，3. 刷嵌
-套虚机的tlb
+第一点，理论上，硬件在L1就可以完成TLBI的处理，但是，vEL2的页表改动的时候，EL2的
+merged S2 页表是无法感知的，这就需要trap TLBI到L0, L0的软件可以做merged S2的无效化
+和对应TLB的无效化。
 
+第二点，和第一点类似，理论上硬件同样可以在L1完成TLBI，但是因为VNCR的缘故还是需要
+trap到L0处理。vEL2作为host的时候(姑且叫做vhost)，vEL2自己的VNCR配置成vhost的VA，
+而硬件实际工作的时候用的物理VNCR(EL2)的配置，这就需要vhost VNCR配置的VA通过IPA、
+PA得到EL2的fixmap VA，在EL2的S1里建立fixmap VA -> PA的映射。这样，VNCR也有了一个
+shadow关系，vEL2 host页表变化的时候，也得通过随后的TLBI trap到L0里修正相关的页表
+和TLB信息。
+
+第三点，如果这时硬件里存的VMID是L2的VMID，硬件直接可以完成这个动作。但是L1 VTTBR
+里的VMID是虚拟的，EL2 VTTBR里的VMID是L1的VMID，所以这种情况也的trap到L0里处理。
 
 vtimer整体逻辑
 ---------------
