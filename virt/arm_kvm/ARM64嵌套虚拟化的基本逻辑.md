@@ -309,7 +309,7 @@ vtimer整体逻辑
 最新的v7.2内核中，L0 timer使用EL2 vtimer，L1 timer使用EL1 vtimer，就是说按照irq27
 报中断到host，但kvm给L1注入的是irq28，这样vEL2看到一个和L0逻辑一样的vEL2 timer。
 
-L2 timer也是使用EL1 vtimer，但是L1/L0的timer是复用的EL1 vtimer。基本逻辑是，L2访问
+L2 timer也是使用EL1 vtimer，但是L2/L1的timer是复用的EL1 vtimer。基本逻辑是，L2访问
 EL1 vtimer寄存器会被重定向到VNCR的内存区域，触发trap到L0(todo)，随后L0上线L2的时候，
 把内存区域的值写入EL1 vtimer寄存器，EL1 vtimer中原来的timer使用L0软件模拟。
 
@@ -325,4 +325,6 @@ vIRQ整体逻辑
 -------------
 
 vPPI/vSGI/vSPI/vLPI
+
+todo: 所有中断都先trap到L0，然后一级一级(L1/L2)的注入？
 
