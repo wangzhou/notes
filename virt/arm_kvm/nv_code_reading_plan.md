@@ -2,6 +2,7 @@ NV 代码学习大纲
 ===============
 
 -v0.1 2026.07.25 Sherlock init
+-v0.2 2026.07.25 增加补丁集附录
 
 简介：ARM嵌套虚拟化KVM代码的阅读大纲。以"每阶段回答一个目标问题"为原
 则，按层切换、trap中转、VNCR、TLBI、shadow S2、vGIC、timer七个阶段组
@@ -121,3 +122,61 @@ nv_tlbi_note.md(TLBI展开)、nv_virq_note.md(vIRQ展开)。
 建议阶段二和阶段四合并读：trap forwarding的HFGITR补丁正好是TLBI trap
 条的出处，两条线同源。补丁作者是Marc Zyngier，系列历史较长，单个补丁
 一般几百行，一个阶段一次读完压力不大。
+
+
+## 附录：NV补丁集列表
+
+按投稿时间排序。补丁集编号取自提交的Link标签，lore链接是cover letter，
+把尾部的-0-换成-N-就是第N个补丁。获取系列建议用b4命令(b4 am加
+message-id)绕过网页直连的证书问题。
+
+1. 20230209175820.1939006(2023-02) NV第一波：虚拟EL2异常与寄存器
+   补丁4-19：vCPU特性引入、virtual EL2 exceptions、HVC注入、
+   ERET/SMC处理、PSTATE.M模拟、EL12访问、ID寄存器过滤
+   lore.kernel.org/linux-arm-kernel/20230209175820.1939006-0-maz@kernel.org/
+   对应阶段一、二
+
+2. 20230330174800.2677007(2023-03) timers子系列
+   补丁17-18：per-timer per-vcpu offset、hyp timer emulation
+   对应阶段七
+
+3. 20230815183903.2735724(2023-08) trap forwarding子系列
+   补丁13-29：FGT寄存器、forwarding基础设施、HCR/MDCR/CNTHCTL/
+   HFGxTR/HFGITR/HDFGxTR的转发、SVC转发、HCRX_EL2
+   对应阶段二
+
+4. 20240214131827.2856277(2024-02) VNCR-backed sysreg sanitising
+   补丁4-13：VNCR/FGT/HCRX的sanitising、负极性FGT、sys_insn表拆分
+   对应阶段二、三
+
+5. 20240419102935.1935571(2024-04) NV2支持
+   补丁5-15：Configure HCR_EL2 for FEAT_NV2、ERET/SMC转发、
+   InHost fast-track、ERETAx模拟、PAuth
+   对应阶段一
+
+6. 20240614144552.2773592(2024-06) shadow S2与TLBI处理
+   补丁2-17：多shadow S2结构、S2 walk、shadow缺页、unmap/flush、
+   EL2 S1 TLBI、L2 stage-1 TLBI、S12E1/ALLE1/IPAS2E1、TTL/range/nXS
+   对应阶段四、五
+
+7. 20240620164653.1130714(2024-06) FP/SVE trap forwarding
+   (Oliver Upton)补丁2-15：FP/ASIMD/SVE trap转发、ZCR_EL2、
+   CPACR/CPTR转换
+   对应阶段二补充
+
+8. 20250225172930.1850838(2025-02) GICv3 nested子系列
+   补丁5-17：ICH寄存器、GICv3 EL2访问、嵌套GICv3模拟、L2到L1中断
+   注入转换、MI模拟、used_lrs传播、维护中断
+   对应阶段六
+
+9. 20250514103501.2225951(2025-05) VNCR_EL2处理系列
+   补丁3-16：VNCR页分配、翻译helper提取、ASID快照、pseudo-TLB、
+   VNCR fault处理、fixmap映射、MMU notifier失效、TLBI S1E2
+   对应阶段三
+
+10. 20250708172532.1699409(2025-07) RAS/vSError系列
+    补丁6-19：SEA路由、vSError寄存器、FEAT_RAS
+    对应阶段一、二补充
+
+另注：VNCR原版补丁(伪TLB、fault处理、fixmap映射)在系列9里，之前大纲
+阶段三里按patch内容找的那几个提交就是这系列的补丁8/10/11。
