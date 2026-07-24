@@ -57,7 +57,7 @@ static inline void self_unspinlock(struct self_spinlock *lock)
 锁，cach0为1(cache0/1/2/3是Flag在各个core上的cache)，CPU1/2/3的cache也会在各个core
 读Flag时被设置为1，CPU0释放锁的时候，cache0被写成0，同时CPU1/2/3上对应的cach被无效
 化，随后哪个core抢先把Flag写成1，对应的cache就是1。后面重复之前的逻辑。可以看出，
-本来在unlock core和lock core之间的通行行为被扩展到了所有参与竞争锁的core，不但锁的
+本来在unlock core和lock core之间的通信行为被扩展到了所有参与竞争锁的core，不但锁的
 请求顺序和实际获得锁的顺序不一致，而且做了很多无用功。
 
 ticket spinlock
