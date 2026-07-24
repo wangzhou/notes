@@ -1,5 +1,5 @@
--v0.1 2026.8.20 Sherlock init
--v0.2 2026.8.21 Sherlock 增加剩余逻辑
+- v0.1 2026.8.20 Sherlock init
+- v0.2 2026.8.21 Sherlock 增加剩余逻辑
 
 基本逻辑
 ---------
