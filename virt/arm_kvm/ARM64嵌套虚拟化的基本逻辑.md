@@ -4,6 +4,7 @@
 - v0.4 2026.8.01 重新整理vEL2寄存器
 - v0.5 2026.8.13 整理vtimer的逻辑
 - v0.6 2026.8.23 整理TLBI的逻辑
+- v0.7 2026.8.25 整理TLBI的逻辑以及中断的逻辑。
 
 简介：梳理ARM64 nested virtualization的基本逻辑，本文梳理构架逻辑，代码在其他文章里梳理。
 
@@ -271,17 +272,18 @@ guest3和guest2(非嵌套)应该有不同的VMID。虚机的combined TLB和S2 TL
 merged S2 页表是无法感知的，这就需要trap TLBI到L0, L0的软件可以做merged S2的无效化
 和对应TLB的无效化。
 
-第二点，和第一点类似，理论上硬件同样可以在L1完成TLBI，但是因为VNCR的缘故还是需要
-trap到L0处理。vEL2作为host的时候(姑且叫做vhost)，vEL2自己的VNCR配置成vhost的VA，
-而硬件实际工作的时候用的物理VNCR(EL2)的配置，这就需要vhost VNCR配置的VA通过IPA、
-PA得到EL2的fixmap VA，在EL2的S1里建立fixmap VA -> PA的映射。这样，VNCR也有了一个
-shadow关系，vEL2 host页表变化的时候，也得通过随后的TLBI trap到L0里修正相关的页表
-和TLB信息。
+第二点，和第一点类似，理论上硬件同样可以在L1完成TLBI。硬件支持L1和L2的VMID独立存
+放，但是并没有信息区分现在该用哪个VMID，其实就是没有信息区分TLBI EL1针对的是L1还
+是L2。所以这种情况也的trap到L0里处理。
 
-第三点，如果这时硬件里存的VMID是L2的VMID，硬件直接可以完成这个动作。但是L1 VTTBR
-里的VMID是虚拟的，EL2 VTTBR里的VMID是L1的VMID，所以这种情况也的trap到L0里处理。
+第三点的逻辑和第二点一样，也需要trap到L0里处理。
 
-todo: FEAT_NV3是否可以解如上的问题。
+FEAT_NV3的协议还没有完全release，但是从已有的KVM FEAT_NV3的支持代码可以看出。这个
+特性增加了NVHCR_EL2寄存器，L1写HCR_EL2会直接把信息写入NVHCR_EL2，这样硬件就可以
+感知当前的状态是L2还是L1，这样如上第二点和第三点就可以在L1硬件直接处理，不用trap。
+
+同时L1不用每次eret都trap到L0，L1不跑嵌套的情况，就是eret到L1用户态可以直接执行。
+L1 vEL2 eret到L2虚机还是需要trap到L0。
 
 vtimer整体逻辑
 ---------------
@@ -332,8 +334,22 @@ vIRQ整体逻辑
 逻辑和host上收到一个虚拟中断的逻辑一致，L1的KVM判断这个中断是给自己的还是要注入
 L2，如果是注入L2，L1把信息写入L1的ICH_LR寄存器，eret到L2的时候把中断注入给L2。
 
-对于vSGI。L2中发起vSGI(写ICC_SGIxx_EL1)，L
+对于vSGI。L2中发起vSGI(写ICC_SGIxx_EL1)，触发trap到L0，L0判断是直接注入L1的系统，
+还是目的地是L2，如果是L2，L0需要把这个中断注入L1，L1的KVM处理对应的逻辑，通过L1
+的GITS_SGIR给L2注入vSGI，写GITS_SGIR导致trap进L0，L0完成给L2实际注入vSGI以及上线
+L2虚机。
 
-对于vLPI
+对于vLPI。嵌套虚机目前不支持vLPI直通，所以vLPI还是依赖ICH_LR注入，所以基本的处理
+应该和vSGI是类似的。
 
+
+Note
+-----
+
+但是因为VNCR的缘故还是需要
+trap到L0处理。vEL2作为host的时候(姑且叫做vhost)，vEL2自己的VNCR配置成vhost的VA，
+而硬件实际工作的时候用的物理VNCR(EL2)的配置，这就需要vhost VNCR配置的VA通过IPA、
+PA得到EL2的fixmap VA，在EL2的S1里建立fixmap VA -> PA的映射。这样，VNCR也有了一个
+shadow关系，vEL2 host页表变化的时候，也得通过随后的TLBI trap到L0里修正相关的页表
+和TLB信息。
 
