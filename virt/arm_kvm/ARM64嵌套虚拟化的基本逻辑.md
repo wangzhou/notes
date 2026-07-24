@@ -326,7 +326,14 @@ CNTV_CNT(L2) = CNTP_CNT(L0) + CNTPOFF_EL2(L0) + CNTVOFF_EL2(L1)
 vIRQ整体逻辑
 -------------
 
-vPPI/vSGI/vSPI/vLPI
+逐个看下vPPI/vSGI/vSPI/vLPI的控制面和数据面的逻辑。
 
-todo: 所有中断都先trap到L0，然后一级一级(L1/L2)的注入？
+对于vPPI/vSPI。中断先到L0，L0把这个中断注入给L1，L1有完整的EL0/EL1/EL2，这之后的
+逻辑和host上收到一个虚拟中断的逻辑一致，L1的KVM判断这个中断是给自己的还是要注入
+L2，如果是注入L2，L1把信息写入L1的ICH_LR寄存器，eret到L2的时候把中断注入给L2。
+
+对于vSGI。L2中发起vSGI(写ICC_SGIxx_EL1)，L
+
+对于vLPI
+
 
