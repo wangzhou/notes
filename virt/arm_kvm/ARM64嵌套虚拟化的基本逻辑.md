@@ -281,6 +281,8 @@ shadow关系，vEL2 host页表变化的时候，也得通过随后的TLBI trap�
 第三点，如果这时硬件里存的VMID是L2的VMID，硬件直接可以完成这个动作。但是L1 VTTBR
 里的VMID是虚拟的，EL2 VTTBR里的VMID是L1的VMID，所以这种情况也的trap到L0里处理。
 
+todo: FEAT_NV3是否可以解如上的问题。
+
 vtimer整体逻辑
 ---------------
 
