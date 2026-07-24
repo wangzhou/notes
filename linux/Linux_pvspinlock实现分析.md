@@ -1,6 +1,8 @@
 - v0.1 2026.8.20 Sherlock init
 - v0.2 2026.8.21 Sherlock 增加剩余逻辑
 
+简介：本文分析pv-spinlock的基本逻辑，pv-spinlock基于半虚拟化向guest传递vCPU是否在位的信息，guest据此避免无效等待；文中梳理了Guest和KVM的通信机制，以及guest侧内核的实现。
+
 基本逻辑
 ---------
 
@@ -20,7 +22,7 @@ guest/KVM共享guest的一段IPA地址空间，KVM在vCPU上下线的时候更�
 通过读这段地址上的数据得到vCPU是否在位。每个vCPU都有一个这样的IPA地址空间。
 
 对于抢锁vCPU，比如，vCPU0持有锁但是被调度出去了，vCPU1在抢锁。vCPU1知道vCPU0不在位，
-vCPU1不在死等，vCPU1自己放弃物理CPU资源。
+vCPU1不再死等，vCPU1自己放弃物理CPU资源。
 
 对于持锁vCPU，比如，vCPU0持有锁、vCPU1在等锁。vCPU0释放锁的时候，可以唤醒vCPU1线程，
 触发vCPU1上位。
@@ -47,7 +49,7 @@ kvm_arch_vcpu_load -> kvm_update_pvsched_preempted(vcpu, 0)
    /* 上下线是原子上下文，需要关page fault */
    pagefault_disable     
    /* 
-    * 更新IPA上的标记，这里通过IPA找见HVA，然后更新。如果缺页这里就没有更新，但是
+    * 更新IPA上的标记，这里通过IPA找到HVA，然后更新。如果缺页这里就没有更新，但是
     * 不会返回失败。结果是vCPU是否在位的hint不准一次。
     */
    kvm_put_guest(...)    
@@ -78,7 +80,7 @@ struct pv_lock_ops {
         struct paravirt_callee_save vcpu_is_preempted;                          
 }
 ```
-X86这里搞的比较复杂，采用动态替换的方式，应该基本上没有开销。逻辑上先可以理解成
+X86这里搞得比较复杂，采用动态替换的方式，应该基本上没有开销。逻辑上先可以理解成
 不同回调函数的实现。
 
 再下一层pvspinlock具体的实现是内核公共代码了，具体在kernel/locking/qspinlock.c里。
@@ -93,6 +95,6 @@ X86这里搞的比较复杂，采用动态替换的方式，应该基本上没�
 [...]
 ```
 
-可以看到queued_spin_lock_slowpath中，PV的逻辑是嵌到普通pvspinlock逻辑里的，PV的
+可以看到queued_spin_lock_slowpath中，PV的逻辑是嵌到普通qspinlock逻辑里的，PV的
 逻辑是在必要的地方，触发抢锁的vCPU睡眠。PV unlock的逻辑是在qspinlock_paravirt.h
 头文件里，基本逻辑是在unlock的时候唤醒睡眠的抢锁vCPU。
