@@ -463,3 +463,8 @@ GICv5
 vfio设备模拟
 c2c benchmark
 PCDPHint
+ublk
+虚机suspend/resume, 快照和恢复
+lsmem
+虚机迁移，Pre-copy和Post-copy
+
