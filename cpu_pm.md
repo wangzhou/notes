@@ -176,26 +176,28 @@ cpu_pm
 实现在kernel/cpu_pm.c，注册入口是：cpu_pm_register_notifier。
 调用入口：cpu_pm_enter/exit <- cpu_pm_suspend/resume <- cpu_pm_syscore.ops->suspend
 
+cpuhp作用的是非启动核，启动核下电之前的保存动作由各个cpu_pm回调搞定。
+
 ARM64 cpu_pm梳理：
 
-gicv3        drivers/irqchip/irq-gic-v3.c:1503
+gicv3        drivers/irqchip/irq-gic-v3.c
              ENTER关GRPEN1+GICR睡/EXIT唤醒+重写ICC_*_EL1
 
-arch_timer   drivers/clocksource/arm_arch_timer.c:995
+arch_timer   drivers/clocksource/arm_arch_timer.c 
              CNTKCTL_EL1保存到saved_cntkctl/EXIT写回+事件流mask更新
 
-arm_pmu      drivers/perf/arm_pmu.c:821
+arm_pmu      drivers/perf/arm_pmu.c
              ENTER stop+保存PMU寄存器/EXIT恢复+start
 
-mpam         arch/arm64/kernel/mpam.c:58
-             仅EXIT: 从per-cpu缓存重写MPAM0/1_EL1+MPAMSM_EL1
+mpam         arch/arm64/kernel/mpam.c
+             仅EXIT，从per-cpu缓存重写MPAM0/1_EL1+MPAMSM_EL1。不需要ENTER ？
 
-kvm hyp      arch/arm64/kvm/arm.c:2366
-             ENTER cpu_hyp_reset/EXIT cpu_hyp_reinit(pKVM显式跳过)
+kvm hyp      arch/arm64/kvm/arm.c
+             只是在nVHE下__hyp_reset_vectors()，为什么需要？
 
-fpsimd       arch/arm64/kernel/fpsimd.c:2073
+fpsimd       arch/arm64/kernel/fpsimd.c
              ENTER保存+flush当前CPU的FP/SVE/SME到task_struct
 
-sdei         drivers/firmware/arm_sdei.c:995
-             SDEI固件接口PM处理(检测到SDEI才注册)
+sdei         drivers/firmware/arm_sdei.c，SDEI固件接口PM处理。
+             注意，主线还是有sdei的!
 
