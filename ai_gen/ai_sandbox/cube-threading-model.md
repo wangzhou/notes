@@ -90,6 +90,22 @@ CubeProxy,CubeProxy查Redis得到沙箱实际IP:端口再转发。
 三、测试命令与线程模型的对应
 ---------------------------
 
+## 命令执行位置与目标组件
+
+所有命令都在host侧发出;只有cubecli exec真正把命令送进guest内执行。
+
+| 命令 | 在哪里跑 | 打到哪个组件(协议/端口) | 权限 |
+|------|---------|------------------------|------|
+| cubemastercli tpl/cubebox/snapshot/multirun | 任意可达CubeMaster的机器 | CubeMaster HTTP :8089 | 普通用户 |
+| cubecli exec/logs/container/multirun | 必须在Cubelet所在节点本机 | Cubelet gRPC,unix socket /data/cubelet/cubelet.sock | root |
+| cube-bench | 任意可达CubeAPI的机器 | CubeAPI HTTP :3000(E2B协议) | 普通用户 |
+| cubebench.sh | 任意;3.3测内存须本机;清场用cubecli | 驱动cube-bench(3.x)+SDK脚本(4.x)->CubeAPI | 清场需root |
+| examples/*.py(SDK脚本) | 任意 | CubeAPI HTTP :3000(CUBE_API_URL,默认127.0.0.1:3000) | 普通用户 |
+| cubeopscli | 任意 | CubeOps HTTP :3010 | 普通用户 |
+| smoke.sh | 部署机本机 | 多组件健康检查汇总 | root |
+
+## 测试命令与线程模型的对应
+
 | 命令 | 路径与参与的线程模型 | 瓶颈对应点 |
 |------|---------------------|-----------|
 | cube-bench -m create-only | SDK->CubeAPI(Tokio worker)->CubeMaster(BufferQueue+调度filter)->Cubelet(workflow semaphore+各step并行)->shim/runtime(KVM_RUN线程) | 全链路;408=API 30s TimeoutLayer;排队=BufferQueue/flow semaphore(concurrent=100) |

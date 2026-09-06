@@ -175,6 +175,37 @@ python bench_create_concurrency.py -c 1 -n 3         # 从快照起沙箱
 python 01_create_snapshot.py                         # 快照功能演示
 ```
 
+5) 其他可用工具(按需)
+
+```bash
+# CubeAPI/examples: 并发create+kill压测(Go/Python两版,打CubeAPI)
+cd ~/CubeSandbox/CubeAPI/examples
+go run go/benchmark.go --help         # 用法自查(需go)
+python benchmark.py --help            # 或Python版
+
+# reflink微基准(存储层CoW,不涉及沙箱,开发用)
+cd ~/CubeSandbox/cubecow && cargo bench --bench reflink_ops
+
+# ivshmem共享内存mmap带宽(host本机跑,测host<->沙箱共享内存)
+python ~/CubeSandbox/examples/ivshmem/ivshmem_benchmark.py
+
+# performance-metrics(Cloud Hypervisor VMM层性能测试,开发用,
+# 部署物不含,需在源码里构建)
+```
+
+工具选择速查:
+
+| 场景 | 用哪个 |
+|------|--------|
+| 冷启动/创建延迟、并发扩展(标准基准) | cube-bench |
+| 最快随手测创建/探测延迟 | multirun |
+| 快照/回滚/克隆/暂停恢复延迟 | SDK bench脚本(4.x同款) |
+| 一键全量、出markdown报告 | cubebench.sh |
+| 并发create+kill压力 | CubeAPI/examples benchmark.go/.py |
+| 存储CoW微基准 | cubecow/benches |
+| VMM层(启动/快照/迁移) | hypervisor/performance-metrics |
+| 共享内存带宽 | ivshmem_benchmark.py |
+
 
 三、使用须知
 ------------
