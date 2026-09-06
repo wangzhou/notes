@@ -48,6 +48,8 @@ core          没有自己的cpuhp注册——core是状态机的宿主。架构
 timer         cpuhp有: arm_arch_timer.c:1063(arch_timer_starting_cpu/
               dying_cpu), 另有:776事件流状态。
 
+              如果一个core上挂了多个定时器，core下线时怎么处理？
+
 gicv3         cpuhp有: irq-gic-v3.c:1416(gic_starting_cpu/NULL),
               另有:1412 BP_PREPARE_DYN上线预检。teardown为NULL靠掉电清理。
 
@@ -58,12 +60,17 @@ uncore pmu    cpuhp有: arm_dsu_pmu.c:846、arm-cmn.c:2682、hisilicon四家
               (hisi_pcie_pmu.c:981/sllc:558/ddrc:508/hns3:1647)。只迁移
               perf事件, 不保存计数器寄存器。
 
+              uncore PMU为什么需要cpuhp，和core没有关系啊？
+
 gic its       没有cpuhp——挂起恢复靠syscore(irq-gic-v3-its.c:5867,
               its_save_disable/its_restore_enable)。唯一cpuhp是EFI
               memreserve(:5798), 与休眠无关; 每CPU部分由gic_starting_cpu
               内的its_cpu_init重建。
 
-smmuv3        无cpuhp, 无dev_pm_ops, 缺口。
+              如果core下线了，gic ite继续给这个core报中断怎么处理？为什么its
+              不需要cpuhp?
+
+smmuv3        iommu/irq_remapping.c里有cpuhp，完成什么功能？
 
 kvm           cpuhp有: kvm_main.c:5697(generic的kvm_online_cpu/offline_cpu)。
               arm64侧不是空函数: cpu_hyp_init/uninit+vgic+timer
@@ -71,8 +78,7 @@ kvm           cpuhp有: kvm_main.c:5697(generic的kvm_online_cpu/offline_cpu)。
 
 fp/simd       cpuhp有: fpsimd.c:2089(fpsimd_cpu_dead), 只清per-CPU缓存指针。
 
-mbigen        无cpuhp, 缺口。补法: per-pin缓存+register_syscore全量重写
-              VEC/TYPE。
+mbigen        需要cpuhp么？
 
 启动核以及相关核心模块休眠
 -----------------------------
