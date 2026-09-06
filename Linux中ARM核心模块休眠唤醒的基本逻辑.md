@@ -89,6 +89,7 @@ todo: smmu休眠唤醒。注意，dev_pm_ops/cpuhp/syscore都有涉及。
 suspend_enter -> pm_sleep_disable_secondary_cpus -> freeze_secondary_cpus 
 _cpu_down -> 各个模块的cpuhp回调：
 
+```
 core          本来就是处理core。
 
 timer         cpuhp有: arm_arch_timer.c arch_timer_dying_cpu。关timer中断。
@@ -114,6 +115,7 @@ kvm           cpuhp有: kvm_main.c kvm_online_cpu/offline_cpu, ARM64回调为
 fp/simd       cpuhp有: fpsimd.c fpsimd_cpu_dead, 只清per-CPU缓存指针。
 
 mbigen        和ITS一样，需要增加syscore。
+```
 
 启动核以及相关核心模块休眠
 ---------------------------
@@ -133,6 +135,7 @@ suspend_enter
 
 关键syscore注册梳理(以ARM平台为基础)：
 
+```
 [...]
 cpu_pm_syscore        自己构成一个子系统，后文分析。
 
@@ -153,9 +156,11 @@ fw_syscore            drivers/base/firmware_loader/main.c  firmware cache挂起�
 mbigen_syscore        todo
 
 smmuv3                todo
+```
 
 从硬件模块的角度再梳理一遍：
 
+```
 core             cpu_pm
 fp/simd          cpu_pm
 gicv3            cpu_pm
@@ -169,6 +174,7 @@ kvm              kvm_syscore
 
 mbigen           todo
 smmuv3           todo
+```
 
 cpu_pm
 -------
@@ -180,6 +186,7 @@ cpuhp作用的是非启动核，启动核下电之前的保存动作由各个cpu
 
 ARM64 cpu_pm梳理：
 
+```
 gicv3        drivers/irqchip/irq-gic-v3.c
              ENTER关GRPEN1+GICR睡/EXIT唤醒+重写ICC_*_EL1
 
@@ -200,4 +207,4 @@ fpsimd       arch/arm64/kernel/fpsimd.c
 
 sdei         drivers/firmware/arm_sdei.c，SDEI固件接口PM处理。
              注意，主线还是有sdei的!
-
+```
