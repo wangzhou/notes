@@ -26,3 +26,23 @@ linux内核：~/linux
 4. 补充的关键技术(脏页追踪、镜像分层、内存复用与回收等)尽量整合进
    CPU/内存/存储三个维度里，不单独成节。
 5. 分析以代码证据为准(file:line引用)，基于ARM host视角。
+
+todo:
+
+1. 给AI沙箱性能测试指标与方法.md补充具体测试命令(被中断，未完成)。
+   已验证的命令入口：
+   - AgentENV：make bench-snapshot / bench-ublk / bench-orchestrator-store /
+     bench-oci-conversion(Makefile:162-179)，AENV_BENCH_FULL=1放开全量采样
+   - CubeSandbox：tests/perf/cubebench.sh sections/run <章节>；
+     examples/cube-bench bin/cube-bench -m create-only -c 50 -n 100 -t <模板>
+   - firecracker 1.18：tools/devtool test -- tests/integration_tests/performance/
+     test_snapshot.py -m nonci(pytest默认排除nonci，pytest.ini:8)
+   注意：文中引用的tests/performance/旧路径需同步改为
+   tests/integration_tests/performance/，test_snapshot.py的latencies_us
+   行号改为134-137与294-302。
+
+2. 在我这台机器上部署下cube sandbox，输出部署指导文档(当前目录下)。
+   部署的文件可以放到~/tests/cube下
+
+3. 在我这台机器上部署下agentENV，输出部署指导文档(当前目录下)。
+   部署的文件可以放到~/tests/agentENV下
