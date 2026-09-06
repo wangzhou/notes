@@ -12,16 +12,62 @@ Linux中ARM核心模块休眠唤醒的基本逻辑
 基本逻辑
 ---------
 
-在一个多核系统上，系统的休眠唤醒逻辑大概是(只看休眠，唤醒逻辑相反)如下的。
+在一个多核系统上，系统的休眠唤醒逻辑大概是：(只看休眠，唤醒逻辑相反)
 
 1. 用户态线程和内核线程冻结。
 2. 外设休眠。
 3. 非启动核下线，这里利用了cpuhp机制，对和下线核相关的软硬件实体做必要处理。
 4. 启动核休眠。
 
-下面展开看下具体逻辑。
+下面展开看下具体逻辑，以s2mem为例：
+```
+state_store()                                  // kernel/power/main.c:799
+    |
+    \-> pm_suspend(state)                      // kernel/power/suspend.c:636
+          |
+          \-> enter_state(state)               // suspend.c:576
+                |
+                +-> mutex_trylock(&system_transition_mutex) // suspend.c:591
+                +-> pm_sleep_fs_sync()         // main.c:125
+                |     \-> ksys_sync on wq, poll pm_wakeup_pending
+                +-> suspend_prepare(state)     // suspend.c:372
+                |     |
+                |     +-> pm_prepare_console() // suspend.c:379
+                |     +-> pm_notifier_call_chain_robust(
+                |     |       PM_SUSPEND_PREPARE, PM_POST_SUSPEND) // :381
+                |     +-> filesystems_freeze(enable) // fs/super.c:1151
+                |     \-> suspend_freeze_processes() // power.h:277
+                +-> suspend_devices_and_enter(state) // suspend.c:504
+                |     |
+                |     +-> platform_suspend_begin()   // suspend.c:517
+                |     +-> console_suspend_all()      // kernel/power/console.c
+                |     +-> dpm_suspend_start(PMSG_SUSPEND) // main.c:2334
+                |     |     \-> dpm_prepare + dpm_suspend // ->prepare/->suspend
+                |     \-> suspend_enter(state, &wakeup) // suspend.c:419
+                |           |
+                |           +-> platform_suspend_prepare()     // suspend.c:423
+                |           +-> dpm_suspend_late(PMSG_SUSPEND) // main.c:1779
+                |           +-> platform_suspend_prepare_late() // suspend.c:432
+                |           +-> dpm_suspend_noirq(PMSG_SUSPEND) // main.c:1648
+                |           |     +-> device_wakeup_arm_wake_irqs() // main.c:1652
+                |           |     +-> suspend_device_irqs() // kernel/irq/pm.c:126
+                |           |     \-> dpm_noirq_suspend_devices() // ->suspend_noirq
+                |           +-> platform_suspend_prepare_noirq() // suspend.c:441
+                |           +-> pm_sleep_disable_secondary_cpus() // power.h:342
+                |           |     \-> suspend_disable_secondary_cpus()
+                |           |           \-> freeze_secondary_cpus() // cpu.c:1886
+                |           +-> arch_suspend_disable_irqs() // suspend.c:401
+                |           +-> syscore_suspend()           // syscore.c:47
+                |           |     \-> check pm_wakeup_pending, reverse syscore_list
+                |           \-> suspend_ops->enter(state)   // suspend.c:468
+                |                 \-> [arm64] psci_system_suspend_enter()
+                |                       \-> cpu_suspend(0, psci_system_suspend)
+                |                             \-> PSCI SYSTEM_SUSPEND call
+                |                                 // psci.c:540/535, suspend.c:97
+                \-> suspend_finish()          // suspend.c:560
+                      \-> thaw + PM_POST_SUSPEND + console restore
+```
 
-todo: 整体代码逻辑。
 
 进程冻结
 ---------
