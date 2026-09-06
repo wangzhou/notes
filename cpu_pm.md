@@ -5,6 +5,7 @@ Linux中ARM核心模块休眠唤醒的基本逻辑
 - v0.2 2026.9.7 Sherlock 非启动核cpuhp逐项核对(注册点清单)
 - v0.3 2026.9.7 Sherlock 解答cpuhp相关问题(多定时器/uncore pmu/its投递/irq_remapping/mbigen)
 - v0.4 2026.9.7 Sherlock 补全系统syscore与cpu_pm_notifier注册清单
+- v0.5 2026.9.7 Sherlock 基本逻辑代码路径去注释
 
 简介：分析Linux内核处理ARM几个核心模块休眠唤醒的处理逻辑。
 
@@ -21,50 +22,50 @@ Linux中ARM核心模块休眠唤醒的基本逻辑
 
 下面展开看下具体逻辑，以s2mem为例：
 ```
-state_store()                                  // kernel/power/main.c:799
+state_store()
     |
-    \-> pm_suspend(state)                      // kernel/power/suspend.c:636
+    \-> pm_suspend(state)
           |
-          \-> enter_state(state)               // suspend.c:576
+          \-> enter_state(state)
                 |
-                +-> mutex_trylock(&system_transition_mutex) // suspend.c:591
-                +-> pm_sleep_fs_sync()         // main.c:125
+                +-> mutex_trylock(&system_transition_mutex)
+                +-> pm_sleep_fs_sync()
                 |     \-> ksys_sync on wq, poll pm_wakeup_pending
-                +-> suspend_prepare(state)     // suspend.c:372
+                +-> suspend_prepare(state)
                 |     |
-                |     +-> pm_prepare_console() // suspend.c:379
+                |     +-> pm_prepare_console()
                 |     +-> pm_notifier_call_chain_robust(
-                |     |       PM_SUSPEND_PREPARE, PM_POST_SUSPEND) // :381
-                |     +-> filesystems_freeze(enable) // fs/super.c:1151
-                |     \-> suspend_freeze_processes() // power.h:277
-                +-> suspend_devices_and_enter(state) // suspend.c:504
+                |     |       PM_SUSPEND_PREPARE, PM_POST_SUSPEND)
+                |     +-> filesystems_freeze(enable)
+                |     \-> suspend_freeze_processes()
+                +-> suspend_devices_and_enter(state)
                 |     |
-                |     +-> platform_suspend_begin()   // suspend.c:517
-                |     +-> console_suspend_all()      // kernel/power/console.c
-                |     +-> dpm_suspend_start(PMSG_SUSPEND) // main.c:2334
-                |     |     \-> dpm_prepare + dpm_suspend // ->prepare/->suspend
-                |     \-> suspend_enter(state, &wakeup) // suspend.c:419
+                |     +-> platform_suspend_begin()
+                |     +-> console_suspend_all()
+                |     +-> dpm_suspend_start(PMSG_SUSPEND)
+                |     |     \-> dpm_prepare + dpm_suspend
+                |     \-> suspend_enter(state, &wakeup)
                 |           |
-                |           +-> platform_suspend_prepare()     // suspend.c:423
-                |           +-> dpm_suspend_late(PMSG_SUSPEND) // main.c:1779
-                |           +-> platform_suspend_prepare_late() // suspend.c:432
-                |           +-> dpm_suspend_noirq(PMSG_SUSPEND) // main.c:1648
-                |           |     +-> device_wakeup_arm_wake_irqs() // main.c:1652
-                |           |     +-> suspend_device_irqs() // kernel/irq/pm.c:126
-                |           |     \-> dpm_noirq_suspend_devices() // ->suspend_noirq
-                |           +-> platform_suspend_prepare_noirq() // suspend.c:441
-                |           +-> pm_sleep_disable_secondary_cpus() // power.h:342
+                |           +-> platform_suspend_prepare()
+                |           +-> dpm_suspend_late(PMSG_SUSPEND)
+                |           +-> platform_suspend_prepare_late()
+                |           +-> dpm_suspend_noirq(PMSG_SUSPEND)
+                |           |     +-> device_wakeup_arm_wake_irqs()
+                |           |     +-> suspend_device_irqs()
+                |           |     \-> dpm_noirq_suspend_devices()
+                |           +-> platform_suspend_prepare_noirq()
+                |           +-> pm_sleep_disable_secondary_cpus()
                 |           |     \-> suspend_disable_secondary_cpus()
-                |           |           \-> freeze_secondary_cpus() // cpu.c:1886
-                |           +-> arch_suspend_disable_irqs() // suspend.c:401
-                |           +-> syscore_suspend()           // syscore.c:47
+                |           |           \-> freeze_secondary_cpus()
+                |           +-> arch_suspend_disable_irqs()
+                |           +-> syscore_suspend()
                 |           |     \-> check pm_wakeup_pending, reverse syscore_list
-                |           \-> suspend_ops->enter(state)   // suspend.c:468
+                |           \-> suspend_ops->enter(state)
                 |                 \-> [arm64] psci_system_suspend_enter()
                 |                       \-> cpu_suspend(0, psci_system_suspend)
                 |                             \-> PSCI SYSTEM_SUSPEND call
-                |                                 // psci.c:540/535, suspend.c:97
-                \-> suspend_finish()          // suspend.c:560
+                |
+                \-> suspend_finish()
                       \-> thaw + PM_POST_SUSPEND + console restore
 ```
 
