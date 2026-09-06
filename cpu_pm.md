@@ -22,53 +22,47 @@ Linux中ARM核心模块休眠唤醒的基本逻辑
 
 下面展开看下具体逻辑，以s2mem为例：
 ```
-state_store()
+state_store() -> pm_suspend(state) -> enter_state(state)
     |
-    \-> pm_suspend(state)
-          |
-          \-> enter_state(state)
-                |
-                +-> mutex_trylock(&system_transition_mutex)
-                +-> pm_sleep_fs_sync()
-                |     \-> ksys_sync on wq, poll pm_wakeup_pending
-                +-> suspend_prepare(state)
-                |     |
-                |     +-> pm_prepare_console()
-                |     +-> pm_notifier_call_chain_robust(
-                |     |       PM_SUSPEND_PREPARE, PM_POST_SUSPEND)
-                |     +-> filesystems_freeze(enable)
-                |     \-> suspend_freeze_processes()
-                +-> suspend_devices_and_enter(state)
-                |     |
-                |     +-> platform_suspend_begin()
-                |     +-> console_suspend_all()
-                |     +-> dpm_suspend_start(PMSG_SUSPEND)
-                |     |     \-> dpm_prepare + dpm_suspend
-                |     \-> suspend_enter(state, &wakeup)
-                |           |
-                |           +-> platform_suspend_prepare()
-                |           +-> dpm_suspend_late(PMSG_SUSPEND)
-                |           +-> platform_suspend_prepare_late()
-                |           +-> dpm_suspend_noirq(PMSG_SUSPEND)
-                |           |     +-> device_wakeup_arm_wake_irqs()
-                |           |     +-> suspend_device_irqs()
-                |           |     \-> dpm_noirq_suspend_devices()
-                |           +-> platform_suspend_prepare_noirq()
-                |           +-> pm_sleep_disable_secondary_cpus()
-                |           |     \-> suspend_disable_secondary_cpus()
-                |           |           \-> freeze_secondary_cpus()
-                |           +-> arch_suspend_disable_irqs()
-                |           +-> syscore_suspend()
-                |           |     \-> check pm_wakeup_pending, reverse syscore_list
-                |           \-> suspend_ops->enter(state)
-                |                 \-> [arm64] psci_system_suspend_enter()
-                |                       \-> cpu_suspend(0, psci_system_suspend)
-                |                             \-> PSCI SYSTEM_SUSPEND call
-                |
-                \-> suspend_finish()
-                      \-> thaw + PM_POST_SUSPEND + console restore
+    +-> pm_sleep_fs_sync()  
+    |
+    +-> suspend_prepare(state)
+    |   |
+    |   +-> pm_prepare_console()
+    |   +-> pm_notifier_call_chain_robust(PM_SUSPEND_PREPARE, PM_POST_SUSPEND)
+    |   +-> filesystems_freeze(enable)
+    |   \-> suspend_freeze_processes()     <-- 冻结线程
+    |
+    +-> suspend_devices_and_enter(state)
+        |
+        +-> platform_suspend_begin()
+        +-> console_suspend_all()
+        +-> dpm_suspend_start(PMSG_SUSPEND)
+        |     \-> dpm_prepare + dpm_suspend     <-- 外设休眠
+        |
+        \-> suspend_enter(state, &wakeup)
+            |
+            +-> platform_suspend_prepare()
+            +-> dpm_suspend_late(PMSG_SUSPEND)
+            +-> platform_suspend_prepare_late()
+            +-> dpm_suspend_noirq(PMSG_SUSPEND)
+            |     +-> device_wakeup_arm_wake_irqs()
+            |     +-> suspend_device_irqs()
+            |     \-> dpm_noirq_suspend_devices()
+            +-> platform_suspend_prepare_noirq()        <-- 关外设中断
+            +-> pm_sleep_disable_secondary_cpus()
+            |     \-> suspend_disable_secondary_cpus()
+            |           \-> freeze_secondary_cpus()       <-- 非启动核cpuhp
+            +-> arch_suspend_disable_irqs()
+            |
+            +-> syscore_suspend()                         <-- 启动核syscore休眠
+            |     \-> syscore'suspend in syscore_list
+            |
+            \-> suspend_ops->enter(state)                 <-- 启动核休眠
+                  \-> [arm64] psci_system_suspend_enter()
+                        \-> cpu_suspend(0, psci_system_suspend)
+                              \-> PSCI SYSTEM_SUSPEND call
 ```
-
 
 进程冻结
 ---------
@@ -90,9 +84,7 @@ todo: smmu休眠唤醒。注意，dev_pm_ops/cpuhp/syscore都有涉及。
 suspend_enter -> pm_sleep_disable_secondary_cpus -> freeze_secondary_cpus 
 _cpu_down -> 各个模块的cpuhp回调：
 
-core          没有自己的cpuhp注册——core是状态机的宿主。架构侧收尾在
-              cpu_operations(注册psci.c:120, cpu_die=CPU_OFF在psci.c:68),
-              骨架状态在kernel/cpu.c静态表。
+core          本来就是处理core。
 
 timer         cpuhp有: arm_arch_timer.c:1063(arch_timer_starting_cpu/
               dying_cpu), 另有:776事件流状态。
@@ -288,5 +280,4 @@ fpsimd       arch/arm64/kernel/fpsimd.c:2073
 
 sdei         drivers/firmware/arm_sdei.c:995
              SDEI固件接口PM处理(检测到SDEI才注册)
-
 
