@@ -81,6 +81,7 @@ state_store() -> pm_suspend(state) -> enter_state(state)
 外设休眠唤醒，需要注册dev_pm_ops回调。
 
 todo: smmu休眠唤醒。注意，dev_pm_ops/cpuhp/syscore都有涉及。
+uncore pmu, 放到dev_pm_ops。
 
 
 非启动核以及相关核心模块休眠
@@ -164,11 +165,11 @@ smmuv3                todo
 core             cpu_pm
 fp/simd          cpu_pm
 gicv3            cpu_pm
-mpam             cpu_pm ?
+mpam             cpu_pm
 core pmu         cpu_pm
 
 timer            timekeeping_syscore
-uncore pmu       ?
+uncore pmu       放到dev_pm_ops
 gic its          its_syscore
 kvm              kvm_syscore
 
