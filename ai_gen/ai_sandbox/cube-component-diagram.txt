@@ -1,0 +1,172 @@
+
+CubeAPI，估计是为了兼容E2B协议，所以这里先收请求然后转换格式后发送到CubeMaster。
+
+CubeMaster，接收沙箱请求的核心部件，整个系统一个？CubeMaster负责管理沙箱，并把请求
+转发到Cubelete。
+
+Cubelete可以是一台物理服务器一个实例，管理本实例下的所有沙箱。一台沙箱对应一个cube-shim，
+cube-shim里的cube-hypervisor对应VMM。虚机里面跑cube-agent。
+
+基于以上的认识，所以用户可以通过各种接口使用cube沙箱。
+
+1. 通过E2B协议提供的接口。cube-bench、cubebench.sh、examples目录下的各种脚本都是
+   通过这种方式。cube提供的SDK是对这些接口的封装，用户可以编程使用。
+
+   功能：
+
+2. cubemastercli命令行。这个直接发信息给CubeMaster。
+
+   
+
+3. cubecli命令行
+
+
+
+
+```
++---------------------------+  CubeSandbox v0.7.0  +-----------------------+
+|                              all-in-one node                             |
+|                                                                          |
+|   CLIENTS                                                                |
+|                                                                          |
+|     +----------------------+    +------------------+    +-------------+  |
+|     |  E2B / Python SDK    |    |  cubemastercli   |    |  cubecli    |  |
+|     |  cube-bench (Go)     |    |  (mgmt CLI)      |    |  (node CLI) |  |
+|     +-----------+----------+    +--------+---------+    +------+------+  |
+|                 |                        |                     |         |
+|                 | E2B HTTP               | REST                | unix    |
+|                 |                        |                     | socket  |
+|                 v                        v                     v         |
+|   CONTROL PLANE                                                          |
+|     +----------------------+        +---------------------+              |
+|     |  CubeAPI  :3000      |        |  CubeMaster  :8089  |              |
+|     |  Rust / Tokio        |------->|  Go                 |              |
+|     |  30s TimeoutLayer    |        |  scheduler          |              |
+|     +----------------------+        |  templates          |              |
+|                                     +----------+----------+              |
+|                                                |                         |
+|                                                | gRPC                    |
+|                                     +----------+----------+              |
+|                                     |                     |              |
+|                            +--------+--------+   +--------+--------+     |
+|                            |  CubeOps :3010  |   |  WebUI :12088   |     |
+|                            |  node registry  |   |  (nginx)        |     |
+|                            +--------+--------+   +-----------------+     |
+|                                     |                                    |
+|                                     | HTTP notify (heartbeat)            |
+|                                     v                                    |
+|   STORAGE / INFRA                                                        |
+|                                                                          |
+|     +------------+   +------------+   +------------+   +-------------+   |
+|     |  MySQL     |   |  Redis     |   |  MinIO     |   |  CoreDNS    |   |
+|     |  (meta)    |   |  (routes)  |   |  :9000     |   |  127.0.0.54 |   |
+|     +------------+   +------------+   |  (S3 vol)  |   |  (cube.app  |   |
+|                                       +------------+   |   lookup)   |   |
+|                                                        +-------------+   |
++--------------------------------------------------------------------------+
+                                     |
+                                     | gRPC (create / destroy / exec)
+                                     v
++--------------------------------------------------------------------------+
+|   DATA PLANE                                                             |
+|                                                                          |
+|     +------------------------------------------------+                   |
+|     |  Cubelet                                       |                   |
+|     |  Go, embedded containerd                       |                   |
+|     |  workflow semaphore = 100                      |                   |
+|     |  unix sock: /data/cubelet/cubelet.sock         |                   |
+|     +---------------------+--------------------------+                   |
+|                           |                                              |
+|                           | ttrpc                                        |
+|                           v                                              |
+|     +-------------------------------------------------------+            |
+|     |  per-sandbox (x N)                                    |            |
+|     |                                                       |            |
+|     |   +----------------------------------------------+    |            |
+|     |   |  cube-shim (Rust, containerd shim v2)        |    |            |
+|     |   |    |                                         |    |            |
+|     |   |    +--> embedded cube-hypervisor             |    |            |
+|     |   |         vcpu0..N threads (KVM_RUN)           |    |            |
+|     |   +----------------------+-----------------------+    |            |
+|     |                          |                            |            |
+|     |                     KVM ioctl                         |            |
+|     |                          v                            |            |
+|     |                    +------------+                     |            |
+|     |                    |  /dev/kvm  |                     |            |
+|     |                    +------------+                     |            |
+|     |                          ^                            |            |
+|     |                          | ttrpc / vsock              |            |
+|     |                   +------+-------------------------+  |            |
+|     |                   |  guest MicroVM                 |  |            |
+|     |                   |  cube-agent                    |  |            |
+|     |                   |  envd :49999 / :49983 (app)    |  |            |
+|     |                   +--------------------------------+  |            |
+|     +-------------------------------------------------------+            |
+|                                                                          |
+|     +-------------------------------------------------------+            |
+|     |  CubeProxy  :80 / :443 / :9090                        |            |
+|     |  nginx + OpenResty, reads Redis for routing           |            |
+|     |  CubeEgress :9091 (L7 MITM)                           |            |
+|     |  lcm (lifecycle manager)                              |            |
+|     +-------------------------------------------------------+            |
+|                                                                          |
++--------------------------------------------------------------------------+
+```
+
+
+TRAFFIC PATHS
+
+1. Control path (create sandbox)
+
+     SDK
+      |
+      |  E2B HTTP
+      v
+     CubeAPI :3000
+      |
+      |  REST
+      v
+     CubeMaster :8089
+      |
+      |  gRPC
+      v
+     Cubelet
+      |
+      |  ttrpc (unix socket)
+      v
+     cube-shim
+      |
+      |  process-internal channel
+      v
+     embedded cube-hypervisor  ->  /dev/kvm  ->  guest boot
+      |
+      |  vsock ready event
+      v
+     cube-agent:  CreateSandbox -> CreateContainer -> app starts
+
+
+2. Data path (access sandbox)
+
+     curl http://49999-<sandboxid>.cube.app
+      |
+      v
+     CoreDNS (127.0.0.54)
+      |
+      v
+     CubeProxy
+      |
+      |  Redis lookup: sandbox IP + port
+      v
+     proxy_pass direct to sandbox MicroVM
+
+
+3. Node registration / heartbeat
+
+     Cubelet
+      |
+      |  HTTP notify
+      v
+     CubeOps :3010
+      |
+      v
+     CubeMaster (node metadata, resources)
