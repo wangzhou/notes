@@ -145,13 +145,13 @@ $CM tpl create-from-image --image cube-sandbox-int.tencentcloudcr.com/cube-sandb
   --writable-layer-size 1Gi --expose-port 49999 --probe 49999
 $CM tpl ls
 
-# 渲染创建请求(的到req.json)
+# 渲染创建请求(的到req.json)，起沙箱会输出sandbox id
 $CM tpl render --template-id <tpl-id> --json > /tmp/render.json
 python3 -c "import json;d=json.load(open('/tmp/render.json'));json.dump(d['api_request'],open('/tmp/req.json','w'))"
 $CM multirun /tmp/req.json                     # 起沙箱测完即删，输出cube-e2e/sandbox-probe延迟
-$CM multirun --runcnt 10 --runcc 1 --printall /tmp/req.json   # 内置压测：循环10次串行
+$CM multirun --norm /tmp/req.json              # 起沙箱并保留
 
-#
+# 沙箱状态、销毁沙箱、打快照
 $CM cubebox ls                                 # 列沙箱（IP/状态）
 $CM cubebox rm <sandBoxId>                     # 销毁
 $CM snapshot create --sandbox-id <id>          # 给运行中沙箱打快照
