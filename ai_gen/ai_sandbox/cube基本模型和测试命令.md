@@ -1,4 +1,5 @@
 - v0.1 2026.9.13 Sherlock init
+- v0.2 2026.9.16 Sherlock ...
 
 简介：cube学习的一个速记，主要记录cube的基本逻辑构架和测试命令。
 
@@ -123,11 +124,17 @@ cube-bench提供沙箱起停的快速测试, examples/snapshot-rollback-clone下
 ```bash
 export E2B_API_URL=http://127.0.0.1:3000 E2B_API_KEY=local
 export CUBE_TEMPLATE_ID=<tpl-id>
+export CUBE_API_URL=http://127.0.0.1:3000     # SDK脚本用
 
 ~/CubeSandbox/examples/cube-bench/bin/cube-bench -m create-delete -c 1 -n 5  # 建删压测：创建/销毁延迟与成功率
 
 cd ~/CubeSandbox/examples/snapshot-rollback-clone
 python bench_snapshot_concurrency.py -c 1 -n 5                               # 快照单点延迟
+python bench_snapshot_dirty.py -d 10 -n 3                                    # 快照脏页开销：写脏页后再打快照
+python bench_clone_concurrency.py -c 1 -n 5                                  # 从快照克隆
+python bench_create_concurrency.py -c 1 -n 3                                 # 从快照起沙箱
+python bench_rollback_concurrency.py -c 1 -n 5                               # 回滚
+python bench_pause_resume_concurrency.py -c 1 -n 5                           # 暂停/恢复
 
 bash ~/CubeSandbox/tests/perf/cubebench.sh run 3.2                           # 一键压测：3.2冷启动/3.3密度/4.x快照回滚克隆暂停
 ```
