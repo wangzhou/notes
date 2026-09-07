@@ -112,15 +112,57 @@ cube-shim里的cube-hypervisor对应VMM。虚机里面跑cube-agent。
 
 基于以上的认识，所以用户可以通过各种接口使用cube沙箱。
 
-1. 通过E2B协议提供的接口。cube-bench、cubebench.sh、examples目录下的各种脚本都是
-   通过这种方式。cube提供的SDK是对这些接口的封装，用户可以编程使用。
+1. 通过E2B协议提供的接口。
 
-   cube-bench提供沙箱起停的快速测试, examples/snapshot-rollback-clone下的脚本，
-   提供快照、回滚、克隆的单点性能测试。cubebench.sh提供批量性能测试。
+cube-bench、cubebench.sh、examples目录下的各种脚本都是通过这种方式。cube提供的SDK
+是对这些接口的封装，用户可以编程使用。
 
-2. cubemastercli命令行。这个直接发信息给CubeMaster。-a指定CubeMaster的IP。基本
-   功能是沙箱镜像/快照的创建/管理，沙箱运行，沙箱状态的管理等。
+cube-bench提供沙箱起停的快速测试, examples/snapshot-rollback-clone下的脚本，提供
+快照、回滚、克隆的单点性能测试。cubebench.sh提供批量性能测试。
 
-3. cubecli命令行。沙箱中执行命令，执行bash可以直接进入沙箱系统，交互式的执行沙箱
-   里的命令。
+```bash
+export E2B_API_URL=http://127.0.0.1:3000 E2B_API_KEY=local
+export CUBE_TEMPLATE_ID=<tpl-id>
 
+~/CubeSandbox/examples/cube-bench/bin/cube-bench -m create-delete -c 1 -n 5  # 建删压测：创建/销毁延迟与成功率
+
+cd ~/CubeSandbox/examples/snapshot-rollback-clone
+python bench_snapshot_concurrency.py -c 1 -n 5                               # 快照单点延迟
+
+bash ~/CubeSandbox/tests/perf/cubebench.sh run 3.2                           # 一键压测：3.2冷启动/3.3密度/4.x快照回滚克隆暂停
+```
+
+2. cubemastercli命令行。
+
+这个直接发信息给CubeMaster。-a指定CubeMaster的IP。基本功能是沙箱镜像/快照的创建/管理，
+沙箱运行，沙箱状态的管理等。
+
+```bash
+CM="cubemastercli -a 127.0.0.1"
+
+# 建模板和模版管理
+$CM tpl create-from-image --image cube-sandbox-int.tencentcloudcr.com/cube-sandbox/sandbox-code:latest \
+  --writable-layer-size 1Gi --expose-port 49999 --probe 49999
+$CM tpl ls
+
+# 渲染创建请求(的到req.json)
+$CM tpl render --template-id <tpl-id> --json > /tmp/render.json
+python3 -c "import json;d=json.load(open('/tmp/render.json'));json.dump(d['api_request'],open('/tmp/req.json','w'))"
+$CM multirun /tmp/req.json                     # 起沙箱测完即删，输出cube-e2e/sandbox-probe延迟
+$CM multirun --runcnt 10 --runcc 1 --printall /tmp/req.json   # 内置压测：循环10次串行
+
+#
+$CM cubebox ls                                 # 列沙箱（IP/状态）
+$CM cubebox rm <sandBoxId>                     # 销毁
+$CM snapshot create --sandbox-id <id>          # 给运行中沙箱打快照
+ ```
+
+3. cubecli命令行。
+
+沙箱中执行命令，执行bash可以直接进入沙箱系统，交互式的执行沙箱里的命令。
+
+```bash
+sudo cubecli exec -it <sandBoxId> bash   # 交互式进沙箱（相当于SSH）
+sudo cubecli exec -d <sandBoxId> cmd     # 沙箱内跑一条命令
+sudo cubecli logs <sandBoxId>            # 看沙箱输出
+```
