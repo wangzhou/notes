@@ -1,5 +1,6 @@
 - v0.1 2026.9.13 Sherlock init
 - v0.2 2026.9.16 Sherlock ...
+- v0.3 2026.9.17 Sherlock 增加测试入口访问路径表
 
 简介：cube学习的一个速记，主要记录cube的基本逻辑构架和测试命令。
 
@@ -111,7 +112,15 @@ cube-shim里的cube-hypervisor对应VMM。虚机里面跑cube-agent。
 测试命令
 ---------
 
-基于以上的认识，所以用户可以通过各种接口使用cube沙箱。
+基于以上的认识，所以用户可以通过各种接口使用cube沙箱。三类入口对服务端的
+访问路径如下：
+
+| 入口 | 服务端路径 | 入口参数 |
+|------|-----------|----------|
+| cube-bench / E2B SDK脚本 | CubeAPI :3000 -> CubeMaster | E2B_API_URL |
+| cube自有SDK脚本(快照系列等) | CubeAPI :3000 -> CubeMaster | CUBE_API_URL |
+| cubemastercli | 直连CubeMaster :8089 | -a/-p命令行参数 |
+| cubecli | 本机Cubelet unix socket | 无 |
 
 1. 通过E2B协议提供的接口。
 
