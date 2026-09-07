@@ -12,7 +12,7 @@ cube的组件包括CubeAPI、CubeMaster、Cubelete、cube-shim、cube-hypervisor
 
 CubeAPI，估计是为了兼容E2B协议，所以这里先收请求然后转换格式后发送到CubeMaster。
 
-CubeMaster，接收沙箱请求的核心部件，整个系统一个？CubeMaster负责管理沙箱，并把请求
+CubeMaster，接收沙箱请求的核心部件，整个集群一个。CubeMaster负责管理沙箱，并把请求
 转发到对应的Cubelete。
 
 Cubelete可以是一台物理服务器一个实例，管理本实例下的所有沙箱。一台沙箱对应一个cube-shim，
