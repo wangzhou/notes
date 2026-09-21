@@ -1,0 +1,348 @@
+-v0.1 2026.9.8  基于 ARM IHI 111701 A.a (GICv5 EAC, 2026/May/26) 整理
+
+简介：本文是 GICv5 协议的学习笔记，对照 ARM_GIC硬件逻辑总结(GICv3/v4) 来写，
+      重点记 GICv5 和 GICv3 的差异。GICv5 对应 CPU 侧的特性名是 FEAT_GCIE。
+
+
+一句话总结
+------------
+
+GICv5 把 GICv3 里"MMIO 寄存器 + 命令队列"那套全部推倒重来：
+
+  - CPU 侧：中断操作从读写系统寄存器改成专用的 GIC 系统指令。
+  - 系统侧：GICD/GICR 合并成 IRS，中断状态全进内存表(IST)；ITS 去掉了 command
+    queue，改成寄存器直接操作。
+  - 安全模型：group/security 那套二维配置换成一维的 Interrupt Domain。
+  - 虚拟化：去掉 List Register，vCPU(VPE) 成为硬件一等对象，中断天然直通。
+
+GICv3 的东西作为可选的 legacy 模式保留(FEAT_GCIE_LEGACY)，靠 ICH_VCTLR_EL2.V3
+切换，给老的 GICv3 虚机用。
+
+
+中断种类和 INTID
+------------------
+
+只剩三种：PPI、LPI、SPI。**SGI 没有了**，IPI 改用 LPI 或 SPI 实现。
+
+INTID 是 32 位，结构变成 type + id：
+
+  bits[31:29]  type: 0b001=PPI, 0b010=LPI, 0b011=SPI
+  bits[28:24]  RES0
+  bits[23:0]   ID
+
+每种 type 有**独立**的 ID 命名空间(PPI 15 和 LPI 15 是两个不同中断)，每种最多
+24 bit ID。对比 GICv3 的一维扁平 INTID 空间(0-15 SGI / 16-31 PPI / 32-1019 SPI /
+8192+ LPI)，这里干净多了。
+
+  PPI  0-127，每 PE 私有，由 CPU interface 自己产生(Timer/PMU/doorbell 等)，
+       不经过 IRI。Handling mode 硬件固定，软件只能读。
+  LPI  MSI 用，也是 IPI 的推荐载体。状态在内存 IST 里。
+  SPI  外设线中断，经 IWB → ITS → IRS。
+
+IPI 的做法：软件自己分配一批 LPI，建立 (PE, IPI号) → LPI ID 的映射，发送方执行
+`GIC CDPEND` 把目标 LPI 置 pending 即可。没有专门的 SGI 寄存器了。
+
+
+Interrupt Domain：取代 group/security
+---------------------------------------
+
+GICv3 用 GICD_CTLR.DS + IGROUPR + IGRPMODR 拼出 group0/secure-group1/
+non-secure-group1 三种类型，再查表决定报 IRQ 还是 FIQ，很别扭。
+
+GICv5 直接定义 4 个 Physical Interrupt Domain，一个中断属于且只属于一个 domain：
+
+  EL3 / Secure / Realm / Non-secure
+
+domain 由当前 EL + Security state 唯一决定：
+
+  EL3                      → EL3 Domain
+  EL2/1/0 + Secure         → Secure Domain
+  EL2/1/0 + Realm          → Realm Domain
+  EL2/1/0 + Non-secure     → Non-secure Domain
+
+另外 EL2 实现时还有**一个** Virtual Interrupt Domain，判定条件：
+
+  EL1 && HCR_EL2.IMO==1 && ICH_VCTLR_EL2.V3==0  →  Current Domain = Virtual
+  否则                                           →  Current Physical Domain
+
+各 domain 的优先级空间互相独立，不做比较，所以每个 domain 都能用满 32 级。
+
+命名空间的隔离粒度：
+  PPI  每 PE 私有，跨 domain 共享同一命名空间(靠 ICC_PPI_DOMAINR<n>_EL3 分配)
+  SPI  全系统单一命名空间，跨 PE 跨 domain 共享
+  LPI  每个 domain 一套独立命名空间，domain 内跨 PE 共享
+
+
+中断状态和优先级
+------------------
+
+状态简化成两个正交的布尔量，不再是 GICv3 那个四状态机：
+
+  Pending / Idle      有没有中断请求
+  Active / Inactive   是不是正在处理
+
+(Pending, Active) 两两组合就等价于 GICv3 的 inactive/pending/active/active&pending。
+
+每个中断的配置项：Enabled、Priority、Handling mode(Edge/Level)、Routing mode
+(Targeted/1ofN)、Affinity(IAFFID)。
+
+Handling mode 的语意：ack 的时候 Edge 会把 Pending 清成 Idle，Level 不动。
+
+优先级：**固定 5 bit，共 32 级，值越小优先级越高**。Idle priority 是 0xFF
+(8 bit，为了让 32 级全部可用)。priority==0 表示 Superpriority，即 NMI。
+
+**GICv5 删掉了 binary point register**(GICv3 的 BPR，把优先级切成抢占级+子优先级)。
+现在 running priority 就是 ICC_APR_EL1 里最高的 active priority，软件数尾部零个数
+就能算出来：
+
+  MRS X0, ICC_APR_EL1
+  CMP WZR, W0
+  CTZ X0, X0
+  MOV X1, #0xff
+  CSEL X0, X0, X1, ne
+
+
+各个模块
+----------
+
+```
+                                      Memory:
+   +--------+   +-------+  +-------+  +-------------+ +-----+
+   |  IWB   |-->|  ITS  |->|       |  |device table | | ITT |
+   +--------+   +-------+  |       |  +-------------+ +-----+
+   (线中断转MSI) (DID/EID  |  IRS  |
+                 翻译)     |       |  +-------------+ +----------+ +-----------+
+                          |       |->|  LPI IST    | | VM table | | VPE table |
+   外设MSI ---------------> |       |  +-------------+ +----------+ +-----------+
+                          +-------+  +-------------+ +-------------+
+                              |      |vLPI IST(每VM)| |vSPI IST(每VM)|
+                              v      +-------------+ +-------------+
+   +-------+  +-------+  +-------+  +-------+
+   | CPU IF|  | CPU IF|  | CPU IF|  | CPU IF|   SPI/PPI 状态在 IRS/CPU IF 硬件里
+   | core0 |  | core1 |  | core2 |  | core3 |
+   +-------+  +-------+  +-------+  +-------+
+```
+
+IRS (Interrupt Routing Service)
+  = GICv3 的 GICD + GICR 合并。管 LPI 和 SPI 的路由、状态、优先级。
+  一个系统可以有多个 IRS，每个 IRS 管一组 PE。
+  LPI 状态全部放内存的 IST 表；SPI 状态放 IRS 硬件里(SPI 数量有限)。
+  编程接口是 MMIO：IRS_INT_SELR 选中一个中断，再读写 IRS_INT_{ENABLER,
+  PENDINGR,PRIORITYR,IAFFIDR,HMR,CFGR} 操作它。**没有 command queue**。
+
+ITS (Interrupt Translation Service)
+  只负责翻译：(DeviceID, EventID) → (INTID, [VM_ID])，然后把消息发给 IRS。
+  相比 GICv3 的 ITS，**去掉了 command queue 和 collection table**：
+    - 路由信息(报给哪个 PE)不再由 ITS 管，挪到 IRS 的 IAFFID 里，所以不需要
+      collection table，也不需要 MAPC/MOVI/MOVALL 这类命令。
+    - 配置改成直接写寄存器：ITS_DT_BASER 配 device table 基址，ITT 由软件直接
+      写内存，cache 失效用 ITS_INV_DEVICER / ITS_INV_EVENTR，同步用 ITS_SYNCR。
+  这两条合起来干掉了 GICv3 ITS 最麻烦的部分。
+
+IWB (Interrupt Wire Bridge)
+  新增模块，把传统的线中断转成 ITS event。一个 IWB 绑一个 ITS，用一个固定的
+  DeviceID，输入线的 index 直接当 EventID 用。最多 65536 根线。
+  也就是说 GICv5 里线中断和 MSI 走同一条翻译通路了。
+
+CPU interface
+  只有系统寄存器接口，没有 MMIO 版本。管 PPI 的全部状态，以及各 domain 的
+  HPPI 选择、优先级屏蔽、active priority。
+
+
+数据结构
+----------
+
+IST (Interrupt State Table)
+  存 LPI(和 vSPI)的状态与配置，每个 entry 一个中断。支持 linear 和 2-level
+  两种结构，2-level 的 L2 表按需映射(IRS_MAP_L2_ISTR)。
+  三种 IST context：物理 LPI IST(每 domain 一个)、虚拟 LPI IST(每 VM 一个)、
+  虚拟 SPI IST(每 VM 一个)。
+  对比 GICv3：把 LPI configuration table + LPI pending table 合成了一张表。
+
+device table + ITT
+  ITS 用。DeviceID 索引 device table 找到 ITT，EventID 索引 ITT 找到 L2_ITTE：
+
+    L2_ITTE:  VM_ID[47:32]  VALID[31]  VIRTUAL[30]  DAC[29:28]  LPI_ID[23:0]
+
+  VIRTUAL=1 就是虚拟中断，VM_ID 指定目标 VM。注意这里**没有 PE/collection 信息**，
+  目标 PE 由 IRS 里该 INTID 的 IAFFID 决定。
+
+VM table + VPE table
+  VM table 按 VM_ID(16bit) 索引，L2_VMTE 里存该 VM 的 VPE table 地址、vLPI IST
+  地址、vSPI IST 地址。VPE table 按 VPE_ID(16bit) 索引，存 VPE descriptor。
+
+
+编程接口
+----------
+
+1) GIC 系统指令(CPU 侧，取代 GICv3 的 ICC_* 读写)
+
+   语法两种：
+     GIC  <domain><cmd>, Xt     写语意，SYS 的 alias
+     GICR Xt, <domain><cmd>     读语意，SYSL 的 alias
+
+   domain 参数三选一：
+     CD  Current Interrupt Domain   —— 普通软件用，EL1/EL2/EL3 都能用
+     VD  Virtual Interrupt Domain   —— hypervisor 在 EL2 用，管 resident VPE
+     LD  Logical Interrupt Domain   —— 只能 EL3 用，操作 SCR_EL3 选中的 domain
+
+   命令：
+     AFF    设置 Routing mode + 目标 IAFFID
+     EN     使能           DIS  关闭
+     PEND   置/清 Pending   PRI  设优先级
+     HM     设 Handling mode(Edge/Level)
+     DI     deactivate
+     EOI    priority drop
+     RCFG   读回中断配置(结果放 ICC_ICSR_EL1)
+     IA     ack，取 INTID      NMIA  ack NMI     ← 这两个是 GICR 变体
+
+   所以完整名字长这样：GIC CDPEND / GIC VDAFF / GICR Xt, CDIA / GIC LDEN ...
+
+2) GSB 同步屏障指令
+
+   GSB SYS   保证之前所有 GIC 系统指令的 Interrupt Effect 完成
+   GSB ACK   保证之前所有 GICR(ack 类)指令的 Interrupt Effect 完成
+
+   GICv3 里这类同步要靠 DSB + ISB 凑，语意不清楚，GICv5 给了专用指令。
+
+3) CPU interface 系统寄存器
+
+   ICC_IAFFIDR_EL1   本 PE 的 interrupt affinity ID
+   ICC_PCR_EL1       priority mask (对应 GICv3 的 ICC_PMR_EL1)
+   ICC_APR_EL1       active priority，一个寄存器 32 bit 对应 32 级
+   ICC_HPPIR_EL1     查询当前 HPPI (不改状态，ack 要用 GICR CDIA)
+   ICC_ICSR_EL1      GIC xDRCFG 的返回结果
+   ICC_CR0_EL1       控制寄存器
+   ICC_IDR0_EL1      规格 (PRI_BITS / ID_BITS)
+   ICC_PPI_{ENABLER,SPENDR,CPENDR,SACTIVER,CACTIVER,PRIORITYR,HMR}<n>_EL1
+                     PPI 的状态和配置，PPI 不走 IRS 所以走寄存器
+   ICC_PPI_DOMAINR<n>_EL3   EL3 分配每个 PPI 属于哪个 domain
+   ICC_DOMHPPIR_EL3  EL3 看各 domain 的 HPPI
+
+   ICV_* 是 EL1 在虚拟化下看到的同名寄存器，逻辑和 GICv3 一样：
+   HCR_EL2.IMO==1 时，EL1 访问 ICC_* 实际访问的是 ICV_*。
+
+   ICH_* 是 hypervisor 用的虚拟化控制寄存器，见下面虚拟化一节。
+
+4) IRS / ITS / IWB 的 MMIO 寄存器
+
+   IRS：IRS_CR0 全局使能；IRS_IST_BASER/CFGR 配物理 LPI IST；
+        IRS_INT_SELR + IRS_INT_*R 操作单个中断；
+        IRS_PE_SELR/PE_CR0 管 PE；IRS_SETLPIR 软件触发 LPI；
+        IRS_SPI_SELR + IRS_SPI_*R 管 SPI；IRS_SYNCR 同步。
+        虚拟化：IRS_VMT_BASER/CFGR 配 VM table，IRS_VM_SELR / IRS_VPE_SELR
+        选中 VM/VPE，IRS_VPE_DBR 配 doorbell，IRS_VMAP_* 建表项。
+
+   ITS：ITS_CR0 使能；ITS_DT_BASER/CFGR 配 device table；
+        ITS_TRANSLATER 收 MSI(ITS_RL_TRANSLATER 收 Realm 的)；
+        ITS_GEN_EVENTR 软件造 ITS event；
+        ITS_INV_DEVICER/INV_EVENTR 失效 cache；ITS_SYNCR 同步。
+
+   IWB：IWB_CR0 使能；IWB_WENABLER<n>/WTMR<n>/WDOMAINR<n> 配每根线的
+        使能、触发方式、所属 domain。
+
+
+中断处理流程
+--------------
+
+软件侧四步，和 GICv3 概念一致但指令换了：
+
+  1. GICR Xt, CDIA          ack，拿 INTID，中断变 Active，其优先级变 active priority
+  2. 查 INTID 跳中断处理函数
+  3. GIC CDEOI              priority drop，让同优先级的中断能再上来
+  4. GIC CDDI, Xt           deactivate，中断变 Inactive
+
+GICv3 的 EOImode=0(EOI 同时做 drop+deactivate)在 GICv5 里没有了，drop 和
+deactivate 永远是两条指令，相当于强制 EOImode=1。
+
+HPPI 选择：每个 domain 各自选一个 HPPI(候选来自该 domain 的 PPI + IRS 报上来的
+LPI/SPI)。只有优先级高于 running priority 且高于等于 PCR 里的 mask 才会被 signal。
+
+IRQ/FIQ 的选择不再查 group 表，改成 preemptive/non-preemptive 概念 +
+doorbell PPI：当前 domain 的中断走 IRQ，其它 domain 有中断要处理时通过
+doorbell PPI(S_DB_PPI / NS_DB_PPI / RL_DB_PPI)通知，让当前 domain 在合适的时机
+主动让出。
+
+
+中断虚拟化
+------------
+
+核心变化：**去掉了 List Register**。GICv3 靠 ICH_LR<n>_EL2 由 hypervisor 逐个
+注入虚拟中断，GICv5 里 VPE 是硬件一等对象，虚拟中断和物理中断走完全相同的
+数据通路，只是查的是 VM 的表而不是 domain 的表。
+
+VPE 在位(resident)机制：
+
+  ICH_CONTEXTR_EL2:  V[63]  F[62]  IRICHPPIDIS[61]  DB[60]  DBPM[59:55]
+                     VPE[47:32]  VM[15:0]
+
+  hypervisor 调度 vCPU 上线时写 V=1 + {VM, VPE}，下线时写 V=0，同时用 DB 位
+  决定要不要 doorbell、DBPM 设 doorbell 的优先级门限。
+  对比 GICv3/v4：VMAPP/VMOVP 那套命令全没了，换成写一个系统寄存器，
+  **vCPU 迁移不再需要对所有 ITS 发 VMOVP，也就没有那把全局锁了**。
+
+直通路径：
+
+  vLPI   设备 MSI → ITS 查 ITT 得 {VIRTUAL=1, VM_ID, LPI_ID} → IRS 查该 VM 的
+         vLPI IST → VPE 在位就直接报 vIRQ，不在位就记 pending + 触发 doorbell。
+  vIPI   guest 在 EL1 执行 GIC CDPEND，Current Domain 自动是 Virtual，硬件按
+         IAFFID 路由到同 VM 内的目标 VPE。**不 trap**(除非 hypervisor 显式在
+         ICH_HFGITR_EL2.GICCDPEND 里要求 trap)。这是相对 GICv3 vSGI 的大改进。
+  vPPI   ICH_PPI_DVIR<n>_EL2.DVI<x>=1 把物理 PPI 的 Pending 直接注入同号虚拟
+         PPI，vtimer 因此可以完全直通，不需要 hypervisor 介入。
+
+hypervisor 控制寄存器：
+
+  ICH_CONTEXTR_EL2       选 resident VPE (上面已述)
+  ICH_VCTLR_EL2          V3 位选 GICv5 还是 legacy GICv3 虚拟接口
+  ICH_APR_EL2            虚拟 active priority (ICV_APR_EL1 的别名)
+  ICH_VMCR_EL2           虚拟 CPU interface 控制状态，给上下文切换用
+  ICH_PPI_ENABLER<n>_EL2 / ICH_PPI_PRIORITYR<n>_EL2 / ICH_PPI_ACTIVER<n>_EL2 /
+  ICH_PPI_PENDR<n>_EL2   虚拟 PPI 状态，是 ICV_* 的别名，给上下文切换用
+  ICH_PPI_DVIR<n>_EL2    物理 PPI 直接注入开关
+  ICH_PPI_HVIR<n>_EL2    对 guest 隐藏某个虚拟 PPI
+  ICH_HFGITR_EL2 / ICH_HFGRTR_EL2 / ICH_HFGWTR_EL2
+                         细粒度 trap 控制，逐条指令/寄存器决定要不要 trap 到 EL2
+
+hypervisor 管理虚拟中断用 GIC VD* 指令(VDAFF/VDEN/VDPEND/VDPRI/...)，
+操作的是当前 resident VPE 所属 VM 的虚拟中断。
+
+嵌套虚拟化：ICH_* 全部被 FEAT_NV2 纳入内存转换(VNCR page，偏移见 spec §9.9)，
+guest hypervisor 读写这些寄存器不 trap；但 GIC VD* 指令在 EL1+NV 下必然 trap。
+另外 §2.10.1.2 有 timer PPI 重定向(物理 PPI 30→虚拟 26, 27→28)专门给 NV 用。
+详见 ~/notes/ai_gen/GICv5/ARM_GICv5_嵌套虚拟化L1L2中断直通分析.md
+
+
+GICv3 → GICv5 对照速查
+------------------------
+
+  GICv3/v4                          GICv5
+  --------------------------------  --------------------------------------
+  GICD + GICR                       IRS
+  ITS(带 command queue)             ITS(纯寄存器) + IWB
+  collection table                  没有，路由信息进 IRS 的 IAFFID
+  MAPD/MAPTI/MAPC/MOVI/INV/SYNC     写内存表 + ITS_INV_*R / ITS_SYNCR
+  VMAPP/VMAPTI/VMOVP/VSGI           写 ICH_CONTEXTR_EL2 + IRS_VMAP_*
+  LPI config table + pending table  IST(一张表)
+  SGI (INTID 0-15)                  没有，IPI 用 LPI/SPI + GIC CDPEND
+  ICC_SGI1R_EL1                     GIC CDPEND
+  ICC_IAR1_EL1                      GICR Xt, CDIA
+  ICC_EOIR1_EL1                     GIC CDEOI (drop) + GIC CDDI (deactivate)
+  ICC_PMR_EL1                       ICC_PCR_EL1
+  ICC_BPR0/1_EL1                    删除
+  group0 / S-group1 / NS-group1     Interrupt Domain (EL3/Secure/Realm/NS)
+  GICD_IROUTER<n>                   GIC CDAFF / IRS_INT_IAFFIDR
+  ICH_LR<n>_EL2                     删除，虚拟中断走 IST，VPE 硬件在位判定
+  8 bit 优先级(实现可少)            固定 5 bit / 32 级
+  INTID 扁平编号                    type[31:29] + id[23:0]，每 type 独立空间
+
+
+todo
+------
+
+- IRS 多实例下的 PE 归属、跨 IRS 的中断迁移细节
+- 1ofN 的具体选核策略和 1ofN doorbell
+- MPAM / MEC 在 IRS/ITS 上的支持
+- GIC Stream 协议(PE 和 IRS 之间的通信)
+- GIC PMU 事件
+- Linux 侧驱动实现(irqchip/irq-gic-v5*)
